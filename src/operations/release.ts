@@ -108,6 +108,9 @@ const PACKAGE_TOP_LEVEL = new Set([
 
 const PACKAGE_DOCS = new Set([
   "docs/installation.md",
+  "docs/system-installation.md",
+  "docs/configuration.md",
+  "docs/monitoring.md",
   "docs/operations.md",
   "docs/development.md",
   "docs/releasing.md",

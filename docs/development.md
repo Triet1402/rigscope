@@ -16,7 +16,7 @@ npm start
 npm run collector:start
 ```
 
-`npm run collector:enroll` uses `COLLECTOR_ENROLL_URL` and a private `COLLECTOR_ENROLL_TOKEN`. `npm run collector:mock` emits synthetic readings. Real collection continues without a browser. See the README for configuration and destination sharing policy.
+`npm run collector:enroll` uses `COLLECTOR_ENROLL_URL` and a private `COLLECTOR_ENROLL_TOKEN`. `npm run collector:mock` emits synthetic readings. Real collection continues without a browser. See the [configuration reference](configuration.md) for variables, enrollment and sharing settings.
 
 ## HTTPS boundary
 

@@ -1,80 +1,107 @@
-# Production operations
+# Operations
 
-This guide covers the supported single-host, two-process deployment:
+For an npm installation, use the managed commands below. The
+[manifest archive workflow](#low-level-manifest-archive-workflow) is for operators
+building and deploying from source.
 
-- `dist/hub.cjs` — Node 26 custom server: listener, WebSocket collectors,
-  browser SSE, authentication and the production Next.js handler from `.next`.
-- `dist/collector.cjs` — outbound-only collector with durable per-destination
-  outboxes.
-- `dist/ops.cjs` — inspect, migrate, backup, restore, package, install,
-  activate, rollback and bounded synthetic measurement.
-
-There is no Next.js standalone output and no `next start`. The hub runs the
-custom server from the installed release directory; the production UI must be
-present in `.next`.
-
-All paths below are examples. Choose a prefix and state directory owned by the
-service user. Paths containing spaces are supported by the generated units.
+| Task | Section |
+| --- | --- |
+| Check, upgrade or roll back an npm installation | [Managed CLI operations](#managed-cli-operations) |
+| Reset a lost password | [Password recovery](#password-recovery) |
+| Change localhost/HTTPS access | [Access changes](#access-changes) |
+| Back up or restore a database | [Database commands](#database-commands) |
+| Plan what to back up | [Consistent backup set](#consistent-backup-set) |
+| Handle a full database or queue | [Storage pressure recovery](#storage-budgets-and-pressure-recovery) |
 
 ## Managed CLI operations
 
-For a per-user installation created by `rigscope install` (default state
-`~/.local/state/rigscope`), the CLI owns the runtime, component units and release pairing:
+These commands apply to an installation created by `rigscope install`. Its
+state directory defaults to `~/.local/state/rigscope`.
+
+### Check health
 
 ```sh
 rigscope status
-rigscope doctor [--json]
-rigscope upgrade [--from PACKAGE] [--timeout SECONDS]
-rigscope rollback [--backup PATH] [--timeout SECONDS]
-rigscope recover-password [--user owner] [--password-file PATH] [--enable]
+rigscope doctor
 ```
 
-`doctor` is read-only. It checks Node, private configuration and state
-permissions, the installed and previous runtimes, the component units, the database
-and schema, free space, hub port/Unix-socket state, role-appropriate listener
-health, configured destinations with TLS certificate validation, and procfs or
-RAPL readability for a collector. A hub without a collector is valid, and a
-collector without a local hub database is valid. Output contains counts and
-paths, never password hashes, collector tokens or environment values.
+`status` shows services and the dashboard URL. `doctor` checks configuration,
+runtimes, database integrity, listeners, TLS destinations, disk space and sensor
+access. It follows enabled components: a hub-only installation does not need a
+collector. Checks are read-only and omit credentials. Use `doctor --json` for
+structured output.
 
-`upgrade` stages the package without touching the active runtime, stops the
-running components, takes a consistent pre-upgrade hub database backup when one
-exists, and activates the new runtime. It restarts only components that were
-running before the upgrade and verifies them within `--timeout` seconds (default
-25). Verification follows the installation's enabled components:
+### Upgrade
 
-- the active package reports the staged version;
-- restarted component services are active;
-- a restarted hub answers `status: "ok"` with the expected version;
-- an existing hub database passes integrity and ledger checks and reaches the
-  staged runtime's supported schema;
-- a restarted collector produces a fresh sampling health marker.
+```sh
+rigscope upgrade
+```
 
-A failed start, migration or health wait restores the previous runtime and the
-paired pre-upgrade database when the old runtime cannot read the new schema. The
-replaced database is preserved first; credentials, collector identities and
-outboxes are not rewritten. `release-state.json` in the state directory records
-which runtime each backup belongs to. An inactive installation is staged and
-activated without starting; live health is then reported as skipped.
+Use `--from PACKAGE` for an exact npm version or local archive. The command
+stages the package, stops running components, takes a consistent hub database
+backup and activates the new runtime. It restarts only the components that were
+running, then checks:
 
-`rollback` swaps to `runtime-previous` and validates it with the same bounded
-health and database checks. If the current schema is compatible it keeps the
-database unchanged, including post-upgrade data. If the previous runtime cannot
-read it, rollback restores the paired pre-upgrade backup, refuses when no
-compatible backup is recorded, and prints where the replaced newer database was
-preserved. For installations created before release state existed, pass an
-explicit compatible copy with `--backup PATH`. Rollback never silently deletes
-the newer database and never runs old code against a newer schema.
+- the installed and running versions match the new package;
+- restarted services are active;
+- hub health is OK and its database passes integrity/schema checks;
+- a restarted collector produces a fresh sampling marker.
 
-`recover-password` is offline recovery for the durable managed user store. It
-requires the hub service to be stopped, takes the hub database lease and
-refuses a live or ambiguous lock. Enter the password at the private prompt, or
-pass a private `0600` file with `--password-file`. It updates only that managed
-user's hash in the database, clears `disabled` only with `--enable`, writes a
-bounded `user.password-recovery` audit row and bumps a durable session-epoch
-marker. It never edits `config.json` or `HUB_BROWSER_USERS`, so bootstrap
-password changes do not overwrite managed users. Restarting the hub invalidates
-all in-memory browser sessions; sign in again with the new password.
+The health timeout is 25 seconds; change it with `--timeout SECONDS`. A failed
+start, migration or health check restores the previous runtime. It also restores
+the paired database backup if the old runtime cannot read the new schema,
+preserving the replaced database first.
+
+Credentials, collector identities and pending samples are retained.
+`release-state.json` records which backup belongs to each runtime. Upgrading a
+stopped installation leaves it stopped and reports live checks as skipped.
+
+### Roll back
+
+```sh
+rigscope rollback
+```
+
+Rollback uses `runtime-previous` and runs the same health checks. If that runtime
+can read the current database, post-upgrade data stays intact. Otherwise it
+restores the paired pre-upgrade backup and saves the replaced database.
+
+A missing compatible backup stops rollback. Older installations without a
+recorded backup can supply a compatible copy with `--backup PATH`. Never point
+old code at a newer database schema.
+
+## Password recovery
+
+Stop the installation, enter a new password at the private prompt, then restart:
+
+```sh
+rigscope stop
+rigscope recover-password --user owner
+rigscope start
+```
+
+Recovery requires the hub to be stopped and refuses a live or uncertain database
+lock. For unattended recovery, use `--password-file` with an owned `0600` file.
+It updates the existing user's stored hash. `--enable` also clears that user's
+disabled flag; recovery never creates a user or grants administrator access.
+
+The operation records an audit event and invalidates sessions. It keeps
+configuration, history and collector credentials. Sign in again after restart;
+editing bootstrap hashes in `config.json` or `HUB_BROWSER_USERS` does not reset a
+managed account.
+
+## Access changes
+
+Follow the commands in [Remote access](installation.md#access-from-another-computer).
+`configure` requires a stopped hub and, when changing its local collector's
+destination, a stopped collector.
+
+It validates the HTTPS origin and private socket, backs up the old settings, and
+updates the matching local collector destination. It moves that destination's
+whole queue directory, including SQLite WAL files. Credentials and other hubs
+stay unchanged. An existing target queue stops the conversion to avoid merging
+or discarding pending records. Accounts and the hub history database are retained.
+Rollback targets must support the saved configuration and database schema.
 
 ## Low-level manifest archive workflow
 
@@ -83,6 +110,14 @@ artifacts. They use a manifest `.tar.gz`, which is different from the npm `.tgz`
 used by `rigscope install` and `rigscope upgrade`. For ordinary installations,
 follow [installation](installation.md) and the managed commands above. The npm
 package excludes source helper scripts and does not require users to build it.
+
+The built deployment runs `dist/hub.cjs` for the dashboard and collector
+connections, and `dist/collector.cjs` for collection. `dist/ops.cjs` provides the
+database and archive tools below. The hub serves the production Next.js output
+from `.next`; it does not use `next start` or standalone output.
+
+Choose a prefix and state directory owned by the service user. All paths below
+are examples; generated units support paths containing spaces.
 
 ### Build and package
 
@@ -406,7 +441,7 @@ a hub back below the schema its database already uses; `rollback` enforces that
 boundary, and collector rollback keeps its private state and outboxes. Process
 detail remains request-scoped and is never persisted or included in the backup
 set. Separate machines and hubs are upgraded independently. System installations
-use the component controls described in [installation](installation.md#system-component-lifecycle).
+use the component controls in [System installation](system-installation.md#system-component-lifecycle).
 
 On upgrade from the previous collector endpoint, saved `/api/collector/v1/connect`
 URLs normalize to `/api/collector/connect` without changing identity, credentials,

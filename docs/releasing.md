@@ -1,18 +1,21 @@
 # Releasing Rigscope
 
-The first public version is `0.1.0`. Source and issue links target
-`https://github.com/Triet1402/rigscope`. Create that repository and push the
-release source before npm publication. The package includes MIT licensing,
+The first public version, `0.1.0`, is published on
+[npm](https://www.npmjs.com/package/rigscope). Source and issues are on
+[GitHub](https://github.com/Triet1402/rigscope). The package includes MIT licensing,
 dependency notices, the security policy and [release notes](../CHANGELOG.md).
+
+The commands below use `0.1.0` as an example. For a new release, substitute its
+new version everywhere; do not attempt to republish `0.1.0`. Documentation edits
+can be committed and pushed to GitHub independently. The published archive and
+its bundled documentation stay unchanged; ship updated package documentation
+with the next version. Keep each release tag on the revision used to build it.
 
 ## Recommended release order
 
-1. Finish the version, public docs, release notes and repository metadata. Commit
-   those changes. Keep the installation examples in the package ready for the
-   version being published.
+1. Update the version, docs, release notes and repository metadata. Commit them.
 2. Push the source to GitHub and run the manual CI workflow on that revision.
-   This repository deliberately has no push, pull-request or scheduled CI
-   triggers. A local result is not a GitHub Actions result.
+   CI runs manually; pushes and pull requests do not trigger it.
 3. Build one npm archive from the final revision. Retain it, its SHA-256 checksum
    and verification results. Test and publish that archive without rebuilding it.
 4. Run the publish dry run, check the npm account, and publish the verified archive.
@@ -111,9 +114,8 @@ npm publish ./out/release/rigscope-0.1.0.tgz --access public --tag latest \
   --registry=https://registry.npmjs.org --dry-run
 ```
 
-The dry run does not publish, reserve the name, or prove that registry
-authorization and two-factor authentication will succeed. The repository
-metadata does not establish npm package ownership.
+The dry run checks the package without publishing. It does not verify permission
+to publish or complete two-factor authentication.
 
 When releasing, this command actually publishes the verified archive publicly:
 
@@ -129,8 +131,8 @@ check. Uninstall that test installation afterward. Use the same isolation
 settings for all test commands so the check does not select a real installation.
 
 The public quick start uses `npx --yes rigscope@latest install --boot` and the
-installed `rigscope upgrade`. Archive commands remain available before npm
-publication and for explicit version selection. Users do not need a global npm
+installed `rigscope upgrade`. Archive commands remain available for downloaded
+releases and testing before publication. Users do not need a global npm
 installation of Rigscope.
 
 GitHub Actions trusted publishing can automate later releases. Configure it for
@@ -146,7 +148,7 @@ It is a separate format from the npm `.tgz`. The low-level installer validates
 size/hash and required artifacts before activation. Production dependencies must
 be installed in the staged release; activation never silently runs npm or service
 commands. See [operations](operations.md#low-level-manifest-archive-workflow) and
-[system installation](installation.md#system-installation).
+[system installation](system-installation.md).
 
 Configuration, database schema and wire-protocol revisions are internal
 compatibility checks, independent of the application package version.
