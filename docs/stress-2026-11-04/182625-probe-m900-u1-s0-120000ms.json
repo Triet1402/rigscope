@@ -1,0 +1,418 @@
+{
+  "tool": "rigscope-scale-harness",
+  "synthetic": true,
+  "disclaimer": "Synthetic bounded workload on an isolated temporary hub/database, not a capacity, latency, or hardware guarantee. Values depend on this host, disk, Node version, payload, cadence, viewer count and concurrent activity.",
+  "generatedAt": "2026-11-04T18:28:34.245Z",
+  "node": "v26.13.0",
+  "host": {
+    "platform": "linux",
+    "release": "7.3.0-9-generic",
+    "arch": "x64",
+    "cpuModel": "AMD EPYC 7402P 24-Core Processor",
+    "logicalCores": 48,
+    "totalMemoryBytes": 130351214592,
+    "loadAverage": [
+      0.98,
+      0.92,
+      0.8
+    ],
+    "node": "v26.13.0"
+  },
+  "command": "npx tsx scripts/scale-harness.ts --case fleet-75m --machines 900 --viewers 1 --sse-clients 0 --sse-workers 4 --duration-ms 120000 --history-interval-ms 1000 --database-budget-mb 1024 --json-out /home/triet/Project/rigscope/docs/stress-2026-11-04/182625-probe-m900-u1-s0-120000ms.json",
+  "suite": [
+    {
+      "name": "fleet-75m",
+      "description": "75 machines with eight concurrent History viewers and four SSE viewers.",
+      "machines": 900,
+      "durationMs": 120000,
+      "sampleIntervalMs": 1000,
+      "recordsPerBatch": 1,
+      "viewers": 1,
+      "sseClients": 0,
+      "slowSseClients": 0,
+      "slowSsePauseAfterMs": 0,
+      "slowSsePauseMs": 0,
+      "historyIntervalMs": 1000,
+      "historyMetricSet": "standard",
+      "churnEveryMs": null,
+      "churnMachines": 0,
+      "replayRecords": 0
+    }
+  ],
+  "cases": [
+    {
+      "name": "fleet-75m",
+      "description": "75 machines with eight concurrent History viewers and four SSE viewers.",
+      "config": {
+        "name": "fleet-75m",
+        "description": "75 machines with eight concurrent History viewers and four SSE viewers.",
+        "machines": 900,
+        "durationMs": 120000,
+        "sampleIntervalMs": 1000,
+        "recordsPerBatch": 1,
+        "viewers": 1,
+        "sseClients": 0,
+        "slowSseClients": 0,
+        "slowSsePauseAfterMs": 0,
+        "slowSsePauseMs": 0,
+        "historyIntervalMs": 1000,
+        "historyMetricSet": "standard",
+        "churnEveryMs": null,
+        "churnMachines": 0,
+        "replayRecords": 0,
+        "warmupMs": 1500,
+        "clientWarmupMs": 0,
+        "sseWorkers": 4,
+        "maxCollectorConnections": 910,
+        "databaseBudgetBytes": 1073741824
+      },
+      "host": {
+        "platform": "linux",
+        "release": "7.3.0-9-generic",
+        "arch": "x64",
+        "cpuModel": "AMD EPYC 7402P 24-Core Processor",
+        "logicalCores": 48,
+        "totalMemoryBytes": 130351214592,
+        "loadAverage": [
+          0.98,
+          0.92,
+          0.8
+        ],
+        "node": "v26.13.0"
+      },
+      "authorization": {
+        "anonymousDenied": true,
+        "scopedHistory": true,
+        "scopedSnapshot": true,
+        "scopedReset": true
+      },
+      "ingestion": {
+        "recordsSent": 111820,
+        "recordsAccepted": 111820,
+        "recordsRejected": 0,
+        "replayRecordsSent": 0,
+        "replayRecordsAccepted": 0,
+        "retryAcks": 0,
+        "unackedLiveRecords": 0,
+        "sendErrors": 0,
+        "ackLatencyMs": {
+          "count": 111820,
+          "min": 4.09,
+          "avg": 47.19,
+          "p50": 42.34,
+          "p95": 71.98,
+          "p99": 267.89,
+          "max": 425.36
+        },
+        "sampleToCommitLagMs": {
+          "count": 111820,
+          "min": 4,
+          "avg": 47.17,
+          "p50": 42,
+          "p95": 72,
+          "p99": 268,
+          "max": 425
+        },
+        "messagesSent": 112720,
+        "backpressureSkips": 0,
+        "connects": 900,
+        "reconnects": 0,
+        "reconnectFailures": 0,
+        "collectorRecoveryMs": {
+          "count": 0,
+          "min": 0,
+          "avg": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0
+        }
+      },
+      "history": {
+        "queries": 121,
+        "ok": 121,
+        "rateLimited": 0,
+        "errors": 0,
+        "latencyMs": {
+          "count": 121,
+          "min": 3.13,
+          "avg": 11.3,
+          "p50": 8.73,
+          "p95": 27.25,
+          "p99": 31.3,
+          "max": 31.49
+        },
+        "series": {
+          "count": 121,
+          "min": 4,
+          "avg": 4,
+          "p50": 4,
+          "p95": 4,
+          "p99": 4,
+          "max": 4
+        },
+        "points": {
+          "count": 121,
+          "min": 8,
+          "avg": 250.45,
+          "p50": 252,
+          "p95": 464,
+          "p99": 488,
+          "max": 488
+        },
+        "truncated": 0,
+        "tiers": {
+          "raw": 121
+        }
+      },
+      "stream": {
+        "clients": 0,
+        "httpStatuses": {},
+        "slowClients": 0,
+        "events": 0,
+        "snapshots": 0,
+        "updates": 0,
+        "resets": 0,
+        "bytes": 0,
+        "eventLagMs": {
+          "count": 0,
+          "min": 0,
+          "avg": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0
+        },
+        "normalEventLagMs": {
+          "count": 0,
+          "min": 0,
+          "avg": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0
+        },
+        "slowEventLagMs": {
+          "count": 0,
+          "min": 0,
+          "avg": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0
+        },
+        "firstEventMs": {
+          "count": 0,
+          "min": 0,
+          "avg": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0
+        },
+        "reconnects": 0,
+        "resetsAfterReconnect": 0,
+        "slowPauses": 0,
+        "slowDrops": 0,
+        "sseRecoveryMs": {
+          "count": 0,
+          "min": 0,
+          "avg": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0
+        }
+      },
+      "hub": {
+        "baseline": {
+          "pid": 185665,
+          "uptimeMs": 3088.34,
+          "hubRunId": "8e3c69bc-e7c1-4f92-aff2-83ee4475c3e5",
+          "eventLoopDelayMs": {
+            "p50": 10.41,
+            "p95": 36.54,
+            "p99": 42.5,
+            "max": 47.02
+          },
+          "eventLoopUtilization": 0.6467,
+          "cpuPercent": 83.47,
+          "cpuMs": {
+            "user": 2138.09,
+            "system": 284.29
+          },
+          "rssBytes": 161828864,
+          "rssPeakBytes": 161828864,
+          "heapUsedBytes": 34142456,
+          "database": {
+            "bytes": 19859264,
+            "walBytes": 4532032,
+            "mainBytes": 15327232
+          },
+          "store": {
+            "queuedRecords": 20,
+            "queuedBatches": 20,
+            "lastFlushMs": 1793816788813,
+            "lastFlushDurationMs": 11,
+            "committedRecords": 2400,
+            "duplicateRecords": 0,
+            "rejectedRecords": 0,
+            "writeFailures": 0,
+            "lastWriteError": null,
+            "diskFullFailures": 0,
+            "dbBytes": 19859264,
+            "dbWalBytes": 4532032,
+            "dbBytesLimit": 1073741824,
+            "retention": {
+              "lastRunAtMs": 0,
+              "lastRunDurationMs": 0,
+              "deletedRows": 0,
+              "pressure": false,
+              "effectiveRawCutoffMs": null,
+              "physicalBytes": 19859264,
+              "physicalLimitBytes": 1073741824,
+              "physicalPressure": false,
+              "walBytes": 4532032
+            }
+          },
+          "liveClients": 0,
+          "sessions": 2,
+          "connectedMachines": 900,
+          "configuredMachines": 900,
+          "snapshotBytes": 1781173
+        },
+        "window": {
+          "pid": 185665,
+          "uptimeMs": 123122.92,
+          "hubRunId": "8e3c69bc-e7c1-4f92-aff2-83ee4475c3e5",
+          "eventLoopDelayMs": {
+            "p50": 12.08,
+            "p95": 47.74,
+            "p99": 60.85,
+            "max": 333.71
+          },
+          "eventLoopUtilization": 0.6896,
+          "cpuPercent": 75.13,
+          "cpuMs": {
+            "user": 66294.15,
+            "system": 23875.5
+          },
+          "rssBytes": 220569600,
+          "rssPeakBytes": 235884544,
+          "heapUsedBytes": 34164040,
+          "database": {
+            "bytes": 211592248,
+            "walBytes": 10023992,
+            "mainBytes": 201568256
+          },
+          "store": {
+            "queuedRecords": 4,
+            "queuedBatches": 4,
+            "lastFlushMs": 1793816908853,
+            "lastFlushDurationMs": 29,
+            "committedRecords": 110396,
+            "duplicateRecords": 0,
+            "rejectedRecords": 0,
+            "writeFailures": 0,
+            "lastWriteError": null,
+            "diskFullFailures": 0,
+            "dbBytes": 211592248,
+            "dbWalBytes": 10023992,
+            "dbBytesLimit": 1073741824,
+            "retention": {
+              "lastRunAtMs": 1793816906097,
+              "lastRunDurationMs": 303,
+              "deletedRows": 0,
+              "pressure": false,
+              "effectiveRawCutoffMs": 1793644106097,
+              "physicalBytes": 211592248,
+              "physicalLimitBytes": 1073741824,
+              "physicalPressure": false,
+              "walBytes": 10023992
+            }
+          },
+          "liveClients": 0,
+          "sessions": 2,
+          "connectedMachines": 900,
+          "configuredMachines": 900,
+          "snapshotBytes": 1782973
+        },
+        "final": {
+          "pid": 185665,
+          "uptimeMs": 126143.17,
+          "hubRunId": "8e3c69bc-e7c1-4f92-aff2-83ee4475c3e5",
+          "eventLoopDelayMs": {
+            "p50": 10.12,
+            "p95": 31.51,
+            "p99": 43.68,
+            "max": 70.45
+          },
+          "eventLoopUtilization": 0.446,
+          "cpuPercent": 45.39,
+          "cpuMs": {
+            "user": 803.58,
+            "system": 562.86
+          },
+          "rssBytes": 224501760,
+          "rssPeakBytes": 224501760,
+          "heapUsedBytes": 31829824,
+          "database": {
+            "bytes": 214029512,
+            "walBytes": 10048712,
+            "mainBytes": 203980800
+          },
+          "store": {
+            "queuedRecords": 0,
+            "queuedBatches": 0,
+            "lastFlushMs": 1793816910380,
+            "lastFlushDurationMs": 19,
+            "committedRecords": 111820,
+            "duplicateRecords": 0,
+            "rejectedRecords": 0,
+            "writeFailures": 0,
+            "lastWriteError": null,
+            "diskFullFailures": 0,
+            "dbBytes": 214029512,
+            "dbWalBytes": 10048712,
+            "dbBytesLimit": 1073741824,
+            "retention": {
+              "lastRunAtMs": 1793816906097,
+              "lastRunDurationMs": 303,
+              "deletedRows": 0,
+              "pressure": false,
+              "effectiveRawCutoffMs": 1793644106097,
+              "physicalBytes": 214029512,
+              "physicalLimitBytes": 1073741824,
+              "physicalPressure": false,
+              "walBytes": 10048712
+            }
+          },
+          "liveClients": 0,
+          "sessions": 2,
+          "connectedMachines": 900,
+          "configuredMachines": 900,
+          "snapshotBytes": 1782973
+        },
+        "databaseGrowth": {
+          "bytes": 194170248,
+          "walBytes": 5516680,
+          "mainBytes": 188653568
+        }
+      },
+      "elapsedMs": 120002,
+      "artifacts": {
+        "directory": "/tmp/rigscope-scale-1U8KZB",
+        "kept": false,
+        "configPath": "/tmp/rigscope-scale-1U8KZB/hub-config.json",
+        "databasePath": "/tmp/rigscope-scale-1U8KZB/scale.sqlite"
+      }
+    }
+  ],
+  "limitations": [
+    "Collector payload values and cadence are synthetic; the hub, database, auth, SSE and History paths are real modules.",
+    "The hub child and all load generators share one host; the hub event loop is single-threaded, while load processes can use other cores. This is not distributed load.",
+    "History queries are synchronous on the hub event loop, so 'concurrent' viewers model overlapping HTTP requests, not parallel SQLite readers.",
+    "The measurement never contacts the live service; it uses a fresh temporary database and loopback ephemeral port.",
+    "A passing case is evidence for this host and workload, not an unlimited-capacity or latency guarantee."
+  ]
+}

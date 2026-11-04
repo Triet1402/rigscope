@@ -9,6 +9,22 @@ concurrency listed for each case. They do not prove that a larger fleet,
 different hardware, slower storage or a different browser workload will behave
 the same way.
 
+## Later capacity search
+
+The [November 4 capacity stress test](stress-2026-11-04/README.md) extends these
+measurements with an exponential/binary search and two-minute confirmations:
+
+- 500 collectors plus 64 live browser sessions passed at one sample and one
+  History poll per second per participant.
+- Ingestion without live viewers passed at 1,050 collectors; 1,125 exceeded the
+  experiment's 500 ms acknowledgment p95 target.
+- Full-fleet streaming passed with 529 representative machines, but 530 exceeded
+  the live feed's 1 MiB buffer guard and disconnected the viewer.
+
+That report, its measurement JSON and chart are included in the npm package.
+These results describe a bounded synthetic workload, not long-term capacity.
+The five-case suite below remains the earlier sustained measurement.
+
 ## What was missing
 
 The earlier `ops measure` command was a bounded synthetic burst capped at 50
@@ -86,12 +102,13 @@ phase boundary.
 
 ### Bounds
 
-- machines: 1–1,000,
+- machines: 1–8,192 (the total-record bound below still applies),
 - measured phase: up to 1 hour,
 - sample cadence: at least 100 ms (the protocol rate limit),
 - records per live batch: 1–32,
-- viewers: 1–50 authenticated sessions,
-- SSE clients: 1–64,
+- viewers: 1–200 authenticated sessions,
+- SSE attempts: 0–65; the hub still admits at most 64 (zero isolates ingestion,
+  and the 65th attempt measures admission rejection),
 - replay: at most 128 records per reconnect,
 - estimated live plus replay records: at most 500,000 per case,
 - database: 512 MiB main+WAL by default (`--database-budget-mb 0` disables the
@@ -201,6 +218,10 @@ payloads, storage and viewer counts.
 
 ## Reproduction
 
+For the later resource-guarded capacity search, including the distinction between
+collector throughput and full-fleet stream limits, see
+[the November 4 stress test](stress-2026-11-04/README.md).
+
 ```sh
 # full five-case suite (about five minutes)
 npx tsx scripts/scale-harness.ts --suite \
@@ -213,6 +234,11 @@ npx tsx scripts/scale-harness.ts --case fleet-75m \
 
 # retain the throwaway database and configuration for inspection
 npx tsx scripts/scale-harness.ts --case small-5m --keep
+
+# Keep stream parsing independent of collector sample generation
+npx tsx scripts/scale-harness.ts --case fleet-75m \
+  --machines 500 --viewers 64 --sse-clients 64 --sse-workers 4 \
+  --duration-ms 60000 --json-out /tmp/rigscope-scale-mixed.json
 ```
 
 The short `tests/scale-harness.test.ts` smoke runs the same child with two
@@ -224,6 +250,11 @@ test; it proves the harness paths work in CI.
 - The hub child and all load generators share one host. The hub event loop uses
   one thread; the load processes can run on other cores. This is
   not a distributed-load test and the generator competes with the hub.
+  `--sse-workers N` separates stream readers into up to eight processes. With
+  workers enabled, a one-second client warmup precedes the measured window;
+  without workers, collector generation and stream parsing share an event loop,
+  which can under-drive large mixed workloads. Report configuration records
+  the worker count and client warmup. The original five results used no workers.
 - History queries are synchronous SQLite work on the hub event loop.
   "Concurrent viewers" means overlapping authenticated HTTP requests, not
   parallel SQLite readers.

@@ -107,6 +107,7 @@ type HubStats = {
   sessions: number;
   connectedMachines: number;
   configuredMachines: number;
+  snapshotBytes: number;
 };
 
 type PercentileSummary = {
@@ -141,7 +142,7 @@ type CaseSpec = {
 type CaseReport = {
   name: string;
   description: string;
-  config: CaseSpec & { warmupMs: number; maxCollectorConnections: number; databaseBudgetBytes: number | null };
+  config: CaseSpec & { warmupMs: number; clientWarmupMs: number; sseWorkers: number; maxCollectorConnections: number; databaseBudgetBytes: number | null };
   host: ReturnType<typeof hostInfo>;
   authorization: {anonymousDenied: boolean; scopedHistory: boolean; scopedSnapshot: boolean; scopedReset: boolean};
   ingestion: {
@@ -175,6 +176,7 @@ type CaseReport = {
   };
   stream: {
     clients: number;
+    httpStatuses: Record<string, number>;
     slowClients: number;
     events: number;
     snapshots: number;
@@ -350,6 +352,7 @@ class HubStatsWindow {
       sessions: input.sessions.size(),
       connectedMachines: input.state.connectedCount(),
       configuredMachines: input.state.configuredCount(),
+      snapshotBytes: Buffer.byteLength(JSON.stringify(input.state.snapshot())),
     };
     if (input.reset) {
       delay.reset();
@@ -382,7 +385,7 @@ async function runHubChild(configPath: string): Promise<void> {
   const state = new HubState({ collectors: config.identities, hubRunId });
   const ingestion = new SampleIngestion({ state, storage: store });
   const feed = new LiveFeed(state, { coalesceMs: config.coalesceMs, maxClients: config.feedMaxClients });
-  const sessions = new BrowserSessionStore({ ttlMs: 12 * 60 * 60 * 1000, maxSessions: 64 });
+  const sessions = new BrowserSessionStore({ ttlMs: 12 * 60 * 60 * 1000 });
   const origin: Extract<AuthOriginRules, { mode?: "loopback" }> = {
     mode: "loopback",
     originPort: 0,
@@ -992,6 +995,7 @@ class SseClient {
   private recoveryStartedAt: number | null = null;
 
   events = 0;
+  readonly httpStatuses: Record<string, number> = {};
   snapshots = 0;
   updates = 0;
   resets = 0;
@@ -1036,6 +1040,8 @@ class SseClient {
     };
     if (lastEventId !== null) headers["Last-Event-ID"] = lastEventId;
     const request = httpGet(`${this.baseUrl}/api/live`, { headers }, (response) => {
+      const status = String(response.statusCode ?? 0);
+      this.httpStatuses[status] = (this.httpStatuses[status] ?? 0) + 1;
       this.response = response;
       response.setEncoding("utf8");
       if (response.statusCode !== 200) {
@@ -1191,6 +1197,100 @@ class SseClient {
     } catch {
       // already gone
     }
+  }
+}
+
+// Keep collector cadence independent of JSON parsing by simulated browsers.
+// Workers only consume the same isolated loopback hub and use throwaway cookies
+// sent over IPC. They never log or persist the cookies.
+const SSE_STAT_KEYS = [
+  "events", "snapshots", "updates", "resets", "bytes", "reconnects",
+  "resetsAfterReconnect", "slowPauses", "slowDrops", "eventLagMs",
+  "firstEventMs", "sseRecoveryMs", "httpStatuses",
+] as const;
+
+function sseStats(client: SseClient): Record<string, unknown> {
+  return Object.fromEntries(SSE_STAT_KEYS.map((key) => [key, client[key]]));
+}
+
+async function runSseWorker(): Promise<void> {
+  const clients: SseClient[] = [];
+  let timer: NodeJS.Timeout | undefined;
+  const report = (): void => {
+    if (process.connected) process.send?.({ type: "stats", clients: clients.map(sseStats) });
+  };
+  process.on("message", (message: any) => {
+    if (message.type === "start") {
+      for (const item of message.clients) {
+        const client = new SseClient(item.id, item.options);
+        clients.push(client);
+        client.connect();
+      }
+      timer = setInterval(report, 1000);
+      process.send?.({ type: "ready" });
+    } else if (message.type === "stop") {
+      clearInterval(timer);
+      for (const client of clients) client.stop();
+      report();
+      process.disconnect?.();
+    }
+  });
+  process.on("disconnect", () => {
+    clearInterval(timer);
+    for (const client of clients) client.stop();
+    process.exit(0);
+  });
+  await new Promise<void>(() => {});
+}
+
+async function startSseWorkers(clients: SseClient[], count: number): Promise<() => Promise<void>> {
+  const children: ChildProcess[] = [];
+  const stop = async (): Promise<void> => {
+    await Promise.all(children.map(async (child) => {
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      const exited = new Promise<void>((done) => child.once("exit", () => done()));
+      if (child.connected) child.send({ type: "stop" });
+      const timeout = setTimeout(() => child.kill("SIGKILL"), 3000);
+      await exited;
+      clearTimeout(timeout);
+    }));
+  };
+  try {
+    await Promise.all(Array.from({ length: Math.min(count, clients.length) }, async (_, worker) => {
+      const group = clients.filter((_, index) => index % count === worker);
+      const child = spawn(process.execPath, ["--import", "tsx", SCRIPT_PATH, "sse-worker"], {
+        cwd: ROOT, stdio: ["ignore", "ignore", "ignore", "ipc"],
+      });
+      children.push(child);
+      await new Promise<void>((ready, fail) => {
+        const timeout = setTimeout(() => fail(new Error("SSE worker startup timeout")), 10000);
+        child.on("error", fail);
+        child.once("exit", (code) => {
+          clearTimeout(timeout);
+          fail(new Error(`SSE worker exited: ${code}`));
+        });
+        child.on("message", (message: any) => {
+          if (message.type === "ready") {
+            clearTimeout(timeout);
+            ready();
+          } else if (message.type === "stats") {
+            message.clients.forEach((stats: Record<string, unknown>, index: number) => {
+              Object.assign(group[index]!, stats);
+            });
+          }
+        });
+        child.send({ type: "start", clients: group.map((client) => ({
+          id: client.id, options: {
+            cookie: client.cookie, baseUrl: client.baseUrl, slow: client.slow,
+            churn: client.churn, pauseAfterMs: client.pauseAfterMs, pauseMs: client.pauseMs,
+          },
+        })) });
+      });
+    }));
+    return stop;
+  } catch (error) {
+    await stop();
+    throw error;
   }
 }
 
@@ -1362,7 +1462,7 @@ async function checkAuthorization(baseUrl: string, password: string, machines: s
   return {anonymousDenied:true,scopedHistory:true,scopedSnapshot:true,scopedReset:true};
 }
 
-async function runCase(spec: CaseSpec, options: { keep: boolean; maxPhysicalBytes: number | null }): Promise<CaseReport> {
+async function runCase(spec: CaseSpec, options: { keep: boolean; maxPhysicalBytes: number | null; sseWorkers: number }): Promise<CaseReport> {
   const directory = mkdtempSync(join(tmpdir(), "rigscope-scale-"));
   chmodSync(directory, 0o700);
   const databasePath = join(directory, "scale.sqlite");
@@ -1381,7 +1481,7 @@ async function runCase(spec: CaseSpec, options: { keep: boolean; maxPhysicalByte
       {username:'scale-scoped',passwordHash,machineIds:[identities[0]!.machineId]}],
     maxConnections: Math.max(100, spec.machines + 10),
     coalesceMs: 500,
-    maxQueuedRecords: 8192,
+    maxQueuedRecords: 4096,
     maxRecordsPerTransaction: 32,
     maxPhysicalBytes: options.maxPhysicalBytes,
     feedMaxClients: 64,
@@ -1397,6 +1497,7 @@ async function runCase(spec: CaseSpec, options: { keep: boolean; maxPhysicalByte
   let windowStats: HubStats | null = null;
   let finalStats: HubStats | null = null;
   let startedAt = 0;
+  let stopSseWorkers: (() => Promise<void>) | undefined;
 
   try {
     const cookies: string[] = [];
@@ -1439,7 +1540,14 @@ async function runCase(spec: CaseSpec, options: { keep: boolean; maxPhysicalByte
         pauseMs: spec.slowSsePauseMs,
       });
       sseClients.push(client);
-      client.connect();
+      if (options.sseWorkers === 0) client.connect();
+    }
+    const clientWarmupMs = options.sseWorkers > 0 && sseClients.length > 0 ? 1000 : 0;
+    if (clientWarmupMs > 0) {
+      stopSseWorkers = await startSseWorkers(sseClients, options.sseWorkers);
+      await sleep(clientWarmupMs);
+      baselineStats = await hub.stats(true);
+      startedAt = performance.now();
     }
 
     for (let viewer = 0; viewer < spec.viewers; viewer += 1) {
@@ -1481,8 +1589,9 @@ async function runCase(spec: CaseSpec, options: { keep: boolean; maxPhysicalByte
     for (const collector of collectors) collector.stopSending();
     await sleep(1_500);
     finalStats = await hub.stats(false);
+    await stopSseWorkers?.();
     for (const client of sseClients) client.stop();
-    for (const collector of collectors) await collector.stop();
+    await Promise.all(collectors.map((collector) => collector.stop()));
 
     const allHistory = mergeHistoryCounters(historyCounters);
     const ingestion = summarizeIngestion(collectors);
@@ -1493,6 +1602,8 @@ async function runCase(spec: CaseSpec, options: { keep: boolean; maxPhysicalByte
       config: {
         ...spec,
         warmupMs,
+        clientWarmupMs,
+        sseWorkers: options.sseWorkers,
         maxCollectorConnections: childConfig.maxConnections,
         databaseBudgetBytes: options.maxPhysicalBytes,
       },
@@ -1536,8 +1647,9 @@ async function runCase(spec: CaseSpec, options: { keep: boolean; maxPhysicalByte
   } finally {
     for (let index = 0; index < stopFlags.length; index += 1) stopFlags[index] = true;
     if (churnTimer !== null) clearInterval(churnTimer);
+    await stopSseWorkers?.();
     for (const client of sseClients) client.stop();
-    for (const collector of collectors) await collector.stop();
+    await Promise.all(collectors.map((collector) => collector.stop()));
     await hub.stop();
     if (!options.keep) rmSync(directory, { recursive: true, force: true });
   }
@@ -1617,6 +1729,7 @@ function summarizeIngestion(collectors: CollectorSim[]): CaseReport["ingestion"]
 }
 
 function summarizeStream(clients: SseClient[], spec: CaseSpec): CaseReport["stream"] {
+  const httpStatuses: Record<string, number> = {};
   const lag: number[] = [];
   const normalLag: number[] = [];
   const slowLag: number[] = [];
@@ -1632,6 +1745,9 @@ function summarizeStream(clients: SseClient[], spec: CaseSpec): CaseReport["stre
   let slowPauses = 0;
   let slowDrops = 0;
   for (const client of clients) {
+    for (const [status, count] of Object.entries(client.httpStatuses)) {
+      httpStatuses[status] = (httpStatuses[status] ?? 0) + count;
+    }
     lag.push(...client.eventLagMs);
     if (client.slow) slowLag.push(...client.eventLagMs);
     else normalLag.push(...client.eventLagMs);
@@ -1649,6 +1765,7 @@ function summarizeStream(clients: SseClient[], spec: CaseSpec): CaseReport["stre
   }
   return {
     clients: spec.sseClients,
+    httpStatuses,
     slowClients: spec.slowSseClients,
     events,
     snapshots,
@@ -1894,6 +2011,10 @@ async function main(): Promise<number> {
     await runHubChild(argv[1]);
     return 0;
   }
+  if (argv[0] === "sse-worker") {
+    await runSseWorker();
+    return 0;
+  }
 
   const parsed = parseArgs({
     args: argv,
@@ -1906,6 +2027,7 @@ async function main(): Promise<number> {
       "records-per-batch": { type: "string" },
       viewers: { type: "string" },
       "sse-clients": { type: "string" },
+      "sse-workers": { type: "string" },
       "slow-sse": { type: "string" },
       "history-interval-ms": { type: "string" },
       "churn-every-ms": { type: "string" },
@@ -1928,11 +2050,15 @@ async function main(): Promise<number> {
   const budgetMb = optionNumber(parsed.values, "database-budget-mb", 512);
   const maxPhysicalBytes = budgetMb === 0 ? null : budgetMb * 1024 * 1024;
   const specs = optionBoolean(parsed.values, "suite") ? suiteSpecs() : [caseFromOptions(parsed.values)];
+  const sseWorkers = optionNumber(parsed.values, "sse-workers", 0);
+  if (!Number.isSafeInteger(sseWorkers) || sseWorkers < 0 || sseWorkers > 8) {
+    throw new Error("sse-workers must be an integer from 0 to 8");
+  }
   for (const spec of specs) validateSpec(spec);
   const cases: CaseReport[] = [];
   for (const spec of specs) {
     console.error(`scale case ${spec.name}: ${spec.machines} machines, ${spec.viewers} viewers, ${spec.durationMs} ms`);
-    const report = await runCase(spec, { keep: optionBoolean(parsed.values, "keep"), maxPhysicalBytes });
+    const report = await runCase(spec, { keep: optionBoolean(parsed.values, "keep"), maxPhysicalBytes, sseWorkers });
     cases.push(report);
     console.error(
       `scale case ${spec.name}: accepted ${report.ingestion.recordsAccepted}/${report.ingestion.recordsSent}, ` +
@@ -1974,13 +2100,15 @@ function validateSpec(spec: CaseSpec): void {
       throw new Error(`${name} must be an integer from 1 to ${max}`);
     }
   };
-  positive(spec.machines, "machines", 1_000);
+  positive(spec.machines, "machines", 8_192);
   positive(spec.durationMs, "durationMs", 3_600_000);
   positive(spec.sampleIntervalMs, "sampleIntervalMs", 60_000);
   if (spec.sampleIntervalMs < 100) throw new Error("sampleIntervalMs must be at least 100 ms (protocol rate limit)");
   positive(spec.recordsPerBatch, "recordsPerBatch", MAX_BATCH_RECORDS);
-  positive(spec.viewers, "viewers", 50);
-  positive(spec.sseClients, "sseClients", 64);
+  positive(spec.viewers, "viewers", 200);
+  // Permit one over the production limit to measure admission rejection.
+  // The child's LiveFeed limit remains 64.
+  if (spec.sseClients !== 0) positive(spec.sseClients, "sseClients", 65);
   if (spec.slowSseClients > spec.sseClients) throw new Error("slowSseClients cannot exceed sseClients");
   positive(spec.historyIntervalMs, "historyIntervalMs", 60_000);
   if (spec.churnMachines > spec.machines) throw new Error("churnMachines cannot exceed machines");
@@ -2007,11 +2135,12 @@ Options:
   --case NAME             small-5m | fleet-75m | fleet-75m-churn |
                           fleet-75m-slow-sse | fleet-75m-history
   --duration-ms N         Measured phase per case (default from case, 60000).
-  --machines N            Collector identities (1..1000).
+  --machines N            Collector identities (1..8192; total record bound applies).
   --sample-interval-ms N  Live cadence per collector (>=100).
   --records-per-batch N   Records per live protocol batch (1..32).
-  --viewers N             Authenticated History sessions (1..50).
-  --sse-clients N         Authenticated SSE viewers (1..64).
+  --viewers N             Authenticated History sessions (1..200).
+  --sse-clients N         SSE attempts (0..65; hub admits at most 64).
+  --sse-workers N         Separate stream-reader processes (0..8; default 0).
   --slow-sse N            How many SSE viewers pause reading (<=sse-clients).
   --history-interval-ms N Per-viewer History poll interval.
   --churn-every-ms N      Collector/SSE reconnect interval (0 disables).
