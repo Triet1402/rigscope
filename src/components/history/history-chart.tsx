@@ -6,7 +6,7 @@
  * shaded. Summary stats are exposed through the chart's accessible label.
  */
 
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import {
   buildYDomain,
@@ -26,6 +26,8 @@ import {
 } from "@/history/presentation";
 import { metricUnitLabel } from "@/history/metrics";
 import type { HistoryGap, HistorySeries } from "@/hub/storage/history-query";
+import { inspectionPoint, inspectionTimeAtPointer } from "@/history/inspection";
+import { ChartInspectionTooltip, useChartInspection } from "./chart-inspection";
 
 const W = 800;
 const H = 160;
@@ -129,7 +131,8 @@ function chartAriaLabel(
 
 export function HistoryChart(props: Props) {
   const { title, unit, series, fromMs, toMs, stepMs, gaps, hiddenKeys, onToggleSeries, emptyMessage, note } = props;
-  const visible = series.filter((item) => !hiddenKeys.has(item.key));
+  const visible = useMemo(() => series.filter((item) => !hiddenKeys.has(item.key)), [series, hiddenKeys]);
+  const inspection = useChartInspection({ series: visible, fromMs, toMs, stepMs, gaps });
   const visiblePoints = visible.flatMap((item) => item.points);
   const hasAnyPoint = visiblePoints.some((point) => point.avg !== null || point.min !== null || point.max !== null);
   const span = Math.max(1, toMs - fromMs);
@@ -143,12 +146,18 @@ export function HistoryChart(props: Props) {
   const x = (t: number): number => PAD + ((Math.min(toMs, Math.max(fromMs, t)) - fromMs) / span) * (W - 2 * PAD);
   const y = (value: number): number => PAD + (1 - (value - domain.min) / yRange) * (H - 2 * PAD);
 
-  const drawSeries = visible.map((item) => {
+  const drawSeries = useMemo(() => visible.map((item) => {
     const downsampled = downsamplePoints(item.points, props.maxDrawPoints ?? MAX_DRAW_POINTS, stepMs);
     const segments = splitSeries(downsampled, { stepMs, gaps, fromMs, toMs });
     return { ...item, segments };
-  });
+  }), [visible, props.maxDrawPoints, stepMs, gaps, fromMs, toMs]);
   const ariaLabel = chartAriaLabel(title, unit, visible, fromMs, toMs, bands.length);
+  const inspected = inspection.timeMs === null ? [] : visible.map((item) => ({
+    ...item, point: inspectionPoint(item.points, inspection.timeMs!, stepMs, gaps),
+  }));
+  const cursorX = inspection.timeMs === null ? null : x(inspection.timeMs);
+  const tooltipId = `${inspection.id}-tooltip`;
+  const instructionsId = `${inspection.id}-instructions`;
 
   return (
     <figure className={`flex min-w-0 flex-col gap-2 ${props.className ?? ""}`}>
@@ -172,88 +181,114 @@ export function HistoryChart(props: Props) {
               ))}
             </div>
             <div className="min-w-0 flex-1">
-              <svg
-                viewBox={`0 0 ${W} ${H}`}
-                preserveAspectRatio="none"
-                role="img"
-                aria-label={ariaLabel}
-                className="block h-40 w-full"
-              >
-                <title>{title}</title>
-                {domain.ticks.map((tick) => (
-                  <line
-                    key={`grid-${tick}`}
-                    x1={PAD}
-                    x2={W - PAD}
-                    y1={y(tick)}
-                    y2={y(tick)}
-                    stroke="var(--border)"
-                    strokeWidth="1"
-                    vectorEffect="non-scaling-stroke"
-                  />
-                ))}
-                {bands.map((band) => (
-                  <rect
-                    key={`gap-${band.fromMs}-${band.toMs}-${band.kind}`}
-                    x={x(band.fromMs)}
-                    y={PAD}
-                    width={Math.max(1, x(band.toMs) - x(band.fromMs))}
-                    height={H - 2 * PAD}
-                    fill="var(--muted-foreground)"
-                    opacity="0.09"
-                  />
-                ))}
-                {drawSeries.map((item) => {
-                  const envelope = envelopeSegments(item.segments, x, y);
-                  return envelope === "" ? null : (
-                    <path
-                      key={`band-${item.key}`}
-                      d={envelope}
-                      fill={item.color}
-                      opacity="0.14"
-                      stroke="none"
-                    />
-                  );
-                })}
-                {drawSeries.map((item) => {
-                  const path = averageSegments(item.segments, x, y);
-                  return path === "" ? null : (
-                    <path
-                      key={`line-${item.key}`}
-                      d={path}
-                      fill="none"
-                      stroke={item.color}
-                      strokeWidth="2"
-                      strokeDasharray={item.dash}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
+              <div className="relative" onPointerLeave={inspection.clear}>
+                <p id={instructionsId} className="sr-only">Use Left and Right arrows to inspect recorded readings, Home or End to jump, and Escape to dismiss.</p>
+                <svg
+                  viewBox={`0 0 ${W} ${H}`}
+                  preserveAspectRatio="none"
+                  role="img"
+                  aria-label={ariaLabel}
+                  tabIndex={0}
+                  aria-describedby={`${instructionsId}${inspection.active ? ` ${tooltipId}` : ""}`}
+                  onPointerMove={(event) => {
+                    const bounds = event.currentTarget.getBoundingClientRect();
+                    inspection.inspect(inspectionTimeAtPointer(event.clientX, bounds.left, bounds.width, fromMs, toMs, PAD / W));
+                  }}
+                  onFocus={inspection.onFocus}
+                  onBlur={inspection.clear}
+                  onKeyDown={inspection.onKeyDown}
+                  className="block h-40 w-full cursor-crosshair rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                  <title>{title}</title>
+                  {domain.ticks.map((tick) => (
+                    <line
+                      key={`grid-${tick}`}
+                      x1={PAD}
+                      x2={W - PAD}
+                      y1={y(tick)}
+                      y2={y(tick)}
+                      stroke="var(--border)"
+                      strokeWidth="1"
                       vectorEffect="non-scaling-stroke"
                     />
-                  );
-                })}
-                {drawSeries.flatMap((item) =>
-                  item.segments
-                    .filter((segment) => segment.length === 1)
-                    .map((segment) => {
-                      const point = segment[0]!;
-                      const cx = x(point.t);
-                      const cy = y(point.avg!);
-                      return (
-                        <line
-                          key={`dot-${item.key}-${point.t}`}
-                          x1={cx - 2.5}
-                          x2={cx + 2.5}
-                          y1={cy}
-                          y2={cy}
-                          stroke={item.color}
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                          vectorEffect="non-scaling-stroke"
-                        />
-                      );
-                    }),
-                )}
-              </svg>
+                  ))}
+                  {bands.map((band) => (
+                    <rect
+                      key={`gap-${band.fromMs}-${band.toMs}-${band.kind}`}
+                      x={x(band.fromMs)}
+                      y={PAD}
+                      width={Math.max(1, x(band.toMs) - x(band.fromMs))}
+                      height={H - 2 * PAD}
+                      fill="var(--muted-foreground)"
+                      opacity="0.09"
+                    />
+                  ))}
+                  {drawSeries.map((item) => {
+                    const envelope = envelopeSegments(item.segments, x, y);
+                    return envelope === "" ? null : (
+                      <path
+                        key={`band-${item.key}`}
+                        d={envelope}
+                        fill={item.color}
+                        opacity="0.14"
+                        stroke="none"
+                      />
+                    );
+                  })}
+                  {drawSeries.map((item) => {
+                    const path = averageSegments(item.segments, x, y);
+                    return path === "" ? null : (
+                      <path
+                        key={`line-${item.key}`}
+                        d={path}
+                        fill="none"
+                        stroke={item.color}
+                        strokeWidth="2"
+                        strokeDasharray={item.dash}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    );
+                  })}
+                  {drawSeries.flatMap((item) =>
+                    item.segments
+                      .filter((segment) => segment.length === 1)
+                      .map((segment) => {
+                        const point = segment[0]!;
+                        const cx = x(point.t);
+                        const cy = y(point.avg!);
+                        return (
+                          <line
+                            key={`dot-${item.key}-${point.t}`}
+                            x1={cx - 2.5}
+                            x2={cx + 2.5}
+                            y1={cy}
+                            y2={cy}
+                            stroke={item.color}
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            vectorEffect="non-scaling-stroke"
+                          />
+                        );
+                      }),
+                  )}
+                  {cursorX !== null ? (
+                    <g aria-hidden pointerEvents="none">
+                      <line x1={cursorX} x2={cursorX} y1={PAD} y2={H - PAD}
+                        stroke="var(--muted-foreground)" strokeWidth="1" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+                      {inspected.map(({ key, color, point }) => point?.avg == null ? null : (
+                        <circle key={key} cx={x(point.t)} cy={y(point.avg)} r="3.5"
+                          fill={color} stroke="var(--card)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+                      ))}
+                    </g>
+                  ) : null}
+                </svg>
+                {inspection.active && inspection.timeMs !== null && cursorX !== null ? (
+                  <ChartInspectionTooltip id={tooltipId} timeMs={inspection.timeMs} fraction={cursorX / W}
+                    unit={unit} readings={inspected} />
+                ) : null}
+              </div>
               <div
                 aria-hidden
                 className="mt-1 flex justify-between gap-2 text-xs leading-tight tnum text-muted-foreground"

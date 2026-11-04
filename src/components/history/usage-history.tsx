@@ -9,6 +9,7 @@ import { defaultMetricsFor, gpuCards, metricOption, metricSeriesStyle } from "@/
 import { continuityStepMs } from "@/history/chart";
 import { useStoredHistory } from "./use-stored-history";
 import { HistoryChart, type ChartSeries } from "./history-chart";
+import { ChartInspectionProvider } from "./chart-inspection";
 
 const EMPTY = new Set<string>();
 const USAGE_METRICS = new Set(["cpu.usage", "memory.used", "gpu.utilization", "gpu.memory.used"]);
@@ -45,18 +46,20 @@ export function UsageHistory({ machine }: { machine: MachineState }) {
       {error ? <p role="status" className="mb-2 text-xs text-warn">{data ? "Refresh failed · showing saved readings" : error.message}</p> : null}
       {data?.result.truncated ? <p className="mb-2 text-xs text-warn">Partial history</p> : null}
       {data ? (
-        <div className="grid gap-5 lg:grid-cols-2">
-          {[
-            { title: "CPU & GPU", unit: "percent" },
-            { title: "RAM & VRAM", unit: "bytes" },
-          ].map(({ title, unit }) => (
-            <HistoryChart key={unit} title={title} unit={unit}
-              series={series.filter((item) => metricOption(item.metric)?.unit === unit)}
-              fromMs={data.result.fromMs} toMs={data.result.toMs}
-              stepMs={continuityStepMs(data.result.stepMs, data.result.tier, machine.expectedIntervalMs)} gaps={data.result.gaps}
-              hiddenKeys={hiddenSeries} onToggleSeries={toggleSeries} emptyMessage="No readings" />
-          ))}
-        </div>
+        <ChartInspectionProvider key={machine.machineId}>
+          <div className="grid gap-5 lg:grid-cols-2">
+            {[
+              { title: "CPU & GPU", unit: "percent" },
+              { title: "RAM & VRAM", unit: "bytes" },
+            ].map(({ title, unit }) => (
+              <HistoryChart key={unit} title={title} unit={unit}
+                series={series.filter((item) => metricOption(item.metric)?.unit === unit)}
+                fromMs={data.result.fromMs} toMs={data.result.toMs}
+                stepMs={continuityStepMs(data.result.stepMs, data.result.tier, machine.expectedIntervalMs)} gaps={data.result.gaps}
+                hiddenKeys={hiddenSeries} onToggleSeries={toggleSeries} emptyMessage="No readings" />
+            ))}
+          </div>
+        </ChartInspectionProvider>
       ) : (
         <div className="flex min-h-48 items-center justify-center text-xs text-muted-foreground" role="status">{error ? "History unavailable" : "Loading history…"}</div>
       )}
