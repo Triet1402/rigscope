@@ -1,5 +1,17 @@
 # Release notes
 
+## 0.1.1
+
+- Improve History chart behavior and add synchronized chart inspection.
+- Add resource-guarded hub capacity testing with independent live-stream readers,
+  two-minute confirmations and reproducible measurements.
+- Include the capacity report and measurement JSON in the npm package so the
+  scale-validation documentation links resolve after installation.
+
+Known limitation: sufficiently large full-fleet snapshots can exceed the live
+feed's 1 MiB buffer guard and disconnect viewers. The synthetic test crossed
+that boundary at 530 machines; the exact count depends on payload size and scope.
+
 ## 0.1.0
 
 Initial public release of Rigscope, a self-hosted Linux system and process monitor.

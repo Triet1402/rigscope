@@ -20,3 +20,8 @@ next-env.d.ts
 
 # Local design tooling
 .impeccable/
+
+# Local stress-test logs and per-process resource traces.
+# Keep the report, measurement JSON, index, chart and manifest versioned.
+/docs/stress-*/*.log
+/docs/stress-*/*.resources.json

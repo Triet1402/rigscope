@@ -1,6 +1,6 @@
 {
   "name": "rigscope",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "rigscopeConfigVersion": 2,
   "private": false,
   "engines": {
@@ -79,6 +79,11 @@
     "docs/scale-validation.md",
     "docs/scale-validation.json",
     "docs/scale-acceptance.json",
+    "docs/stress-2026-11-04/README.md",
+    "docs/stress-2026-11-04/index.jsonl",
+    "docs/stress-2026-11-04/manifest.json",
+    "docs/stress-2026-11-04/results.html",
+    "docs/stress-2026-11-04/*ms.json",
     "ARCHITECTURE.md",
     "DESIGN.md",
     "LICENSE",

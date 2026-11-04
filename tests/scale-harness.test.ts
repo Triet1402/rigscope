@@ -19,8 +19,8 @@ const execFileAsync = promisify(execFile);
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SCRIPT = join(ROOT, "scripts", "scale-harness.ts");
 
-test(
-  "scale harness runs an isolated sustained case with reconnect, replay and SSE reset",
+for (const sseWorkers of [0, 2]) test(
+  `scale harness runs reconnect, replay and SSE reset with ${sseWorkers} stream workers`,
   { timeout: 90_000 },
   async () => {
     const directory = mkdtempSync(join(tmpdir(), "rigscope-scale-test-"));
@@ -39,7 +39,9 @@ test(
           "--viewers",
           "1",
           "--sse-clients",
-          "1",
+          "2",
+          "--sse-workers",
+          String(sseWorkers),
           "--churn-machines",
           "1",
           "--churn-every-ms",
@@ -61,7 +63,7 @@ test(
         tool: string;
         synthetic: boolean;
         cases: Array<{
-          config: { machines: number; durationMs: number };
+          config: { machines: number; durationMs: number; sseWorkers: number };
           authorization: {anonymousDenied:boolean;scopedHistory:boolean;scopedSnapshot:boolean;scopedReset:boolean};
           ingestion: {
             recordsSent: number;
@@ -73,7 +75,7 @@ test(
             sampleToCommitLagMs: { count: number };
           };
           history: { queries: number; ok: number; rateLimited: number; errors: number };
-          stream: { events: number; resetsAfterReconnect: number; reconnects: number };
+          stream: { events: number; snapshots: number; httpStatuses: Record<string, number>; resetsAfterReconnect: number; reconnects: number };
           hub: { window: { eventLoopDelayMs: { p99: number } } | null; final: { database: { bytes: number } } | null };
           artifacts: { kept: boolean; directory: string };
         }>;
@@ -84,6 +86,7 @@ test(
       const measurement = report.cases[0]!;
       assert.equal(measurement.config.machines, 2);
       assert.equal(measurement.config.durationMs, 8_000);
+      assert.equal(measurement.config.sseWorkers, sseWorkers);
       assert.deepEqual(measurement.authorization,{anonymousDenied:true,scopedHistory:true,scopedSnapshot:true,scopedReset:true});
       assert.ok(measurement.ingestion.recordsSent > 0);
       assert.equal(measurement.ingestion.recordsAccepted, measurement.ingestion.recordsSent);
@@ -96,6 +99,8 @@ test(
       assert.ok(measurement.history.ok > 0);
       assert.equal(measurement.history.errors, 0);
       assert.ok(measurement.stream.events > 0);
+      assert.equal(measurement.stream.snapshots, 2);
+      assert.ok(measurement.stream.httpStatuses["200"] >= 2);
       assert.ok(measurement.stream.reconnects > 0);
       assert.ok(measurement.stream.resetsAfterReconnect > 0);
       assert.ok(measurement.hub.window !== null);

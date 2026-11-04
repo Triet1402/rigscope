@@ -1,0 +1,22 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rigscope hub stress results</title><style>
+#stress-results {font-family:var(--font-sans, system-ui);color:var(--foreground, CanvasText);font-size:14px;line-height:1.45}
+#stress-results h2 {font-size:16px;font-weight:500;margin:0 0 4px}
+#stress-results p {margin:0 0 18px;color:var(--muted-foreground, GrayText);font-size:12px}
+#stress-results .axis,#stress-results .row {display:grid;grid-template-columns:70px minmax(60px,1fr) 118px;gap:12px;align-items:center}
+#stress-results .axis {font-size:11px;color:var(--muted-foreground, GrayText);margin-bottom:8px}
+#stress-results .axis-scale {position:relative;display:flex;justify-content:space-between}
+#stress-results .axis-scale b {position:absolute;left:20%;transform:translateX(-50%);font-weight:400;white-space:nowrap;color:var(--foreground, CanvasText)}
+#stress-results .row {height:44px;font-variant-numeric:tabular-nums}
+#stress-results .track {position:relative;height:20px;background:color-mix(in srgb,var(--foreground, CanvasText) 6%,transparent);border-radius:3px}
+#stress-results .bar {height:20px;border-radius:3px;min-width:3px}
+#stress-results .pass {background:var(--chart-1, Highlight)}
+#stress-results .fail {background:var(--chart-2, GrayText)}
+#stress-results .limit {position:absolute;top:-7px;bottom:-7px;left:20%;border-left:1px dashed var(--foreground, CanvasText);opacity:.6}
+#stress-results .value {text-align:right}
+#stress-results small {display:block;font-size:11px;color:var(--muted-foreground, GrayText)}
+#stress-results .mixed {margin-top:22px;padding-top:14px;border-top:1px solid var(--border, GrayText)}
+#stress-results .metrics {display:flex;flex-wrap:wrap;gap:14px 32px;margin-top:10px}
+#stress-results .metric {font-variant-numeric:tabular-nums}
+#stress-results .metric strong {font-size:18px;font-weight:500}
+@media(max-width:440px){#stress-results .axis,#stress-results .row{grid-template-columns:55px minmax(55px,1fr) 94px;gap:8px}#stress-results .axis-scale b{top:-16px}#stress-results .axis{margin-top:28px}}
+</style></head><body><div id="stress-results"><h2>Ingestion gets slower near 1,100 collectors</h2><p>Two-minute runs · one sample per collector per second · no live viewers</p><div class="axis"><span>Collectors</span><span class="axis-scale"><span>0</span><b>500 ms limit</b><span>2,500 ms</span></span><span style="text-align:right">Ack p95</span></div><div class="row" aria-label="900 collectors, acknowledgment p95 72 milliseconds, Pass"><span>900</span><div class="track"><div class="bar pass" style="width:2.88%"></div><span class="limit"></span></div><span class="value">72 ms <small>Pass</small></span></div><div class="row" aria-label="1050 collectors, acknowledgment p95 140 milliseconds, Pass"><span>1,050</span><div class="track"><div class="bar pass" style="width:5.60%"></div><span class="limit"></span></div><span class="value">140 ms <small>Pass</small></span></div><div class="row" aria-label="1125 collectors, acknowledgment p95 538 milliseconds, Over threshold"><span>1,125</span><div class="track"><div class="bar fail" style="width:21.53%"></div><span class="limit"></span></div><span class="value">538 ms <small>Over threshold</small></span></div><div class="row" aria-label="1200 collectors, acknowledgment p95 2154 milliseconds, Over threshold"><span>1,200</span><div class="track"><div class="bar fail" style="width:86.17%"></div><span class="limit"></span></div><span class="value">2,154 ms <small>Over threshold</small></span></div><div class="mixed"><h2>500 collectors + 64 live sessions passed for two minutes</h2><div class="metrics"><div class="metric"><strong>223 ms</strong><small>Acknowledgment p95</small></div><div class="metric"><strong>181 ms</strong><small>History p95 · 64 polls/s</small></div><div class="metric"><strong>560 MiB</strong><small>Hub memory peak</small></div></div></div></div></body></html>

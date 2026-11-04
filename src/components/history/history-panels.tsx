@@ -30,6 +30,7 @@ import { continuityStepMs } from "@/history/chart";
 import { formatMetricValue } from "@/history/presentation";
 import { HistoryChart, type ChartSeries } from "./history-chart";
 import { CoreHistoryChart } from "./core-history-chart";
+import { ChartInspectionProvider } from "./chart-inspection";
 import { useHistoryCores } from "./history-prefs";
 
 type ChartModel = {
@@ -475,70 +476,73 @@ export function HistoryCharts(props: Props) {
   const panels = buildHistoryPanels({ machine, result, selectedMetrics, hiddenCards, coreIds });
 
   return (
-    <div className="grid grid-cols-1 gap-5">
-      {panels.map((panel) => {
-        const fullWidthCore = panel.charts.find((chart) => chart.key === "cpu.core" && chart.series.length > 4);
-        // Put the bounded multi-core chart after the smaller resource charts,
-        // keeping DOM, visual and keyboard order aligned.
-        const charts = fullWidthCore
-          ? [...panel.charts.filter((chart) => chart !== fullWidthCore), fullWidthCore]
-          : panel.charts;
-        const gridClass = fullWidthCore && charts.length === 4
-          ? "grid gap-6 lg:grid-cols-2 xl:grid-cols-3"
-          : charts.length > 1 && !(fullWidthCore && charts.length === 2)
-            ? "grid gap-6 lg:grid-cols-2"
-            : "flex flex-col gap-6";
-        return (
-          <Panel key={panel.key} title={panel.title}>
-            <div className={gridClass}>
-              {charts.map((chart, index) => {
-                const group = chart.unitGroup;
-                const preferredUnit = group ? props.capacityUnits[group] : undefined;
-                const activeView = chart.views?.find((view) => view.unit === preferredUnit) ?? chart.views?.[0] ?? chart;
-                const spansRow = chart === fullWidthCore || (!fullWidthCore && charts.length % 2 === 1 && index === charts.length - 1);
-                if (chart.key === "cpu.core" && chart.series.length > CORE_LINE_LIMIT) {
-                  return <CoreHistoryChart key={chart.key} title={chart.title} series={chart.series}
-                    fromMs={result.fromMs} toMs={result.toMs} gaps={result.gaps}
-                    hiddenKeys={hiddenSeries} onToggleSeries={onToggleSeries} />;
-                }
-                return (
-                  <HistoryChart
-                    key={chart.key}
-                    title={chart.title}
-                    unit={activeView.unit}
-                    series={activeView.series}
-                    fromMs={result.fromMs}
-                    toMs={result.toMs}
-                    stepMs={continuityStepMs(result.stepMs, result.tier, machine.expectedIntervalMs)}
-                    gaps={result.gaps}
-                    hiddenKeys={hiddenSeries}
-                    onToggleSeries={onToggleSeries}
-                    emptyMessage={chart.emptyMessage}
-                    note={chart.note}
-                    action={group && chart.views && chart.views.length > 1 ? (
-                      <div role="group" aria-label={`${chart.title} units`} className="inline-flex rounded-md border border-border bg-background p-0.5">
-                        {chart.views.map((view) => (
-                          <button
-                            key={view.unit}
-                            type="button"
-                            aria-pressed={view.unit === activeView.unit}
-                            onClick={() => props.onCapacityUnitChange(group, view.unit as "bytes" | "percent")}
-                            className={`min-h-7 rounded px-2 text-xs transition-colors ${view.unit === activeView.unit ? "bg-selected text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                          >
-                            {view.unit === "bytes" ? "Bytes" : "%"}
-                          </button>
-                        ))}
-                      </div>
-                    ) : undefined}
-                    maxDrawPoints={chart.key === "cpu.core" ? 150 : undefined}
-                    className={spansRow ? "lg:col-span-full" : undefined}
-                  />
-                );
-              })}
-            </div>
-          </Panel>
-        );
-      })}
-    </div>
+    <ChartInspectionProvider key={`${machine.machineId}|${result.toMs - result.fromMs}`}>
+      <div className="grid grid-cols-1 gap-5">
+        {panels.map((panel) => {
+          const fullWidthCore = panel.charts.find((chart) => chart.key === "cpu.core" && chart.series.length > 4);
+          // Put the bounded multi-core chart after the smaller resource charts,
+          // keeping DOM, visual and keyboard order aligned.
+          const charts = fullWidthCore
+            ? [...panel.charts.filter((chart) => chart !== fullWidthCore), fullWidthCore]
+            : panel.charts;
+          const gridClass = fullWidthCore && charts.length === 4
+            ? "grid gap-6 lg:grid-cols-2 xl:grid-cols-3"
+            : charts.length > 1 && !(fullWidthCore && charts.length === 2)
+              ? "grid gap-6 lg:grid-cols-2"
+              : "flex flex-col gap-6";
+          return (
+            <Panel key={panel.key} title={panel.title}>
+              <div className={gridClass}>
+                {charts.map((chart, index) => {
+                  const group = chart.unitGroup;
+                  const preferredUnit = group ? props.capacityUnits[group] : undefined;
+                  const activeView = chart.views?.find((view) => view.unit === preferredUnit) ?? chart.views?.[0] ?? chart;
+                  const spansRow = chart === fullWidthCore || (!fullWidthCore && charts.length % 2 === 1 && index === charts.length - 1);
+                  if (chart.key === "cpu.core" && chart.series.length > CORE_LINE_LIMIT) {
+                    return <CoreHistoryChart key={chart.key} title={chart.title} series={chart.series}
+                      fromMs={result.fromMs} toMs={result.toMs} gaps={result.gaps}
+                      stepMs={continuityStepMs(result.stepMs, result.tier, machine.expectedIntervalMs)}
+                      hiddenKeys={hiddenSeries} onToggleSeries={onToggleSeries} />;
+                  }
+                  return (
+                    <HistoryChart
+                      key={chart.key}
+                      title={chart.title}
+                      unit={activeView.unit}
+                      series={activeView.series}
+                      fromMs={result.fromMs}
+                      toMs={result.toMs}
+                      stepMs={continuityStepMs(result.stepMs, result.tier, machine.expectedIntervalMs)}
+                      gaps={result.gaps}
+                      hiddenKeys={hiddenSeries}
+                      onToggleSeries={onToggleSeries}
+                      emptyMessage={chart.emptyMessage}
+                      note={chart.note}
+                      action={group && chart.views && chart.views.length > 1 ? (
+                        <div role="group" aria-label={`${chart.title} units`} className="inline-flex rounded-md border border-border bg-background p-0.5">
+                          {chart.views.map((view) => (
+                            <button
+                              key={view.unit}
+                              type="button"
+                              aria-pressed={view.unit === activeView.unit}
+                              onClick={() => props.onCapacityUnitChange(group, view.unit as "bytes" | "percent")}
+                              className={`min-h-7 rounded px-2 text-xs transition-colors ${view.unit === activeView.unit ? "bg-selected text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                            >
+                              {view.unit === "bytes" ? "Bytes" : "%"}
+                            </button>
+                          ))}
+                        </div>
+                      ) : undefined}
+                      maxDrawPoints={chart.key === "cpu.core" ? 150 : undefined}
+                      className={spansRow ? "lg:col-span-full" : undefined}
+                    />
+                  );
+                })}
+              </div>
+            </Panel>
+          );
+        })}
+      </div>
+    </ChartInspectionProvider>
   );
 }

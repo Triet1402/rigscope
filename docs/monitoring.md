@@ -37,6 +37,12 @@ Default retention:
 Summaries retain minimum and maximum values. History queries limit the number
 of points, series, scanned rows and time spent. The UI marks partial results.
 
+Hover over a History or Overview recent-usage chart to inspect a recorded time
+and its bucket averages. The time marker follows across charts in the same view;
+per-core heatmaps show the bucket peak at that time. Missing readings stay
+unavailable. With a chart focused, use Left/Right arrows to move between readings,
+Home/End to jump to the first/last reading, and Escape to dismiss the marker.
+
 ### Storage limits
 
 Each collector queue keeps up to ten minutes or 64 MiB of queued JSON per hub,
