@@ -425,23 +425,33 @@ function readGaps(db: HubDatabase, machineId: string, fromMs: number, toMs: numb
     reason: string;
   }>;
 
-  // LAG is evaluated only over receipts inside the requested range: the first
-  // in-range receipt has no predecessor, so no leading/trailing interval is
-  // invented. The threshold uses the row's own advertised cadence.
+  // Include the latest receipt immediately before the range so a gap that
+  // crosses the left boundary is still detected. The predecessor is only a
+  // comparison row; the returned interval retains its real timestamps and is
+  // clipped to the visible range by the chart. The threshold uses the row's
+  // own advertised cadence.
   const missing = db.db
     .prepare(
-      "WITH ordered AS ( " +
+      "WITH predecessor AS ( " +
+        "SELECT captured_at_ms, expected_interval_ms FROM sample_receipts " +
+        "WHERE machine_id = ? AND captured_at_ms < ? " +
+        "ORDER BY captured_at_ms DESC LIMIT 1 " +
+        "), ordered AS ( " +
+        "SELECT captured_at_ms, expected_interval_ms FROM predecessor " +
+        "UNION ALL " +
+        "SELECT captured_at_ms, expected_interval_ms FROM sample_receipts " +
+        "WHERE machine_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ? " +
+        "), with_previous AS ( " +
         "SELECT captured_at_ms, " +
-        "LAG(captured_at_ms) OVER (PARTITION BY machine_id ORDER BY captured_at_ms) AS prev_ms, " +
-        "expected_interval_ms " +
-        "FROM sample_receipts WHERE machine_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ? " +
+        "LAG(captured_at_ms) OVER (ORDER BY captured_at_ms) AS prev_ms, " +
+        "expected_interval_ms FROM ordered " +
         ") " +
-        "SELECT prev_ms AS from_ms, captured_at_ms AS to_ms FROM ordered " +
+        "SELECT prev_ms AS from_ms, captured_at_ms AS to_ms FROM with_previous " +
         "WHERE prev_ms IS NOT NULL " +
         "AND captured_at_ms - prev_ms > MAX(15000, 3 * COALESCE(expected_interval_ms, 5000)) " +
         "ORDER BY captured_at_ms LIMIT ?",
     )
-    .all(machineId, fromMs, toMs, MAX_GAPS) as Array<{
+    .all(machineId, fromMs, machineId, fromMs, toMs, MAX_GAPS) as Array<{
     from_ms: number | bigint;
     to_ms: number | bigint;
   }>;

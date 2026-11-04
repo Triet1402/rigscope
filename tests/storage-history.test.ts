@@ -427,6 +427,37 @@ describe("history query", () => {
     }
   });
 
+  it("detects a missing gap when its predecessor is just outside the requested range", async () => {
+    const ctx = setup();
+    try {
+      const from = Math.floor((Date.now() - 300_000) / 60_000) * 60_000;
+      await ingest(
+        ctx.store,
+        batch([
+          makeMetricsRecord({ sequence: 1, capturedAt: from - 10_000 }),
+          makeMetricsRecord({ sequence: 2, capturedAt: from + 60_000 }),
+        ]),
+      );
+
+      const history = queryHistory(ctx.db, {
+        machineId: "machine-1",
+        metrics: ["cpu.usage"],
+        fromMs: from,
+        toMs: from + 120_000,
+      });
+      assert.deepEqual(history.gaps, [
+        {
+          fromMs: from - 10_000,
+          toMs: from + 60_000,
+          kind: "missing",
+          reason: "expected interval missed",
+        },
+      ]);
+    } finally {
+      await teardown(ctx);
+    }
+  });
+
   it("uses the primary-key range for point scans", async () => {
     const ctx = setup();
     try {
