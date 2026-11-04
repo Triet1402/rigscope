@@ -1,5 +1,20 @@
 # Release notes
 
+## 0.1.2
+
+- Show History downtime shading as soon as the collector disconnects, and stop
+  extending it on reconnect, including short outages.
+- Detect missing-data intervals that cross the selected range's start. Align
+  shading with plotted readings and preserve outage breaks during downsampling.
+- Keep chart inspection tracking over the detail box, and hold the box in a
+  stable position while retaining scrolling for long reading lists.
+- Reduce inspection rendering work by caching chart geometry and summaries,
+  sharing formatted core timestamps and coalescing pointer updates per frame.
+- Preserve the per-core heatmap peak summary and keep inspection headers on one
+  line so the heatmap does not jump when the cursor appears.
+
+The full-fleet snapshot buffer limitation documented in 0.1.1 remains unchanged.
+
 ## 0.1.1
 
 - Improve History chart behavior and add synchronized chart inspection.
