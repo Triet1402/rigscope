@@ -425,23 +425,31 @@ function readGaps(db: HubDatabase, machineId: string, fromMs: number, toMs: numb
     reason: string;
   }>;
 
-  // LAG is evaluated only over receipts inside the requested range: the first
-  // in-range receipt has no predecessor, so no leading/trailing interval is
-  // invented. The threshold uses the row's own advertised cadence.
+  // Include exactly one receipt before the window so an interval that started
+  // before `fromMs` is still detected, then clip its visible start to the query
+  // edge. The first in-range receipt without a predecessor is never invented,
+  // and no receipt after `toMs` is consulted, so no leading/trailing gap appears
+  // unless real stored receipts prove one. The threshold uses the row's own
+  // advertised cadence.
   const missing = db.db
     .prepare(
-      "WITH ordered AS ( " +
-        "SELECT captured_at_ms, " +
-        "LAG(captured_at_ms) OVER (PARTITION BY machine_id ORDER BY captured_at_ms) AS prev_ms, " +
-        "expected_interval_ms " +
-        "FROM sample_receipts WHERE machine_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ? " +
+      "WITH before_window AS ( " +
+        "SELECT captured_at_ms, expected_interval_ms FROM sample_receipts " +
+        "WHERE machine_id = ? AND captured_at_ms < ? ORDER BY captured_at_ms DESC LIMIT 1 " +
+        "), in_window AS ( " +
+        "SELECT captured_at_ms, expected_interval_ms FROM sample_receipts " +
+        "WHERE machine_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ? " +
+        "), ordered AS ( " +
+        "SELECT captured_at_ms, expected_interval_ms, " +
+        "LAG(captured_at_ms) OVER (ORDER BY captured_at_ms) AS prev_ms " +
+        "FROM (SELECT * FROM before_window UNION ALL SELECT * FROM in_window) " +
         ") " +
-        "SELECT prev_ms AS from_ms, captured_at_ms AS to_ms FROM ordered " +
-        "WHERE prev_ms IS NOT NULL " +
+        "SELECT MAX(prev_ms, ?) AS from_ms, captured_at_ms AS to_ms FROM ordered " +
+        "WHERE prev_ms IS NOT NULL AND captured_at_ms > ? " +
         "AND captured_at_ms - prev_ms > MAX(15000, 3 * COALESCE(expected_interval_ms, 5000)) " +
         "ORDER BY captured_at_ms LIMIT ?",
     )
-    .all(machineId, fromMs, toMs, MAX_GAPS) as Array<{
+    .all(machineId, fromMs, machineId, fromMs, toMs, fromMs, fromMs, MAX_GAPS) as Array<{
     from_ms: number | bigint;
     to_ms: number | bigint;
   }>;

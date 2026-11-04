@@ -1,6 +1,25 @@
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 import test from "node:test";
+import { build, type Plugin } from "esbuild";
 import { inspectionPoint, inspectionTimeAtPointer, inspectionTimeForKey, inspectionTimes } from "../src/history/inspection";
+
+type RenderExports = Record<string, any>;
+const inspectionGlobals = globalThis as typeof globalThis & {
+  __rigscopeInspectTime?: number | null;
+  __rigscopeFormatDateTimeCalls?: number;
+};
+
+async function compile(contents: string, plugins: Plugin[] = []): Promise<RenderExports> {
+  const bundle = await build({
+    stdin: { contents, resolveDir: process.cwd() },
+    bundle: true, write: false, platform: "node", format: "cjs", jsx: "automatic", packages: "external",
+    plugins,
+  });
+  const output = { exports: {} as RenderExports };
+  new Function("require", "module", "exports", bundle.outputFiles[0]!.text)(createRequire(import.meta.url), output, output.exports);
+  return output.exports;
+}
 
 const point = (t: number, avg: number | null) => ({ t, min: avg, max: avg, avg });
 
@@ -45,4 +64,47 @@ test("keyboard inspection navigates the union of series timestamps and stays at 
   assert.equal(inspectionTimeForKey(times, 2000, "Home"), 1000);
   assert.equal(inspectionTimeForKey(times, 2000, "End"), 4000);
   assert.equal(inspectionTimeForKey([], null, "End"), null);
+});
+
+test("core inspection preserves the peak summary and desktop Peak column, formatting the cursor time once", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const render = await compile(`
+    import { renderToStaticMarkup } from 'react-dom/server';
+    import { createElement } from 'react';
+    import { CoreHistoryChart } from './src/components/history/core-history-chart';
+    module.exports.render = () => renderToStaticMarkup(createElement(CoreHistoryChart, {
+      title: 'Per-core usage', fromMs: 0, toMs: 2000, stepMs: 1000, gaps: [],
+      hiddenKeys: new Set(), onToggleSeries() {},
+      series: Array.from({length: 12}, (_, i) => ({
+        key: String(i), label: 'Core ' + i, points: [{t: 1000, min: 20, max: 80, avg: 40}],
+      })),
+    }));`, [{
+      name: "inspection-cursor",
+      setup(builder) {
+        builder.onResolve({ filter: /^\.\/chart-inspection$/ }, () => ({ path: "inspection", namespace: "cursor-fixture" }));
+        builder.onLoad({ filter: /.*/, namespace: "cursor-fixture" }, () => ({ contents: `
+          export const useChartInspection = () => ({ id: 'cursor', timeMs: globalThis.__rigscopeInspectTime,
+            inspect() {}, clear() {}, onKeyDown() {}, onFocus() {} });` }));
+        builder.onLoad({ filter: /history\/presentation\.ts$/ }, async ({ path }) => ({
+          contents: (await readFile(path, "utf8")).replace(/(export function formatDateTime\([^)]*\): string \{)/,
+            "$1 globalThis.__rigscopeFormatDateTimeCalls++ ;"), loader: "ts",
+        }));
+      },
+    }]);
+  try {
+    inspectionGlobals.__rigscopeInspectTime = null;
+    const idle = render.render() as string;
+    inspectionGlobals.__rigscopeInspectTime = 1000;
+    inspectionGlobals.__rigscopeFormatDateTimeCalls = 0;
+    const inspected = render.render() as string;
+    const summary = (html: string) => html.match(/Peak · Core 0.*?<\/span><\/span>/)?.[0];
+    assert.ok(summary(idle));
+    assert.equal(summary(inspected), summary(idle), "inspection must not replace or resize the peak summary");
+    assert.match(inspected, /class="hidden sm:inline">Peak<\/span>/, "the desktop peak column still displays peak values");
+    assert.match(inspected, /80%/);
+    assert.equal(inspectionGlobals.__rigscopeFormatDateTimeCalls, 1, "share one formatted cursor timestamp across all core labels");
+  } finally {
+    delete inspectionGlobals.__rigscopeInspectTime;
+    delete inspectionGlobals.__rigscopeFormatDateTimeCalls;
+  }
 });

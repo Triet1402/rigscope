@@ -427,6 +427,28 @@ describe("history query", () => {
     }
   });
 
+  it("detects an outage crossing the query start using the preceding receipt", async () => {
+    const ctx = setup();
+    try {
+      const start = Math.floor((Date.now() - 300_000) / 60_000) * 60_000;
+      await ingest(ctx.store, batch([
+        makeMetricsRecord({ sequence: 1, capturedAt: start }),
+        makeMetricsRecord({ sequence: 2, capturedAt: start + 60_000 }),
+      ]));
+      const query = (fromMs: number, toMs: number) => queryHistory(ctx.db, {
+        machineId: "machine-1", metrics: ["cpu.usage"], fromMs, toMs,
+      });
+      assert.deepEqual(query(start + 20_000, start + 90_000).gaps, [{
+        fromMs: start + 20_000, toMs: start + 60_000,
+        kind: "missing", reason: "expected interval missed",
+      }]);
+      assert.deepEqual(query(start + 20_000, start + 40_000).gaps, [], "no invented trailing gap without a receipt");
+      assert.deepEqual(query(start + 60_000, start + 90_000).gaps, [], "an outage ending at the query start has no overlap");
+    } finally {
+      await teardown(ctx);
+    }
+  });
+
   it("uses the primary-key range for point scans", async () => {
     const ctx = setup();
     try {

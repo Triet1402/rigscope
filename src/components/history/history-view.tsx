@@ -8,7 +8,7 @@
  */
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, History as HistoryIcon, RefreshCw, ShieldAlert, WifiOff } from "lucide-react";
 
 import { AppShell } from "@/components/shell/app-shell";
@@ -21,6 +21,13 @@ import { useMachineSelection } from "@/live/machine-selection";
 import type { MachineState } from "@/contracts";
 import { defaultMetricsFor, gpuCards, visibleCapacityMetrics } from "@/history/metrics";
 import { availableCoreIds, resolveCoreSelection } from "@/history/cores";
+import { gapBands } from "@/history/chart";
+import {
+  observedOutageGaps,
+  updateObservedOutages,
+  type ConnectionPoint,
+  type ObservedOutage,
+} from "@/history/gaps";
 import {
   formatClock,
   formatDateTime,
@@ -123,6 +130,44 @@ export function HistoryView() {
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
 
+  // Remember live collector transitions. The stored query alone cannot show an
+  // outage that has not produced a new receipt yet, and a short reconnect can
+  // stay below the storage gap threshold.
+  const connectionRef = useRef<{ machineId: string; point: ConnectionPoint } | null>(null);
+  const [outageState, setOutageState] = useState<{ machineId: string; outages: ObservedOutage[] } | null>(null);
+  const [outageNow, setOutageNow] = useState(Date.now);
+  useEffect(() => {
+    if (machine === undefined) {
+      connectionRef.current = null;
+      setOutageState(null);
+      return;
+    }
+    const previous = connectionRef.current;
+    const point: ConnectionPoint = {
+      connected: machine.connected,
+      lastReceivedAt: machine.lastReceivedAt,
+    };
+    const previousPoint = previous?.machineId === machine.machineId ? previous.point : null;
+    setOutageState((state) => {
+      const outages = updateObservedOutages(
+        state?.machineId === machine.machineId ? state.outages : [],
+        previousPoint,
+        point,
+        Date.now(),
+      );
+      return state?.machineId === machine.machineId && state.outages === outages ? state : { machineId: machine.machineId, outages };
+    });
+    if (!point.connected || previousPoint?.connected === false) setOutageNow(Date.now());
+    connectionRef.current = { machineId: machine.machineId, point };
+  }, [machine?.machineId, machine?.connected, machine?.lastReceivedAt]);
+  useEffect(() => {
+    if (machine?.connected !== false || !autoRefresh) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") setOutageNow(Date.now());
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [machine?.machineId, machine?.connected, autoRefresh]);
+
   const defaultMetricsKey = useMemo(
     () => (machine === undefined ? "" : defaultMetricsFor(machine).join(",")),
     // Capability/inventory changes can change the honest defaults; the selected
@@ -177,13 +222,23 @@ export function HistoryView() {
     return () => controller.abort();
   }, [machineId]);
 
-  const { data: shown, error, loading, manualRefreshing } = useStoredHistory({
+  const { data: stored, error, loading, manualRefreshing } = useStoredHistory({
     machineId, metricsKey, coreIdsKey: selectedMetrics.includes("cpu.core") && selectedCoreIds.length !== knownCoreIds.length ? selectedCoreIds.join(",") : undefined,
     range, enabled: canQuery, autoRefresh, refreshNonce,
   });
   useEffect(() => {
     if (error?.kind === "rate-limited") setAutoRefresh(false);
   }, [error?.kind, setAutoRefresh]);
+
+  const shown = useMemo(() => {
+    if (!stored || outageState?.machineId !== machineId || outageState.outages.length === 0) return stored;
+    const result = stored.result;
+    const toMs = Math.max(result.toMs, ...outageState.outages.map((outage) => outage.toMs ?? outageNow));
+    const fromMs = result.fromMs + toMs - result.toMs;
+    return { ...stored, result: { ...result, fromMs, toMs,
+      gaps: gapBands([...result.gaps, ...observedOutageGaps(outageState.outages, fromMs, toMs)], fromMs, toMs),
+    } };
+  }, [stored, machineId, outageState, outageNow]);
 
   const result = shown?.result ?? null;
   const cards = machine === undefined ? [] : gpuCards(machine, result?.series ?? []);

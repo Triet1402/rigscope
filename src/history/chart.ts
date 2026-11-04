@@ -46,21 +46,9 @@ function finiteOrNull(value: number | null): number | null {
 // Gaps
 // ---------------------------------------------------------------------------
 
-/**
- * Clip gaps to the visible range and merge overlaps so the chart never paints
- * the same interval twice. Clipped bands keep their dominant kind/reason.
- */
-export function gapBands(gaps: readonly HistoryGap[], fromMs: number, toMs: number): GapBand[] {
-  const clipped = gaps
-    .map((gap) => ({
-      ...gap,
-      fromMs: Math.max(fromMs, gap.fromMs),
-      toMs: Math.min(toMs, gap.toMs),
-    }))
-    .filter((gap) => gap.toMs > gap.fromMs)
-    .sort((a, b) => a.fromMs - b.fromMs || a.toMs - b.toMs);
+function mergeSortedBands(bands: readonly GapBand[]): GapBand[] {
   const merged: GapBand[] = [];
-  for (const gap of clipped) {
+  for (const gap of bands) {
     const previous = merged.at(-1);
     if (previous !== undefined && gap.fromMs <= previous.toMs) {
       previous.toMs = Math.max(previous.toMs, gap.toMs);
@@ -74,6 +62,84 @@ export function gapBands(gaps: readonly HistoryGap[], fromMs: number, toMs: numb
     merged.push({ ...gap });
   }
   return merged;
+}
+
+function lastPointAtOrBefore(times: readonly number[], value: number): number | null {
+  let low = 0;
+  let high = times.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (times[mid]! <= value) low = mid + 1;
+    else high = mid;
+  }
+  return low > 0 ? times[low - 1]! : null;
+}
+
+function firstPointAtOrAfter(times: readonly number[], value: number): number | null {
+  let low = 0;
+  let high = times.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (times[mid]! < value) low = mid + 1;
+    else high = mid;
+  }
+  return low < times.length ? times[low]! : null;
+}
+
+/**
+ * Extend clipped gaps to the neighboring plotted bucket timestamps so the
+ * shaded outage visibly meets the line endpoints instead of starting at a
+ * receipt time inside the last partial bucket.
+ *
+ * Never shorten a recorded outage to a bucket inside it. Boundary aggregates
+ * retain their real timestamps and values; segmentation keeps them as isolated
+ * marks instead of inventing a horizontal line through the outage.
+ */
+export function alignGapBands(
+  bands: readonly GapBand[],
+  points: readonly HistoryPoint[],
+  fromMs: number,
+  toMs: number,
+): GapBand[] {
+  if (bands.length === 0) return [];
+  const times = [...new Set(points.filter(plottable).map((point) => point.t).filter((t) => Number.isFinite(t)))]
+    .sort((a, b) => a - b);
+  const aligned: GapBand[] = [];
+  for (const band of bands) {
+    const from = Math.max(fromMs, Math.min(toMs, band.fromMs));
+    const to = Math.max(fromMs, Math.min(toMs, band.toMs));
+    if (to <= from) continue;
+    const start = Math.max(fromMs, lastPointAtOrBefore(times, from) ?? from);
+    const end = Math.min(toMs, firstPointAtOrAfter(times, to) ?? to);
+    if (end <= start) continue;
+    aligned.push({ ...band, fromMs: start, toMs: end });
+  }
+  aligned.sort((a, b) => a.fromMs - b.fromMs || a.toMs - b.toMs);
+  return mergeSortedBands(aligned);
+}
+
+/**
+ * Clip gaps to the visible range and merge overlaps so the chart never paints
+ * the same interval twice. Clipped bands keep their dominant kind/reason.
+ * When plotted points are supplied, bands are also aligned to the neighboring
+ * bucket timestamps (see `alignGapBands`).
+ */
+export function gapBands(
+  gaps: readonly HistoryGap[],
+  fromMs: number,
+  toMs: number,
+  points?: readonly HistoryPoint[],
+): GapBand[] {
+  const clipped = gaps
+    .map((gap) => ({
+      ...gap,
+      fromMs: Math.max(fromMs, gap.fromMs),
+      toMs: Math.min(toMs, gap.toMs),
+    }))
+    .filter((gap) => gap.toMs > gap.fromMs)
+    .sort((a, b) => a.fromMs - b.fromMs || a.toMs - b.toMs);
+  const merged = mergeSortedBands(clipped);
+  return points === undefined ? merged : alignGapBands(merged, points, fromMs, toMs);
 }
 
 function overlapsGap(previousT: number, nextT: number, bands: readonly GapBand[]): boolean {

@@ -38,6 +38,7 @@ export function CoreHistoryChart({ title, series, fromMs, toMs, stepMs, gaps, hi
   const visible = rows.filter((row) => !hiddenKeys.has(row.key));
   const peak = visible.reduce<(typeof rows)[number] | null>((best, row) =>
     row.stats.max !== null && (best?.stats.max === null || best === null || row.stats.max > best.stats.max) ? row : best, null);
+  const cursorTime = inspection.timeMs === null ? null : formatDateTime(inspection.timeMs);
   const span = Math.max(1, toMs - fromMs);
   const bands = gapBands(gaps, fromMs, toMs);
 
@@ -46,8 +47,7 @@ export function CoreHistoryChart({ title, series, fromMs, toMs, stepMs, gaps, hi
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-xs font-medium text-foreground">{title}</h3>
         <div className="flex flex-wrap items-center gap-3 text-xs">
-          {inspection.timeMs !== null ? <span className="tnum text-muted-foreground">{formatDateTime(inspection.timeMs)} · bucket peak</span>
-            : peak ? <span className="tnum text-muted-foreground">Peak · {peak.label} <span className="text-foreground">{formatMetricValue(peak.stats.max, "percent")}</span></span> : null}
+          {peak ? <span className="tnum text-muted-foreground">Peak · {peak.label} <span className="text-foreground">{formatMetricValue(peak.stats.max, "percent")}</span></span> : null}
           <button type="button" aria-pressed={busiestFirst} onClick={() => setBusiestFirst(!busiestFirst)}
             className={`min-h-8 rounded-md border border-border px-2 ${busiestFirst ? "bg-selected text-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}>
             Busiest first
@@ -55,7 +55,14 @@ export function CoreHistoryChart({ title, series, fromMs, toMs, stepMs, gaps, hi
         </div>
       </div>
       <div className={`${rowGrid} mb-1 text-xs text-muted-foreground`} aria-hidden>
-        <span>Core</span><span><span className="sm:hidden">History</span><span className="hidden sm:inline">Peak usage over time</span></span><span className="hidden text-right sm:block">{inspection.timeMs !== null ? "At cursor" : "Last"}</span><span className="text-right"><span className="hidden sm:inline">Peak</span><span className="sm:hidden">{inspection.timeMs !== null ? "At cursor" : "Peak"}</span></span>
+        <span>Core</span>
+        <span className="truncate">
+          {cursorTime !== null ? <span className="tnum">{cursorTime}</span> : <>
+            <span className="sm:hidden">History</span><span className="hidden sm:inline">Peak usage over time</span>
+          </>}
+        </span>
+        <span className="hidden text-right sm:block">{cursorTime !== null ? "At cursor" : "Last"}</span>
+        <span className="text-right"><span className="hidden sm:inline">Peak</span><span className="sm:hidden">{cursorTime !== null ? "At cursor" : "Peak"}</span></span>
       </div>
       <p id={`${inspection.id}-instructions`} className="sr-only">Focus a core chart and use Left and Right arrows to inspect recorded bucket peaks, Home or End to jump, and Escape to dismiss.</p>
       <div role="region" aria-label="Per-core history rows" tabIndex={0} className="max-h-96 overflow-y-auto rounded-md">
@@ -70,7 +77,7 @@ export function CoreHistoryChart({ title, series, fromMs, toMs, stepMs, gaps, hi
                 <span className={`${shown ? "text-foreground" : "text-muted-foreground line-through"} rounded-sm peer-focus-visible:outline-2 peer-focus-visible:outline-accent`}>{row.label}</span>
               </label>
               <svg viewBox={`0 0 ${COLUMNS} 18`} preserveAspectRatio="none" role="img"
-                aria-label={`${row.label}: ${inspection.timeMs !== null ? `${formatMetricValue(inspectedValue, "percent")} at ${formatDateTime(inspection.timeMs)}` : `latest ${formatMetricValue(row.stats.latest, "percent")}`}, peak ${formatMetricValue(row.stats.max, "percent")}${shown ? "" : ", hidden"}`}
+                aria-label={`${row.label}: ${cursorTime !== null ? `${formatMetricValue(inspectedValue, "percent")} at ${cursorTime}` : `latest ${formatMetricValue(row.stats.latest, "percent")}`}, peak ${formatMetricValue(row.stats.max, "percent")}${shown ? "" : ", hidden"}`}
                 aria-describedby={`${inspection.id}-instructions`}
                 tabIndex={shown ? 0 : undefined}
                 onPointerMove={shown ? (event) => {

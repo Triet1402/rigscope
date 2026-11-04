@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useId, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { HistoryGap, HistorySeries } from "@/hub/storage/history-query";
 import { inspectionPoint, inspectionTimeForKey, inspectionTimes } from "@/history/inspection";
 import { formatClock, formatDateTime, formatMetricValue } from "@/history/presentation";
@@ -26,6 +26,14 @@ export function useChartInspection({ series, fromMs, toMs, stepMs, gaps }: {
   const shared = useContext(InspectionContext);
   const cursor = shared ? shared.cursor : localCursor;
   const setCursor = shared ? shared.setCursor : setLocalCursor;
+  const frame = useRef<number | null>(null);
+  const pending = useRef<Cursor>(null);
+  const cancelPending = useCallback(() => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
+    pending.current = null;
+  }, []);
+  useEffect(() => cancelPending, [cancelPending]);
   const times = useMemo(() => inspectionTimes(series)
     .filter((point) => point.t <= toMs && point.t + stepMs / 2 >= fromMs), [series, fromMs, toMs, stepMs]);
   const timeMs = cursor && cursor.timeMs >= fromMs - stepMs / 2 && cursor.timeMs <= toMs ? cursor.timeMs : null;
@@ -33,18 +41,32 @@ export function useChartInspection({ series, fromMs, toMs, stepMs, gaps }: {
   useEffect(() => {
     if (!active) return;
     const dismiss = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") setCursor(null);
+      if (event.key === "Escape") {
+        cancelPending();
+        setCursor(null);
+      }
     };
     window.addEventListener("keydown", dismiss);
     return () => window.removeEventListener("keydown", dismiss);
-  }, [active, setCursor]);
+  }, [active, setCursor, cancelPending]);
   const inspect = (time: number) => {
     const clamped = Math.max(fromMs, Math.min(toMs, time));
     const point = inspectionPoint(times, clamped, stepMs, gaps);
-    setCursor({ timeMs: point?.t ?? clamped, source: id });
+    pending.current = { timeMs: point?.t ?? clamped, source: id };
+    if (frame.current === null) {
+      frame.current = requestAnimationFrame(() => {
+        frame.current = null;
+        setCursor(pending.current);
+        pending.current = null;
+      });
+    }
   };
-  const clear = () => { if (cursor?.source === id) setCursor(null); };
+  const clear = () => {
+    cancelPending();
+    if (cursor?.source === id) setCursor(null);
+  };
   const onKeyDown = (event: KeyboardEvent) => {
+    cancelPending();
     if (event.key === "Escape") {
       event.preventDefault();
       clear();
@@ -54,17 +76,20 @@ export function useChartInspection({ series, fromMs, toMs, stepMs, gaps }: {
       if (next !== null) setCursor({ timeMs: next, source: id });
     }
   };
-  return { id, timeMs, active, inspect, clear, onKeyDown, onFocus: () => inspect(times.at(-1)?.t ?? toMs) };
+  return { id, timeMs, active, inspect, clear, onKeyDown, onFocus: () => {
+    cancelPending();
+    setCursor({ timeMs: times.at(-1)?.t ?? toMs, source: id });
+  } };
 }
 
 export function ChartInspectionTooltip({ id, timeMs, fraction, unit, readings }: {
   id: string; timeMs: number; fraction: number; unit: string;
   readings: readonly { key: string; label: string; color: string; point: HistorySeries["points"][number] | null }[];
 }) {
+  const [placement] = useState(() => fraction > 0.5 ? "left" : "right");
   return (
     <div id={id} role="tooltip"
-      className="absolute top-2 z-10 max-h-56 w-56 max-w-[calc(100%-1rem)] overflow-y-auto rounded-md border border-border bg-card p-3 text-xs text-foreground"
-      style={{ left: `clamp(8px, calc(${fraction * 100}% ${fraction > 0.5 ? "- 14rem - 12px" : "+ 12px"}), max(8px, calc(100% - 14rem - 8px)))` }}>
+      className={`absolute top-2 z-10 max-h-56 w-56 max-w-[calc(100%-1rem)] overflow-y-auto rounded-md border border-border bg-card p-3 text-xs text-foreground ${placement === "left" ? "left-2" : "right-2"}`}>
       <p className="tnum font-medium">{formatDateTime(timeMs)}</p>
       <p className="mb-2 text-muted-foreground">Recorded bucket average</p>
       <dl className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1.5">
