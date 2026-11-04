@@ -3,7 +3,8 @@
  *
  * A query first picks the finest storage tier whose retention window covers the
  * requested start and whose estimated scan (series × range / tier step) fits the
- * row budget. It then downsamples to at most `maxPoints` buckets per series.
+ * row budget. It then downsamples to approximately `maxPoints` buckets per
+ * series, with at most one extra bucket where the range cuts the fixed grid.
  *
  * Aggregation is done in SQL with the same min/max/sum/count semantics as the
  * rollups, and weighted by `count` so a one-minute bucket with 60 samples weighs
@@ -140,7 +141,10 @@ export function queryHistory(
     seriesRows = seriesRows.slice(0, Math.max(0, chosen.cutSeries));
     truncated = true;
   }
-  const stepMs = Math.max(chosen.resolutionMs, Math.ceil(rangeMs / maxPoints));
+  // Keep the grid fixed as a rolling window advances. Whole storage-tier
+  // intervals ensure query buckets also respect the minute/hour rollup grid.
+  const stepMs = Math.max(1, Math.ceil(rangeMs / maxPoints / chosen.resolutionMs)) * chosen.resolutionMs;
+  const originMs = Math.floor(q.fromMs / stepMs) * stepMs;
 
   const series: HistorySeries[] = [];
   for (const row of seriesRows) {
@@ -157,7 +161,7 @@ export function queryHistory(
       Number(row.series_id),
       fromBucketMs(chosen.tier, q.fromMs),
       q.toMs,
-      q.fromMs,
+      originMs,
       stepMs,
       // An additional per-series guard. Tier selection already keeps the total
       // under budget; this makes a single query bounded even if a custom
@@ -399,7 +403,8 @@ function readSeries(
 /**
  * Rollup tiers are bucketed on absolute minute/hour boundaries. Include the
  * bucket that contains `fromMs`; otherwise a short query inside one bucket
- * would return no rows at all. It re-buckets to the requested origin below.
+ * would return no rows at all. The output keeps its absolute bucket timestamp,
+ * which can precede the requested range for the first, partial bucket.
  */
 function fromBucketMs(tier: Tier, fromMs: number): number {
   if (tier === "raw") return fromMs;

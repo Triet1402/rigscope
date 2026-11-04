@@ -31,11 +31,12 @@ const W = 800;
 const H = 160;
 const PAD = 6;
 /**
- * Safety net above the API's 600-point request: current data is drawn bucket
- * for bucket, so the line is the true bucket average. A future wider request
- * is reduced without losing the envelope.
+ * A 600-point API request can include 601 buckets where the rolling range
+ * cuts the fixed grid. Draw those bucket for bucket: regrouping them by array
+ * position would shift historical averages as the oldest bucket leaves.
+ * A future wider request is reduced without losing the envelope.
  */
-const MAX_DRAW_POINTS = 600;
+const MAX_DRAW_POINTS = 601;
 
 export type ChartSeries = {
   key: string;

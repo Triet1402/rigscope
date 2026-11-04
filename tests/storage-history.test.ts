@@ -40,6 +40,94 @@ function batch(records: IngestBatch["records"], overrides: Partial<IngestBatch> 
 }
 
 describe("history query", () => {
+  it("keeps past CPU buckets unchanged as the one-hour window advances", async () => {
+    const ctx = setup();
+    try {
+      const start = Math.floor(Date.now() / 3_600_000) * 3_600_000 - 3_600_000;
+      await ingest(ctx.store, batch([
+        makeMetricsRecord({ sequence: 1, capturedAt: start + 105_500, payload: makePayload({ cpuUsage: 10 }) }),
+        makeMetricsRecord({ sequence: 2, capturedAt: start + 108_500, payload: makePayload({ cpuUsage: 90 }) }),
+        makeMetricsRecord({ sequence: 3, capturedAt: start + 3_600_100, payload: makePayload({ cpuUsage: 20 }) }),
+      ]));
+      const query = (offset: number) => queryHistory(ctx.db, {
+        machineId: "machine-1",
+        metrics: ["cpu.usage"],
+        fromMs: start + offset,
+        toMs: start + 3_600_000 + offset,
+        maxPoints: 600,
+      });
+      const before = query(500);
+      await ingest(ctx.store, batch([
+        makeMetricsRecord({ sequence: 4, capturedAt: start + 3_601_100, payload: makePayload({ cpuUsage: 60 }) }),
+      ]));
+      const after = query(1500);
+      assert.equal(before.tier, "raw");
+      assert.equal(before.stepMs, 6000);
+      assert.equal(before.stepMs, after.stepMs);
+      assert.deepEqual(after.series[0]!.points.slice(0, -1), before.series[0]!.points.slice(0, -1));
+      assert.deepEqual(after.series[0]!.points.slice(0, -1), [
+        { t: start + 102_000, min: 10, max: 10, avg: 10 },
+        { t: start + 108_000, min: 90, max: 90, avg: 90 },
+      ]);
+      assert.deepEqual(before.series[0]!.points.at(-1), { t: start + 3_600_000, min: 20, max: 20, avg: 20 });
+      assert.deepEqual(after.series[0]!.points.at(-1), { t: start + 3_600_000, min: 20, max: 60, avg: 40 });
+    } finally {
+      await teardown(ctx);
+    }
+  });
+
+  for (const [tier, resolutionMs] of [["1m", 60_000], ["1h", 3_600_000]] as const) {
+    it(`keeps ${tier} rollups on a stable grid with weighted averages`, async () => {
+      const ctx = setup();
+      try {
+        const start = Math.floor(Date.now() / (3 * resolutionMs)) * 3 * resolutionMs - 6 * resolutionMs;
+        const offsets = [resolutionMs, resolutionMs * 7 / 6, 2 * resolutionMs, 3 * resolutionMs, resolutionMs * 19 / 6];
+        await ingest(ctx.store, batch(offsets.map((offset, index) => makeMetricsRecord({
+          sequence: index + 1,
+          capturedAt: start + offset + 1000,
+          payload: makePayload({ cpuUsage: [10, 30, 90, 40, 60][index] }),
+        }))));
+        const query = (offset: number) => queryHistory(ctx.db, {
+          machineId: "machine-1", metrics: ["cpu.usage"],
+          fromMs: start + offset, toMs: start + 5 * resolutionMs + offset, maxPoints: 2,
+        }, { maxRowsScanned: 3 });
+        const before = query(resolutionMs / 4);
+        const after = query(resolutionMs / 4 + 1000);
+        assert.equal(before.tier, tier);
+        assert.equal(before.stepMs, 3 * resolutionMs);
+        assert.deepEqual(before.series[0]!.points, [
+          { t: start, min: 10, max: 90, avg: 130 / 3 },
+          { t: start + 3 * resolutionMs, min: 40, max: 60, avg: 50 },
+        ]);
+        assert.deepEqual(after.series[0]!.points, before.series[0]!.points);
+      } finally {
+        await teardown(ctx);
+      }
+    });
+  }
+
+  it("bounds a dense rolling window to maxPoints plus one edge bucket", async () => {
+    const ctx = setup();
+    try {
+      const start = Math.floor(Date.now() / 3_600_000) * 3_600_000 - 3_600_000;
+      await ingest(ctx.store, batch(Array.from({ length: 601 }, (_, index) => makeMetricsRecord({
+        sequence: index + 1, capturedAt: start + index * 6000 + 500,
+        payload: makePayload({ cpuUsage: index % 2 ? 90 : 10 }),
+      }))));
+      const query = (offset: number) => queryHistory(ctx.db, {
+        machineId: "machine-1", metrics: ["cpu.usage"],
+        fromMs: start + offset, toMs: start + 3_600_000 + offset, maxPoints: 600,
+      });
+      const before = query(500);
+      const after = query(6500);
+      assert.equal(before.series[0]!.points.length, 601);
+      assert.equal(after.series[0]!.points.length, 600);
+      assert.deepEqual(after.series[0]!.points, before.series[0]!.points.slice(1));
+    } finally {
+      await teardown(ctx);
+    }
+  });
+
   it("queries selected high-numbered cores without excluding other metric resources", async () => {
     const ctx = setup();
     try {
@@ -249,7 +337,7 @@ describe("history query", () => {
     const ctx = setup();
     try {
       const now = Date.now();
-      const from = Math.floor((now - 120_000) / 1000) * 1000;
+      const from = Math.floor((now - 120_000) / 60_000) * 60_000;
       const records = Array.from({ length: 300 }, (_, index) =>
         makeMetricsRecord({
           sequence: index + 1,
