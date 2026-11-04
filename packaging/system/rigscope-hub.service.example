@@ -1,0 +1,50 @@
+# Managed by `rigscope system`. Enable explicitly; do not edit in place.
+# Independent component: enabling or restarting this unit never touches the collector.
+[Unit]
+Description=Rigscope hub (system scope)
+Documentation=file:/opt/rigscope/current/README.md
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=rigscope-hub
+Group=rigscope-hub
+WorkingDirectory=/opt/rigscope/current
+EnvironmentFile=/etc/rigscope/hub.env
+Environment=NODE_ENV=production
+Restart=on-failure
+RestartSec=2s
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+ExecStart="/opt/rigscope/node/node" "/opt/rigscope/current/dist/hub.cjs"
+Environment="HUB_DATABASE_PATH=/var/lib/rigscope/hub/telemetry.sqlite"
+Environment="HUB_STATE_FILE=/var/lib/rigscope/hub/enrollment.json"
+Environment="HUB_SOCKET_PATH=/var/lib/rigscope/hub/run/hub.sock"
+ReadWritePaths="/var/lib/rigscope/hub"
+ReadOnlyPaths="/opt/rigscope/current"
+PrivateDevices=yes
+TimeoutStopSec=15s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rigscope-hub
+
+[Install]
+WantedBy=multi-user.target

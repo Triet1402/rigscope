@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rigscope measured History latency</title>
+<style>
+:root{--viz-series-1:var(--chart-1)}
+html,body{background:transparent;color:var(--foreground);font-family:var(--font-sans);margin:0}
+#rigscope-scale-latency h3{font-weight:500;margin:0 0 16px}
+#rigscope-scale-latency .row{display:grid;grid-template-columns:minmax(110px,160px) minmax(60px,1fr) 64px;gap:12px;align-items:center;min-height:40px}
+#rigscope-scale-latency .track{height:12px;background:var(--muted)}
+#rigscope-scale-latency .bar{height:12px;background:var(--viz-series-1)}
+#rigscope-scale-latency .value{font-variant-numeric:tabular-nums;text-align:right}
+#rigscope-scale-latency .caption{color:var(--muted-foreground);margin-top:12px}
+@media(max-width:420px){#rigscope-scale-latency .row{grid-template-columns:110px minmax(60px,1fr) 60px;gap:8px}}
+</style></head>
+<body><figure id="rigscope-scale-latency" style="margin:0" aria-label="Measured History query latency, 95th percentile. Five machines: 12.9 milliseconds; 75 machines: 20.9; with churn: 23.4; with slow SSE: 23.0; with broad History queries: 50.3. Each workload had a 60-second measured phase on one EPYC host.">
+<h3>History latency · p95</h3>
+<div class="row"><span>5 machines</span><div class="track" aria-hidden="true"><div class="bar" style="width:21.5%"></div></div><span class="value">12.9 ms</span></div>
+<div class="row"><span>75 machines</span><div class="track" aria-hidden="true"><div class="bar" style="width:34.83%"></div></div><span class="value">20.9 ms</span></div>
+<div class="row"><span>75 · churn</span><div class="track" aria-hidden="true"><div class="bar" style="width:39%"></div></div><span class="value">23.4 ms</span></div>
+<div class="row"><span>75 · paused SSE</span><div class="track" aria-hidden="true"><div class="bar" style="width:38.33%"></div></div><span class="value">23.0 ms</span></div>
+<div class="row"><span>75 · broad History</span><div class="track" aria-hidden="true"><div class="bar" style="width:83.83%"></div></div><span class="value">50.3 ms</span></div>
+<figcaption class="caption">60-second synthetic phases · one host · 8 History sessions in each 75-machine case</figcaption>
+</figure></body></html>

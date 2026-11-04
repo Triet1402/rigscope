@@ -1,0 +1,128 @@
+@import "tailwindcss";
+
+/*
+ * Dark variant is class-based (driven by next-themes on <html class="dark">),
+ * not media-query based, so the toggle overrides the system preference.
+ */
+@custom-variant dark (&:is(.dark *));
+
+/* ---------------------------------------------------------------
+ * Theme tokens — "the rig-as-console"
+ * Flat cool neutrals, hairline borders, one accent for selection
+ * and live state, reference-metric hues (blue CPU/GPU, green
+ * memory, amber swap) that keep their jobs in both themes.
+ * --------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+  --background: #f4f5f7;
+  --card: #ffffff;
+  --card-strong: #f9fafb;
+  --border: #e2e4e9;
+  --foreground: #1a1b1e;
+  --muted-foreground: #5d5f64;
+  --accent: #1c71d8;
+  --accent-foreground: #ffffff;
+  --selected: #e8f0fb;
+  --component-selected: #1c71d8;
+  --ok: #2a9134;
+  --ok-soft: rgba(42, 145, 52, 0.13);
+  --warn: #c67b00;
+  --warn-soft: rgba(198, 123, 0, 0.14);
+  --crit: #c33c3c;
+  --crit-soft: rgba(195, 60, 60, 0.14);
+  --cpu: #3584e4;
+  --mem: #33a06f;
+  --swap: #d8a23a;
+  --scrollbar: #c7cad0;
+  --focus: color-mix(in oklab, #1c71d8 60%, transparent);
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #1a1b1e;
+  --card: #26272b;
+  --card-strong: #2d2e33;
+  --border: #3a3b3f;
+  --foreground: #e4e5e8;
+  --muted-foreground: #a2a4a9;
+  --accent: #3584e4;
+  --accent-foreground: #ffffff;
+  --selected: #1e3a5c;
+  --component-selected: #3584e4;
+  --ok: #3db84a;
+  --ok-soft: rgba(61, 184, 74, 0.15);
+  --warn: #e5a83b;
+  --warn-soft: rgba(229, 168, 59, 0.15);
+  --crit: #e05e5e;
+  --crit-soft: rgba(224, 94, 94, 0.15);
+  --cpu: #3584e4;
+  --mem: #4ec289;
+  --swap: #d8a23a;
+  --scrollbar: #3a3b3f;
+  --focus: color-mix(in oklab, #3584e4 65%, transparent);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-card: var(--card);
+  --color-card-strong: var(--card-strong);
+  --color-border: var(--border);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-selected: var(--selected);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-crit: var(--crit);
+  --color-crit-soft: var(--crit-soft);
+  --color-cpu: var(--cpu);
+  --color-mem: var(--mem);
+  --color-swap: var(--swap);
+}
+
+html,
+body {
+  overscroll-behavior: none;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: ui-sans-serif, system-ui, "Noto Sans", "Inter", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Tabular numerals: every number in data positions moves in step. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Browser chrome belongs to the design: selection, focus,
+       scrollbars, device caret color. --------------------------- */
+::selection {
+  background-color: color-mix(in oklab, var(--accent) 28%, transparent);
+  color: var(--foreground);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

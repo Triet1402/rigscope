@@ -1,0 +1,56 @@
+name: CI
+
+# Manual verification only. This repository does not run CI on push, pull
+# requests, a schedule or from other workflows.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify (Linux, Node 26)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CI: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Use Node 26
+        uses: actions/setup-node@v4
+        with:
+          node-version: "26"
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # `prepack` performs the single production build, then verifies the
+      # artifacts before the archive is written. Several tests start the
+      # packaged hub, so this must run before the test suite.
+      - name: Build and verify the npm package
+        run: npm run verify:package
+
+      # The archive is installed as a dependency in a throwaway prefix: npm
+      # overrides only apply to the root project, so the source audit above
+      # cannot detect a vulnerable installed lockfile. This also boots the
+      # packaged hub from the installed production dependencies.
+      - name: Audit and smoke-test the installed package
+        run: npm run verify:installed
+
+      - name: Unit and integration tests
+        run: npm test
+
+      # Uses the build above; the runner itself does not rebuild.
+      - name: Packaged runtime checks
+        run: node scripts/test-runtime.cjs

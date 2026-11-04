@@ -1,0 +1,111 @@
+{
+  "name": "rigscope",
+  "version": "0.1.0",
+  "rigscopeConfigVersion": 2,
+  "private": false,
+  "engines": {
+    "node": ">=26.0.0"
+  },
+  "os": [
+    "linux"
+  ],
+  "scripts": {
+    "dev": "NODE_ENV=development tsx src/hub/main.ts",
+    "build": "npm run build:ui && npm run build:runtime",
+    "build:runtime": "node scripts/build-runtime.cjs",
+    "start": "node dist/hub.cjs",
+    "collector:mock": "COLLECTOR_MODE=mock tsx collector/main.ts",
+    "collector:enroll": "tsx collector/main.ts --enroll",
+    "collector:start": "node dist/collector.cjs",
+    "ops": "node dist/ops.cjs",
+    "package:release": "npm run build && node scripts/package-release.cjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/test.cjs",
+    "test:runtime": "npm run build:runtime && node scripts/test-runtime.cjs",
+    "test:dev": "npm run build:runtime && node scripts/test.cjs --suite development",
+    "validate:https": "node scripts/validate-https.cjs",
+    "build:ui": "next build --webpack",
+    "rigscope": "node bin/rigscope.cjs",
+    "verify:build": "node scripts/verify-build.cjs",
+    "verify:package": "node scripts/verify-package.cjs",
+    "verify:installed": "node scripts/verify-installed-package.cjs",
+    "prepack": "node scripts/prepack.cjs",
+    "package:npm": "npm pack",
+    "notices": "node scripts/third-party-notices.cjs"
+  },
+  "dependencies": {
+    "lucide-react": "^0.475.0",
+    "next": "^16.4.5",
+    "next-themes": "^0.4.6",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "ws": "^8.22.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.0",
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@types/ws": "^8.18.2",
+    "esbuild": "^0.28.2",
+    "postcss": "^8.5.23",
+    "tailwindcss": "^4.1.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.7.0"
+  },
+  "description": "Your machines, in view. A self-hosted Linux system and process monitor.",
+  "bin": {
+    "rigscope": "bin/rigscope.cjs"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    ".next/BUILD_ID",
+    ".next/*.json",
+    ".next/server/",
+    ".next/static/",
+    "next.config.js",
+    "README.md",
+    "CHANGELOG.md",
+    "docs/installation.md",
+    "docs/operations.md",
+    "docs/bottlenecks.md",
+    "docs/exports.md",
+    "docs/development.md",
+    "docs/releasing.md",
+    "docs/scale-validation.md",
+    "docs/scale-validation.json",
+    "docs/scale-acceptance.json",
+    "ARCHITECTURE.md",
+    "DESIGN.md",
+    "LICENSE",
+    "SECURITY.md",
+    "THIRD_PARTY_NOTICES.md",
+    "packaging/"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "Triet (@Triet1402)",
+    "url": "https://github.com/Triet1402"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Triet1402/rigscope.git"
+  },
+  "homepage": "https://github.com/Triet1402/rigscope#readme",
+  "bugs": {
+    "url": "https://github.com/Triet1402/rigscope/issues"
+  },
+  "keywords": [
+    "linux",
+    "monitoring",
+    "system-monitor",
+    "process-monitor",
+    "self-hosted",
+    "gpu"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

@@ -1,0 +1,7 @@
+# Managed by Rigscope: read-only package energy/range counters for the collector group.
+# Top-level package devices only; subdomains and constraint files are not touched.
+SUBSYSTEM=="powercap", ACTION=="add|change", KERNEL=="intel-rapl:[0-9]*", KERNEL!="intel-rapl:*:*", ATTR{name}=="package*", \
+  RUN+="/usr/bin/chgrp rigscope-rapl /sys%p/energy_uj", \
+  RUN+="/usr/bin/chmod 0440 /sys%p/energy_uj", \
+  RUN+="/usr/bin/chgrp rigscope-rapl /sys%p/max_energy_range_uj", \
+  RUN+="/usr/bin/chmod 0440 /sys%p/max_energy_range_uj"
