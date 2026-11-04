@@ -10,7 +10,9 @@ import type { ChartSeries } from "./history-chart";
 import { useChartInspection } from "./chart-inspection";
 
 const COLUMNS = 120;
-const rowGrid = "grid grid-cols-[3rem_minmax(0,1fr)_2.5rem] items-center gap-2 sm:grid-cols-[3.5rem_minmax(0,1fr)_3rem_3rem]";
+// Reserve room for "At cursor" even before inspection starts. Every header,
+// data row and time axis uses these same tracks to keep the heatmap aligned.
+const rowGrid = "grid grid-cols-[3rem_minmax(0,1fr)_4.5rem] items-center gap-2 sm:grid-cols-[3.5rem_minmax(0,1fr)_4.5rem_3rem]";
 const color = (level: number) => level < 5 ? "var(--cpu)" : level < 8 ? "var(--warn)" : "var(--crit)";
 
 export function CoreHistoryChart({ title, series, fromMs, toMs, stepMs, gaps, hiddenKeys, onToggleSeries }: {
@@ -54,7 +56,7 @@ export function CoreHistoryChart({ title, series, fromMs, toMs, stepMs, gaps, hi
           </button>
         </div>
       </div>
-      <div className={`${rowGrid} mb-1 text-xs text-muted-foreground`} aria-hidden>
+      <div className={`${rowGrid} mb-1 min-h-4 whitespace-nowrap text-xs leading-4 text-muted-foreground`} aria-hidden>
         <span>Core</span>
         <span className="truncate">
           {cursorTime !== null ? <span className="tnum">{cursorTime}</span> : <>
@@ -86,7 +88,7 @@ export function CoreHistoryChart({ title, series, fromMs, toMs, stepMs, gaps, hi
                 } : undefined}
                 onFocus={inspection.onFocus} onBlur={inspection.clear} onKeyDown={inspection.onKeyDown}
                 className={`h-5 w-full cursor-crosshair rounded-sm focus-visible:outline-2 focus-visible:outline-accent ${shown ? "" : "opacity-20"}`}>
-                <title>{row.label} · Last {formatMetricValue(row.stats.latest, "percent")} · Peak {formatMetricValue(row.stats.max, "percent")}</title>
+                <title>{`${row.label} · Last ${formatMetricValue(row.stats.latest, "percent")} · Peak ${formatMetricValue(row.stats.max, "percent")}`}</title>
                 {shown ? row.paths.map((path, level) => path ? <path key={level} d={path} fill={color(level)} opacity={level < 5 ? 0.15 + level * 0.17 : 0.65 + (level % 5) * 0.07} /> : null) : null}
                 {bands.map((band) => <rect key={`${band.fromMs}-${band.toMs}`} x={(band.fromMs - fromMs) / span * COLUMNS}
                   width={(band.toMs - band.fromMs) / span * COLUMNS} y={0} height={18} fill="var(--card)" />)}
