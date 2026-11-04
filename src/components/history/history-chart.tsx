@@ -133,7 +133,28 @@ export function HistoryChart(props: Props) {
   const visiblePoints = visible.flatMap((item) => item.points);
   const hasAnyPoint = visiblePoints.some((point) => point.avg !== null || point.min !== null || point.max !== null);
   const span = Math.max(1, toMs - fromMs);
-  const bands = gapBands(gaps, fromMs, toMs);
+  const plottedTimes = visiblePoints
+    .filter((point) => point.avg !== null && Number.isFinite(point.avg))
+    .map((point) => point.t)
+    .sort((a, b) => a - b);
+  const chartGaps = gaps.map((gap) => {
+    if (gap.kind !== "missing") return gap;
+    let previousPoint: number | undefined;
+    let nextPoint: number | undefined;
+    for (const pointTime of plottedTimes) {
+      if (pointTime <= gap.fromMs) previousPoint = pointTime;
+      else {
+        nextPoint = pointTime;
+        break;
+      }
+    }
+    return {
+      ...gap,
+      fromMs: previousPoint ?? gap.fromMs,
+      toMs: nextPoint ?? gap.toMs,
+    };
+  });
+  const bands = gapBands(chartGaps, fromMs, toMs);
 
   const domain = buildYDomain(
     unit,
@@ -145,7 +166,7 @@ export function HistoryChart(props: Props) {
 
   const drawSeries = visible.map((item) => {
     const downsampled = downsamplePoints(item.points, props.maxDrawPoints ?? MAX_DRAW_POINTS, stepMs);
-    const segments = splitSeries(downsampled, { stepMs, gaps, fromMs, toMs });
+    const segments = splitSeries(downsampled, { stepMs, gaps: chartGaps, fromMs, toMs });
     return { ...item, segments };
   });
   const ariaLabel = chartAriaLabel(title, unit, visible, fromMs, toMs, bands.length);

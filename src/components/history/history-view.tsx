@@ -85,6 +85,13 @@ function machinesLabel(machine: MachineState): string {
   return machine.displayName?.trim() || machine.hostname.trim() || machine.machineId;
 }
 
+type LiveHistoryGap = {
+  machineId: string;
+  range: string;
+  fromMs: number;
+  toMs: number;
+};
+
 function LoadingPanels() {
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-2" aria-busy="true">
@@ -186,6 +193,63 @@ export function HistoryView() {
   }, [error?.kind, setAutoRefresh]);
 
   const result = shown?.result ?? null;
+  const [liveHistoryGap, setLiveHistoryGap] = useState<LiveHistoryGap | null>(null);
+  useEffect(() => {
+    if (machine === undefined || result === null) return;
+    const lastReceivedAt = machine.lastReceivedAt === null ? NaN : Date.parse(machine.lastReceivedAt);
+    const scopeMatches = liveHistoryGap?.machineId === machine.machineId && liveHistoryGap.range === range;
+
+    if (scopeMatches && liveHistoryGap !== null) {
+      const recorded = result.gaps.some(
+        (gap) => gap.kind === "missing" && gap.fromMs <= liveHistoryGap.toMs && gap.toMs >= liveHistoryGap.fromMs,
+      );
+      if (recorded) {
+        setLiveHistoryGap(null);
+        return;
+      }
+      if (machine.connected && Number.isFinite(lastReceivedAt) && lastReceivedAt > liveHistoryGap.fromMs) {
+        if (lastReceivedAt !== liveHistoryGap.toMs) {
+          setLiveHistoryGap({ ...liveHistoryGap, toMs: lastReceivedAt });
+        }
+        return;
+      }
+      if (!machine.connected && result.toMs > liveHistoryGap.toMs) {
+        setLiveHistoryGap({ ...liveHistoryGap, toMs: result.toMs });
+      }
+      return;
+    }
+
+    if (machine.connected || !Number.isFinite(lastReceivedAt)) return;
+    if (lastReceivedAt < result.toMs && result.toMs > result.fromMs) {
+      setLiveHistoryGap({
+        machineId: machine.machineId,
+        range,
+        fromMs: Math.max(result.fromMs, lastReceivedAt),
+        toMs: result.toMs,
+      });
+    }
+  }, [machine, result, range, liveHistoryGap]);
+  const resultWithLiveGap = useMemo(() => {
+    if (result === null || liveHistoryGap === null || liveHistoryGap.machineId !== machine?.machineId || liveHistoryGap.range !== range) return result;
+    const toMs = Math.min(liveHistoryGap.toMs, result.toMs);
+    if (liveHistoryGap.fromMs >= toMs) return result;
+    const alreadyRecorded = result.gaps.some(
+      (gap) => gap.kind === "missing" && gap.fromMs <= toMs && gap.toMs >= liveHistoryGap.fromMs,
+    );
+    if (alreadyRecorded) return result;
+    return {
+      ...result,
+      gaps: [
+        ...result.gaps,
+        {
+          fromMs: Math.max(result.fromMs, liveHistoryGap.fromMs),
+          toMs,
+          kind: "missing" as const,
+          reason: "collector is not reporting",
+        },
+      ],
+    };
+  }, [result, liveHistoryGap, machine?.machineId, range]);
   const cards = machine === undefined ? [] : gpuCards(machine, result?.series ?? []);
   const rangeInfo = rangePreset(range);
 
@@ -439,17 +503,17 @@ export function HistoryView() {
                 </div>
               ) : null}
 
-              {result.gaps.length > 0 ? (
+              {resultWithLiveGap!.gaps.length > 0 ? (
                 <details className="mb-4 max-w-3xl text-xs text-muted-foreground">
                   <summary className="inline-flex min-h-8 cursor-pointer items-center gap-2 rounded-md text-warn">
                     <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warn" aria-hidden />
                     <span>
                       <strong className="font-medium">Data gaps:</strong>{" "}
-                      {gapSummary(result.gaps, result.fromMs, result.toMs)}
+                    {gapSummary(resultWithLiveGap!.gaps, result.fromMs, result.toMs)}
                     </span>
                   </summary>
                     <ul className="mt-1.5 flex flex-col gap-1">
-                      {result.gaps.slice(0, 20).map((gap) => (
+                      {resultWithLiveGap!.gaps.slice(0, 20).map((gap) => (
                         <li key={`${gap.fromMs}-${gap.toMs}-${gap.kind}`} className="tnum text-xs">
                           {formatDateTime(gap.fromMs)} – {formatDateTime(gap.toMs)} (
                           {formatGapDuration(gap.toMs - gap.fromMs)}):{" "}
@@ -460,9 +524,9 @@ export function HistoryView() {
                             : ""}
                         </li>
                       ))}
-                      {result.gaps.length > 20 ? (
+                      {resultWithLiveGap!.gaps.length > 20 ? (
                         <li className="text-xs text-muted-foreground">
-                          …and {result.gaps.length - 20} more.
+                          …and {resultWithLiveGap!.gaps.length - 20} more.
                         </li>
                       ) : null}
                     </ul>
@@ -479,7 +543,7 @@ export function HistoryView() {
               ) : (
                 <HistoryCharts
                   machine={machine}
-                  result={result}
+                  result={resultWithLiveGap!}
                   selectedMetrics={selectedMetrics}
                   hiddenCards={hiddenCards}
                   hiddenSeries={hiddenSeries}
