@@ -135,6 +135,9 @@ DNS name. Choose the section for a new or existing installation.
 
 ### New HTTPS installation
 
+`--origin` accepts a root URL with or without a trailing slash and saves it
+without the slash. Paths, query strings and fragments are not allowed.
+
 ```sh
 npx --yes rigscope@latest install \
   --origin https://machine.example.ts.net:8081 --boot

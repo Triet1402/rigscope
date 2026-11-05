@@ -221,6 +221,10 @@ async function main(): Promise<number> {
   for (const [key, value] of Object.entries(values)) {
     if (value !== undefined && key !== 'state-dir' && key !== 'scope' && !(permitted[command] ?? []).includes(key)) throw new Error(`--${key} is not available for ${command}.`);
   }
+  // Browser-copied root URLs commonly include '/'; persist the strict origin.
+  // Remove only one final slash, so paths, query strings and other aliases
+  // still pass through the hub's existing canonical-origin validation.
+  if (values.origin?.endsWith('/')) values.origin = values.origin.slice(0, -1);
   const managedState = basename(ROOT) === 'rigscope' && basename(dirname(ROOT)) === 'node_modules' && basename(resolve(ROOT, '../..')) === 'runtime'
     ? resolve(ROOT, '../../..') : undefined;
   const dir = stateDirectory(values['state-dir'] ?? (command === 'try' ? `${stateDirectory()}-trial` : process.env.RIGSCOPE_STATE_DIR ?? managedState));

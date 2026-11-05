@@ -120,3 +120,18 @@ test('invalid URLs, conflicting queues and a live runtime refuse conversion with
     assert.equal(readFileSync(join(dir, 'collector', 'state.json'), 'utf8'), stateBefore);
   } finally { rmSync(dir, {recursive: true, force: true}); }
 });
+
+test('CLI accepts a trailing slash on --origin and stores only the canonical origin', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'rigscope-origin-slash-'));
+  try {
+    initialize(dir, {role: 'hub'});
+    const result = spawnSync(process.execPath, [cli, 'configure', '--origin', 'https://rig.example.com:8081/', '--state-dir', dir], {encoding: 'utf8', timeout: 5000});
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readSetup(dir)!.origin, 'https://rig.example.com:8081');
+    for (const origin of ['https://rig.example.com/path/', 'https://rig.example.com/?query=1', '/https://rig.example.com/', 'https://user:password@rig.example.com/']) {
+      const invalid = spawnSync(process.execPath, [cli, 'configure', '--origin', origin, '--state-dir', dir], {encoding: 'utf8', timeout: 5000});
+      assert.equal(invalid.status, 1, origin);
+      assert.equal(readSetup(dir)!.origin, 'https://rig.example.com:8081');
+    }
+  } finally { rmSync(dir, {recursive: true, force: true}); }
+});
