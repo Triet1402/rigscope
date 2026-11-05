@@ -37,6 +37,10 @@ structured output.
 rigscope upgrade
 ```
 
+Approve the stop prompt if components are running; `--yes` approves it in
+scripts. `--no-restart` leaves the upgraded installation stopped and skips live
+health checks. Uninstall always stays stopped.
+
 Use `--from PACKAGE` for an exact npm version or local archive. The command
 stages the package, stops running components, takes a consistent hub database
 backup and activates the new runtime. It restarts only the components that were
@@ -82,16 +86,17 @@ that format.
 
 ## Password recovery
 
-Stop the installation, enter a new password at the private prompt, then restart:
+Enter a new password at the private prompt; approve stopping the running hub
+when asked. Rigscope resumes previously running components after success:
 
 ```sh
-rigscope stop
 rigscope recover-password --user owner
-rigscope start
 ```
 
-Recovery requires the hub to be stopped and refuses a live or uncertain database
-lock. For unattended recovery, use `--password-file` with an owned `0600` file.
+Recovery coordinates stopping the hub and refuses foreign or uncertain database
+locks. Use `--yes` to approve stopping without a prompt and `--no-restart` to
+leave it stopped. For unattended recovery, also use `--password-file` with an
+owned `0600` file.
 It updates the existing user's stored hash. `--enable` also clears that user's
 disabled flag; recovery never creates a user or grants administrator access.
 
@@ -103,8 +108,9 @@ managed account.
 ## Access changes
 
 Follow the commands in [Remote access](installation.md#access-from-another-computer).
-`configure` requires a stopped hub and, when changing its local collector's
-destination, a stopped collector. `--origin` changes HTTPS access, `--local`
+`configure` asks to stop a running hub and, when changing its local collector's
+destination, its collector. Previously running components resume after success;
+`--yes` approves the stop prompt and `--no-restart` leaves them stopped. `--origin` changes HTTPS access, `--local`
 returns to loopback, and `--port PORT` changes the local hub port (combine it
 with `--local` when leaving HTTPS). `--origin` and `--port` cannot be combined
 because HTTPS mode uses a private Unix socket instead of the port; `--local

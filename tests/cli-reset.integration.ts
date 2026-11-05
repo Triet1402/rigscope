@@ -33,7 +33,7 @@ test('reset stops a running hub and replaces its unfinished state and runtime', 
     writeFileSync(path, JSON.stringify({...old, version: 2}));
     assert.equal(existsSync(join(dir, 'hub', 'telemetry.sqlite')), true);
 
-    const reset = invoke(['upgrade', '--from', archive, '--no-start']);
+    const reset = invoke(['upgrade', '--from', archive, '--no-start', '--yes']);
     assert.match(reset, /Resetting configuration and history/);
     assert.match(reset, /Password: /);
     assert.equal(run('systemctl', ['--user', 'show', hub, '--property=ActiveState', '--value']).trim(), 'inactive');
@@ -50,7 +50,7 @@ test('reset stops a running hub and replaces its unfinished state and runtime', 
     assert.match(invoke(['start', 'hub']), /Hub service started/);
     assert.match(invoke(['status']), /Health: ok/);
   } finally {
-    if (existsSync(cli)) spawnSync(process.execPath, [cli, 'uninstall', '--state-dir', dir], {env, stdio: 'ignore', timeout: 30000});
+    if (existsSync(cli)) spawnSync(process.execPath, [cli, 'uninstall', '--state-dir', dir, '--yes'], {env, stdio: 'ignore', timeout: 30000});
     for (const component of ['hub', 'collector'] as const) {
       const unit = unitName(dir, component);
       spawnSync('systemctl', ['--user', 'stop', unit], {stdio: 'ignore', timeout: 15000});

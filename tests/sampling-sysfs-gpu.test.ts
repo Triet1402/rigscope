@@ -104,3 +104,19 @@ test('AMD integrated display-controller class 0380 is inventoried and sampled', 
   assert.equal(inventory.gpus[0]!.telemetry, 'supported');
   assert.doesNotThrow(() => parseInventory(inventory));
 });
+
+test('Intel adapter with no counters remains inventoried with an honest fallback name', () => {
+  const readers = createReaders(pciDeviceFiles(address, '0x8086'), {dirs: {'/sys/bus/pci/devices': [address]}});
+  const inventory = buildInventory(readers, null);
+  assert.equal(inventory.gpus.length, 1);
+  assert.equal(inventory.gpus[0]!.name, 'Intel display adapter');
+  assert.equal(inventory.gpus[0]!.telemetry, 'unsupported');
+  assert.match(inventory.gpus[0]!.reason!, /driver support or permissions may/);
+});
+
+test('distro PCI names improve AMD naming without guessing a hardware model', () => {
+  const readers = fixture();
+  readers.files[`${base}/device`] = '0x150e';
+  readers.files['/usr/share/hwdata/pci.ids'] = '1002  AMD\n\t150e  Radeon fixture graphics\n8086  Intel\n\t150e  Other device';
+  assert.equal(buildInventory(readers, null).gpus[0]!.name, 'Radeon fixture graphics');
+});

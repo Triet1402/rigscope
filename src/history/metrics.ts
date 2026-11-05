@@ -449,7 +449,7 @@ function shortIdentifier(resourceId: string): string {
  */
 export function gpuCards(machine: MachineState | undefined, series: readonly HistorySeries[]): GpuCard[] {
   const historyIds = new Set(
-    series.filter((item) => item.metric.startsWith("gpu.") && item.resourceId !== "").map((item) => item.resourceId),
+    series.filter((item) => item.metric.startsWith("gpu.") && item.resourceId !== "" && item.points.some(point => point.avg !== null || point.min !== null || point.max !== null)).map((item) => item.resourceId),
   );
   const cards: GpuCard[] = [];
   const seen = new Set<string>();
@@ -489,7 +489,7 @@ export function gpuCards(machine: MachineState | undefined, series: readonly His
     if (seen.has(id)) continue;
     cards.push({
       id,
-      label: shortIdentifier(id),
+      label: id.startsWith("pci:") ? `Previously detected GPU (${shortIdentifier(id)})` : shortIdentifier(id),
       index: cards.length,
       totalBytes: null,
       supported: true,

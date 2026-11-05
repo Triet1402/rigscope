@@ -37,7 +37,7 @@ export function readSysfsGpu(readers: SysfsGpuReaders, address: string): GpuRead
     if (power !== null && values.powerWatts === null) values.powerWatts = power / 1_000_000;
   }
   if ([values.utilizationPercent, values.memoryTotalBytes, values.temperatureC, values.powerWatts].every(value => value === null)) {
-    return {id, status: 'unavailable', reason: 'driver exposes no readable GPU counters; check DRM driver and permissions'};
+    return {id, status: 'unavailable', reason: 'GPU detected, but no readable DRM/sysfs counters; driver support or permissions may limit telemetry'};
   }
   return values;
 }

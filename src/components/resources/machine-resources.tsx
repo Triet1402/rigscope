@@ -337,7 +337,7 @@ function GpuCard({card}: {card: GpuCardView}) {
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
           {supported ? null : <Tag text="no telemetry" title={card.reason ?? "Management adapter"} />}
-          {card.stale ? <Tag text="last known" title="Retained from the last accepted sample" /> : null}
+          {card.stale && card.state === "ok" ? <Tag text="last known" title="Retained from the last accepted sample" /> : null}
         </div>
       </div>
 

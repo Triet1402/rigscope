@@ -363,7 +363,7 @@ export function stopAndRemoveOwnedUnits(dir: string): string[] {
  * Remove every unit this installation owns, the launcher and installed runtime
  * trees. Configuration, history, backups and enrollment state are retained.
  */
-export function uninstallService(dir: string): void {
+export function uninstallService(dir: string, keepRuntime = false): void {
   stopAndRemoveOwnedUnits(dir);
   const alias = join(process.env.XDG_BIN_HOME || join(homedir(), '.local', 'bin'), 'rigscope');
   const target = runtimeTarget(dir);
@@ -374,6 +374,7 @@ export function uninstallService(dir: string): void {
       (stat.isFile() && readFileSync(alias, 'utf8').split('\n')[1] === aliasMarker(dir))
     )) rmSync(alias);
   } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+  if (keepRuntime) return;
   for (const tree of ['runtime', 'runtime-previous', 'runtime-next', 'runtime-rollback-tmp', 'runtime-remove-tmp']) {
     rmSync(join(dir, tree), {recursive: true, force: true});
   }

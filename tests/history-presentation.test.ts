@@ -399,3 +399,11 @@ test("normal five-second sampling and rollup cadence remain connected on a finer
     { kind: "dropped", fromMs: 6000, toMs: 9000 },
   ], fromMs: 0, toMs: 30000 }).length, 2);
 });
+
+test('GPU history ignores empty PCI aliases after NVIDIA UUID discovery', () => {
+  const machine = structuredClone(MACHINE);
+  const gpu = machine.inventory!.gpus[0]!;
+  gpu.pciBusId = '0000:64:00.0';
+  const cards = gpuCards(machine, [series('gpu.utilization', 'pci:0000:64:00.0', [point(0, null)])]);
+  assert.deepEqual(cards.map(card => card.id), [gpu.id]);
+});

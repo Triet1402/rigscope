@@ -36,6 +36,8 @@ The trial uses separate data and stops with Ctrl+C.
 | Check services and the dashboard URL | `rigscope status` |
 | Follow hub logs | `rigscope logs hub --follow` |
 | Upgrade from npm | `rigscope upgrade` |
+| Delete installation and all saved data | `rigscope uninstall` |
+| Remove installation, preserve saved data | `rigscope uninstall --keep-data` |
 | Stop or start the installation | `rigscope stop` / `rigscope start` |
 | Open the dashboard through Tailscale HTTPS | [Set up remote access](docs/installation.md#access-from-another-computer) |
 | Monitor another machine | [Add a collector](docs/installation.md#add-machines-and-hubs) |

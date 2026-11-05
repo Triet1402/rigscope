@@ -35,7 +35,8 @@ async function main() {
     const root = path.join(prefix,'node_modules','rigscope');
     const cli = path.join(root,'bin','rigscope.cjs');
     const invoke = (args, expected = 0) => {
-      const result = spawnSync(process.execPath, [cli,...args,'--state-dir',state],
+      const approvals = ['install','upgrade','rollback','recover-password','uninstall'].includes(args[0]) ? ['--yes'] : [];
+      const result = spawnSync(process.execPath, [cli,...args,...approvals,'--state-dir',state],
         {encoding:'utf8', timeout:120_000, env});
       assert.equal(result.status, expected, `CLI ${args[0]}: ${result.stderr}`);
       return result.stdout;
@@ -114,7 +115,7 @@ async function main() {
     db = new DatabaseSync(database,{readOnly:true});
     assert.equal(db.prepare("SELECT count(*) n FROM admin_audit WHERE action='user.password-recovery'").get().n,1);
     assert.equal(db.prepare('PRAGMA quick_check').get().quick_check,'ok');db.close();
-    invoke(['uninstall']);
+    invoke(['uninstall','--keep-data']);
     assert.ok(componentUnitFiles.every(file => !fs.existsSync(file)), 'uninstall removes both component units');
     assert.ok(fs.existsSync(database), 'uninstall retains history');
     assert.equal(fs.readFileSync(path.join(state,'config.json'),'utf8'), configBefore);

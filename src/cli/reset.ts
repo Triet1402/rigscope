@@ -12,7 +12,7 @@
  */
 
 import { lstatSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { OperationsError, errorMessage, writePrivateFile } from '../operations/fs';
 import { acquireProcessLease } from '../runtime/process-lease';
 import { parseHubConfig } from '../hub/config';
@@ -177,9 +177,11 @@ function assertProcessOwned(dir: string, pid: number, lease: string): void {
 }
 
 /** PIDs that a live lease claims for this installation and whose identity matches. */
-function identifiedProcesses(dir: string): number[] {
+function identifiedProcesses(dir: string, components?: Array<'hub' | 'collector'>): number[] {
   const pids = new Set<number>();
   for (const lease of processLocks(dir)) {
+    const component = ['collector.lock', 'collector-runtime.lock', 'state.json.lock'].includes(basename(lease)) ? 'collector' : 'hub';
+    if (components && !lease.endsWith('rigscope.lock') && !components.includes(component)) continue;
     const pid = readLeasePid(lease);
     if (pid === null || !isAlive(pid)) continue;
     if (pid === process.pid) {
@@ -219,6 +221,24 @@ function terminate(pid: number): void {
   if (!waitForExit(pid, KILL_GRACE_MS)) {
     throw new OperationsError('process-stuck', `process ${pid} did not stop; refusing to delete its state`);
   }
+}
+
+/** Inspect live leases and prove ownership before any prompt or signal. */
+export function runningOwnedComponents(dir: string): Array<'hub' | 'collector'> {
+  identifiedProcesses(dir);
+  const components = new Set<'hub' | 'collector'>();
+  for (const path of processLocks(dir)) {
+    const pid = readLeasePid(path);
+    if (pid === null || !isAlive(pid)) continue;
+    if (path.endsWith('rigscope.lock')) { components.add('hub'); components.add('collector'); }
+    else components.add(['collector.lock', 'collector-runtime.lock', 'state.json.lock'].includes(basename(path)) ? 'collector' : 'hub');
+  }
+  return [...components];
+}
+
+export function stopOwnedRuntimes(dir: string, components?: Array<'hub' | 'collector'>): void {
+  for (const pid of identifiedProcesses(dir, components)) terminate(pid);
+  clearStoppedLeases(dir);
 }
 
 /** Stop every foreground process whose lease and identity belong to this installation. */

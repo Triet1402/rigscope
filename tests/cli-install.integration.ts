@@ -39,12 +39,13 @@ test('release installs in the background, survives bootstrap removal, enrolls, a
     assert.match(status, /Health: ok/);
     assert.match(status, /Startup: at (login|boot)/);
     assert.ok(!status.includes(password));
-    const pid = run('systemctl', ['--user', 'show', unit(local, 'hub'), '--property=MainPID', '--value']).trim();
+    let pid = run('systemctl', ['--user', 'show', unit(local, 'hub'), '--property=MainPID', '--value']).trim();
     assert.match(run(launcher, ['start']), /already running/);
     assert.equal(run('systemctl', ['--user', 'show', unit(local, 'hub'), '--property=MainPID', '--value']).trim(), pid);
-    assert.match(run(launcher, ['install', '--no-start']), /Installed; stopped|Installed; running/);
-    // --no-start leaves an existing service's activity unchanged.
-    assert.equal(run('systemctl', ['--user', 'show', unit(local, 'hub'), '--property=MainPID', '--value']).trim(), pid);
+    assert.match(run(launcher, ['install', '--no-start', '--yes']), /Installed; stopped/);
+    assert.equal(run('systemctl', ['--user', 'show', unit(local, 'hub'), '--property=ActiveState', '--value']).trim(), 'inactive');
+    run(launcher, ['start']);
+    pid = run('systemctl', ['--user', 'show', unit(local, 'hub'), '--property=MainPID', '--value']).trim();
     run(launcher, ['logs']);
     const serviceProperty = (component: 'hub' | 'collector', property: string) =>
       run('systemctl', ['--user', 'show', unit(local, component), `--property=${property}`, '--value']).trim();
@@ -77,15 +78,15 @@ test('release installs in the background, survives bootstrap removal, enrolls, a
     assert.match(connected, /Background service started/);
     assert.ok(!connected.includes(grant.token));
     assert.equal(run('systemctl', ['--user', 'show', unit(collector, 'collector'), '--property=ActiveState', '--value']).trim(), 'active');
-    run(launcher, ['uninstall', '--state-dir', collector]);
-    run(launcher, ['uninstall']);
+    run(launcher, ['uninstall', '--state-dir', collector, '--yes']);
+    run(launcher, ['uninstall', '--keep-data', '--yes']);
     assert.equal(existsSync(launcher), false);
     // Reproduce uninstall -> reinstall: the runtime tree is removed with the
     // service, so any explicit check must bootstrap again from the archive.
     const secondBootstrap = join(root, 'bootstrap2');
     run('npm', ['install', '--prefix', secondBootstrap, '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', archive]);
     const durableCli = join(secondBootstrap, 'node_modules', 'rigscope', 'bin', 'rigscope.cjs');
-    assert.throws(() => run(process.execPath, [durableCli, 'install', '--role', 'hub', '--origin', 'https://rig.example.com:8081', '--state-dir', local]), /Uninstall keeps configuration and history/);
+    assert.throws(() => run(process.execPath, [durableCli, 'install', '--role', 'hub', '--origin', 'https://rig.example.com:8081', '--state-dir', local]), /To change access while preserving data/);
     const beforeAccess = JSON.parse(readFileSync(join(local, 'config.json'), 'utf8'));
     run(process.execPath, [durableCli, 'configure', '--origin', 'https://rig.example.com:8081', '--state-dir', local]);
     assert.match(run(process.execPath, [durableCli, 'install', '--no-start', '--state-dir', local]), /Installed; stopped/);
@@ -105,9 +106,8 @@ test('release installs in the background, survives bootstrap removal, enrolls, a
     const configBefore = readFileSync(join(local, 'config.json'), 'utf8');
     assert.deepEqual(JSON.parse(configBefore).users, beforeAccess.users);
     assert.deepEqual(JSON.parse(configBefore).collectors, beforeAccess.collectors);
-    run(launcher, ['uninstall']);
-    assert.equal(readFileSync(join(local, 'config.json'), 'utf8'), configBefore);
-    assert.ok(existsSync(join(local, 'hub', 'telemetry.sqlite')));
+    run(launcher, ['uninstall', '--yes']);
+    assert.equal(existsSync(local), false, 'default uninstall purges saved data');
     await expectPortClosed(port);
   } finally {
     // Also clean up a partially failed installation; never touch unrelated units.

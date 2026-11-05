@@ -72,12 +72,11 @@ export function capReason(value: string): string {
   return capText(value, MAX_REASON);
 }
 
-/** Normalizes `0000:c1:00.0` / `00000000:C1:00.0` to `c1:00.0`. */
+/** Normalize domain width and case without collapsing distinct PCI domains. */
 export function normalizePciBusId(value: string): string {
   const lower = value.trim().toLowerCase();
-  const parts = lower.split(':');
-  if (parts.length >= 3) return `${parts[parts.length - 2]}:${parts[parts.length - 1]}`;
-  return lower;
+  const match = /^(?:([0-9a-f]{4,8}):)?([0-9a-f]{2}:[0-9a-f]{2}\.[0-7])$/.exec(lower);
+  return match ? `${(match[1] ?? '0').replace(/^0+/, '').padStart(4, '0')}:${match[2]}` : lower;
 }
 
 function vendorFor(raw: string): GpuInventory['vendor'] {
@@ -127,7 +126,20 @@ function fallbackGpuName(vendor: GpuInventory['vendor'], address: string): strin
     intel: 'Intel',
     other: 'Display',
   };
-  return `${labels[vendor]} display adapter at ${address}`;
+  return `${labels[vendor]} display adapter`;
+}
+
+/** Resolve optional distro PCI names without invoking a command per sample. */
+export function pciDeviceName(database: string, vendorId: string, deviceId: string): string | null {
+  let vendor = false;
+  for (const line of database.split('\n')) {
+    const heading = /^([0-9a-f]{4})\s+/i.exec(line);
+    if (heading) vendor = heading[1]!.toLowerCase() === vendorId.replace(/^0x/, '').toLowerCase();
+    if (!vendor) continue;
+    const device = /^\t([0-9a-f]{4})\s+(.+)$/i.exec(line);
+    if (device && device[1]!.toLowerCase() === deviceId.replace(/^0x/, '').toLowerCase()) return capText(device[2]!);
+  }
+  return null;
 }
 
 function unsupportedGpuReason(vendor: GpuInventory['vendor'], gpu: GpuInventorySource): string {
@@ -152,6 +164,7 @@ function buildGpus(
       }
     }
   }
+  const pciNames = readTextOrNull(read, '/usr/share/hwdata/pci.ids') ?? readTextOrNull(read, '/usr/share/misc/pci.ids') ?? '';
   const result: GpuInventory[] = [];
   const seenIds = new Set<string>();
   for (const device of pciDevices) {
@@ -173,7 +186,7 @@ function buildGpus(
       const product = readTextOrNull(read, `/sys/bus/pci/devices/${device.address}/product_name`)?.trim();
       entry = {
         id: `pci:${device.address}`,
-        name: capText(product || fallbackGpuName(device.vendor, device.address)),
+        name: capText(product || pciDeviceName(pciNames, device.vendorId, readTextOrNull(read, `/sys/bus/pci/devices/${device.address}/device`)?.trim() ?? '') || fallbackGpuName(device.vendor, device.address)),
         vendor: device.vendor,
         pciBusId: device.address,
         telemetry: reading.status === 'ok' ? 'supported' : 'unsupported',

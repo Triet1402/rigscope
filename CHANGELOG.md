@@ -1,5 +1,26 @@
 # Release notes
 
+## 0.1.4
+
+- Coordinate stopping running user services and owned foreground processes for
+  installation, configuration, enrollment and password recovery. Prompt before
+  stopping; `--yes` approves without prompting and `--no-restart` leaves the
+  installation stopped. Successful changes resume previously running components.
+- **Uninstall now deletes saved data by default**, including accounts, history,
+  collector credentials, pending samples and backups. Use `uninstall --keep-data`
+  to retain data for reinstalling. `--purge` remains an explicit alias for default
+  deletion. Uninstall never restarts processes.
+- Add terminal colors for help, status, warnings and completed actions. Piped
+  output and JSON remain plain; `NO_COLOR` disables terminal colors.
+- Avoid extra History GPU cards created by empty historical PCI placeholder
+  series. Preserve historical cards that contain readings. Use the system PCI
+  name database when available, simplify fallback names and keep PCI addresses
+  separate. Normalize NVIDIA PCI domain widths without merging distinct domains.
+- Clarify unavailable GPU counters, including Intel integrated adapters, and
+  avoid a last-known badge when no GPU reading is displayed.
+- Update installation and operations documentation and add lifecycle, uninstall,
+  terminal output and GPU regression coverage.
+
 ## 0.1.3
 
 - Replace the unfinished versioned configuration formats with one canonical

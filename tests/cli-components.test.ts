@@ -157,7 +157,7 @@ test('connect keeps the collector disabled when enrollment fails', () => {
     const busy = spawnSync(process.execPath, [cli, 'connect', 'http://127.0.0.1:1', '--token-file', token, '--state-dir', dir],
       {env, encoding: 'utf8', timeout: 10000});
     assert.equal(busy.status, 1);
-    assert.match(busy.stderr, /stop collector/);
+    assert.match(busy.stderr, /--yes/);
     assert.equal(readSetup(dir)!.components?.collector.enabled, false);
   } finally { rmSync(root, {recursive: true, force: true}); }
 });
@@ -195,4 +195,72 @@ test('successful connect enables the collector service for startup without touch
     await new Promise<void>(resolve => server.close(() => resolve()));
     rmSync(root, {recursive: true, force: true});
   }
+});
+
+test('uninstall keeps data only with opt-in and defaults to purge', () => {
+  const root = mkdtempSync(join(tmpdir(), 'rigscope-purge-'));
+  const dir = join(root, 'state');
+  const env = stubs(root, false);
+  const run = (...args: string[]) => spawnSync(process.execPath, [cli, ...args, '--state-dir', dir], {env, encoding: 'utf8'});
+  try {
+    initialize(dir, {});
+    mkdirSync(join(dir, 'backups'));
+    writeFileSync(join(dir, 'backups', 'history'), 'saved');
+    assert.equal(run('uninstall', '--keep-data').status, 0);
+    assert.ok(existsSync(join(dir, 'config.json')));
+    assert.ok(existsSync(join(dir, 'backups', 'history')));
+    const purged = run('uninstall');
+    assert.equal(purged.status, 0, purged.stderr);
+    assert.equal(existsSync(dir), false);
+    assert.equal(run('uninstall', '--purge').status, 0, 'missing state is safe to purge again');
+    assert.equal(run('status', '--purge').status, 1);
+  } finally { rmSync(root, {recursive: true, force: true}); }
+});
+
+test('purge refuses unrecognized state and live foreground leases', async () => {
+  const { acquireProcessLease } = await import('../src/runtime/process-lease');
+  const root = mkdtempSync(join(tmpdir(), 'rigscope-purge-refusal-'));
+  const dir = join(root, 'state');
+  const env = stubs(root, false);
+  const run = () => spawnSync(process.execPath, [cli, 'uninstall', '--purge', '--state-dir', dir], {env, encoding: 'utf8'});
+  try {
+    mkdirSync(dir, {mode: 0o700});
+    writeFileSync(join(dir, 'unrelated'), 'keep');
+    assert.equal(run().status, 1);
+    assert.ok(existsSync(join(dir, 'unrelated')));
+    initialize(dir, {});
+    mkdirSync(join(dir, 'runtime'));
+    const release = acquireProcessLease(join(dir, 'run', 'hub.lock'));
+    try {
+      const result = run();
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /refusing to signal an unrelated process/);
+      assert.ok(existsSync(join(dir, 'config.json')));
+      assert.ok(existsSync(join(dir, 'runtime')));
+    } finally { release(); }
+    assert.equal(run().status, 0);
+  } finally { rmSync(root, {recursive: true, force: true}); }
+});
+
+test('configure asks for approval, --yes stops automatically and --no-restart suppresses startup', () => {
+  const root = mkdtempSync(join(tmpdir(), 'rigscope-configure-active-'));
+  const dir = join(root, 'state');
+  const env = stubs(root);
+  const run = (...args: string[]) => spawnSync(process.execPath, [cli, 'configure', '--port', '9148', ...args, '--state-dir', dir], {env, encoding: 'utf8'});
+  try {
+    initialize(dir);
+    const declined = run();
+    assert.equal(declined.status, 1);
+    assert.match(declined.stderr, /--yes/);
+    assert.equal(readSetup(dir)!.port, 8081);
+    const approved = run('--yes', '--no-restart');
+    assert.equal(approved.status, 0, approved.stderr);
+    assert.equal(readSetup(dir)!.port, 9148);
+    const log = readFileSync(join(root, 'systemctl.log'), 'utf8');
+    assert.match(log, /stop .*hub.service/);
+    assert.match(log, /stop .*collector.service/);
+    assert.doesNotMatch(log, /(?:^|\n).*\bstart\b/);
+    // An unchanged request does not require another stop approval.
+    assert.equal(run().status, 0);
+  } finally { rmSync(root, {recursive: true, force: true}); }
 });

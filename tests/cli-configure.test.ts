@@ -19,7 +19,7 @@ test('retained local installation converts to HTTPS without reinstalling, changi
     // The exact failed reinstall from the user's screenshots must explain the recovery path.
     const reinstall = spawnSync(process.execPath, [cli, 'install', '--role', 'hub', '--origin', 'https://rig.example.com:8081', '--state-dir', dir], {encoding: 'utf8', timeout: 5000});
     assert.equal(reinstall.status, 1);
-    assert.match(reinstall.stderr, /Uninstall keeps configuration and history/);
+    assert.match(reinstall.stderr, /To change access while preserving data/);
     assert.match(reinstall.stderr, /rigscope configure --origin/);
     assert.equal(readFileSync(join(dir, 'config.json'), 'utf8'), beforeConfig);
     const history = join(dir, 'hub', 'keep-history');
@@ -114,7 +114,7 @@ test('invalid URLs, conflicting queues and a live runtime refuse conversion with
     try {
       const result = spawnSync(process.execPath, [cli, 'configure', '--origin', 'https://rig.example.com', '--state-dir', dir], {encoding: 'utf8', timeout: 5000});
       assert.equal(result.status, 1);
-      assert.match(result.stderr, /another process owns/);
+      assert.match(result.stderr, /refusing to signal an unrelated process/);
     } finally { release(); }
     assert.equal(readFileSync(join(dir, 'config.json'), 'utf8'), before);
     assert.equal(readFileSync(join(dir, 'collector', 'state.json'), 'utf8'), stateBefore);

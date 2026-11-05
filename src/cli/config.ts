@@ -422,7 +422,7 @@ export function initialize(dir: string, options: SetupOptions = {}): {config: Se
   if (existing) {
     if ((options.role && options.role !== existing.role) || (options.port && Number(options.port) !== existing.port) ||
         (options.origin && options.origin !== existing.origin) || (options.socket && options.socket !== existing.socket)) {
-      throw new Error('Setup already exists with different settings. Uninstall keeps configuration and history. To change access, stop the service and run rigscope configure --origin https://your-hub (or --local). Use another --state-dir for a separate installation.');
+      throw new Error('Setup already exists with different settings. To change access while preserving data, run rigscope configure --origin https://your-hub (or --local). To delete all saved data and choose a new role, run rigscope uninstall first (deletes saved data). Use another --state-dir for a separate installation.');
     }
     return {config: existing, created: false};
   }

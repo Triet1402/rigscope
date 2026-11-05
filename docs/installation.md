@@ -27,7 +27,7 @@ install or source checkout is needed. The launcher and services use the installe
 runtime, so removing the npx cache does not break them.
 
 Releases are on [npm](https://www.npmjs.com/package/rigscope). `@latest` selects
-the current stable release; replace it with `@0.1.3` to select that exact version.
+the current stable release; replace it with `@0.1.4` to select that exact version.
 
 ### Installation options
 
@@ -53,7 +53,7 @@ For a downloaded package or one built from source, run from the directory
 containing the archive, or give its absolute path:
 
 ```sh
-npx --yes --package ./rigscope-0.1.3.tgz rigscope install --boot
+npx --yes --package ./rigscope-0.1.4.tgz rigscope install --boot
 ```
 
 The same installation options apply. npm still needs registry access or cached
@@ -71,17 +71,61 @@ Run only the command for the task you want:
 | Stop local collection | `rigscope stop collector` |
 | Follow logs | `rigscope logs --follow` |
 | Check configuration, services and sensor access | `rigscope doctor` |
-| Remove services and the managed runtime | `rigscope uninstall` |
+| Remove the installation and all its data | `rigscope uninstall` |
+| Remove services and runtime, keeping saved data | `rigscope uninstall --keep-data` |
 
 `start` is safe to repeat. `logs` shows the last 100 journal lines by default.
 `enable` and `disable` control the hub and collector independently; the initial
 role is a preset. Use `rigscope enable collector` to add local collection to a
 hub-only installation.
 
-`uninstall` keeps accounts, history, identity, pending samples and backups.
-Reinstalling reuses that data, including the existing password. This retention
-applies to canonical installations. Upgrading from a pre-canonical format resets
-configuration and history; back up the state directory first.
+`uninstall` permanently deletes the selected user installation, including
+accounts, history, collector credentials, pending samples and backups. It stops
+owned services and foreground runtimes and never restarts them. `--purge` remains
+an explicit alias for this default.
+
+To keep saved data for a later reinstall, opt in:
+
+```sh
+rigscope uninstall --keep-data
+```
+
+If the launcher is already gone, use the package entry point:
+
+```sh
+npx --yes rigscope@latest uninstall
+npx --yes rigscope@latest install --role collector --boot
+```
+
+Pass `--state-dir PATH` to select a separate installation. Reinstalling after
+`uninstall --keep-data` reuses saved settings and the existing password. This
+retention applies to canonical installations; upgrading a pre-canonical format
+resets configuration and history, so back up the state directory first.
+
+### Changes while running
+
+Commands that need exclusive access detect the selected installation's running
+services and foreground runtimes and ask before stopping them. After a successful
+change, previously running components resume automatically. Uninstall never
+restarts anything.
+
+Use `--yes` to approve stopping without a prompt, and `--no-restart` to leave the
+installation stopped after a change. In scripts, pass these flags to Rigscope:
+
+```sh
+npx --yes rigscope@latest configure --port 8086 --yes --no-restart
+```
+
+The first `--yes` belongs to npm; the second approves Rigscope's stop prompt.
+`--no-start` also prevents startup on commands that support it. Components that
+were already stopped stay stopped when restoring a running installation. Foreign
+or unidentifiable processes are never stopped automatically. Foreground trials
+resume as background processes when there is no installed service; their logs
+are written under the selected state directory in `run/hub.log` and
+`run/collector.log`.
+
+Terminal output uses color for headings, status and errors. Piped output and
+JSON remain plain; set `NO_COLOR=1` to disable color in a terminal.
 
 ## Access from another computer
 
@@ -103,16 +147,14 @@ tailscale serve --bg --tls-terminated-tcp=8081 \
 If you already installed for localhost, change access without reinstalling:
 
 ```sh
-rigscope stop
 rigscope configure --origin https://machine.example.ts.net:8081
 tailscale serve --bg --tls-terminated-tcp=8081 \
   "unix:$HOME/.local/state/rigscope/run/hub.sock"
-rigscope start
 ```
 
 This keeps accounts, history and collector credentials. It updates the local
-collector's destination and moves its pending samples. Both services must be
-stopped during conversion. See [Access changes](operations.md#access-changes)
+collector's destination and moves its pending samples. Rigscope asks to stop
+running components during conversion and resumes them afterward. See [Access changes](operations.md#access-changes)
 for backup and queue checks.
 
 ### Open and check the dashboard
@@ -138,13 +180,11 @@ collectors connect through HTTPS with certificate validation.
 ### Return to localhost
 
 ```sh
-rigscope stop
 rigscope configure --local
 tailscale serve --bg --tls-terminated-tcp=8081 off
-rigscope start
 ```
 
-If you already uninstalled, change retained settings through the package entry
+If you used `uninstall --keep-data`, change retained settings through the package entry
 point, then reinstall:
 
 ```sh
@@ -175,7 +215,7 @@ Collectors connect outbound and need no incoming port or root access. Each can
 send to up to eight hubs. Sharing is separate for each hub; network addresses
 and full process arguments start disabled. See [Collection and sharing](monitoring.md#collection-and-sharing).
 
-Stop a running collector before changing its destinations. To replace an
+Changing destinations asks to stop a running collector and resumes it afterward. To replace an
 existing machine credential, create a grant bound to that machine and use
 `connect --replace`. For unattended enrollment, use `--token-file` with an owned
 private file and delete it afterward; do not put the grant on the command line.
@@ -252,7 +292,7 @@ settings and collector identities.
 
 | Alternative | Command |
 | --- | --- |
-| Select an exact published version | `rigscope upgrade --from rigscope@0.1.3` |
+| Select an exact published version | `rigscope upgrade --from rigscope@0.1.4` |
 | Install a local archive | `rigscope upgrade --from ./rigscope-VERSION.tgz` |
 | Return to the retained previous runtime | `rigscope rollback` |
 
@@ -267,13 +307,11 @@ Keep separate backups outside the machine.
 ### No password was printed
 
 The `owner` password appears only when the account is created. Reinstalling with
-saved settings keeps the old password. If you lost it, stop the installation
-and reset it at a private prompt:
+saved settings keeps the old password. If you lost it, reset it at a private
+prompt; Rigscope coordinates stopping and resuming the running installation:
 
 ```sh
-rigscope stop
 rigscope recover-password --user owner
-rigscope start
 ```
 
 Recovery keeps history and collector credentials. Sign in again afterward.
@@ -291,8 +329,8 @@ npx --yes rigscope@latest status
 npx --yes rigscope@latest uninstall
 ```
 
-Choose the operation you need; `uninstall` removes this installation and retains
-its data. Use `ls -l ~/.local/bin/rigscope` to check for a link to an older
+Choose the operation you need; `uninstall` deletes this installation and its
+data. Use `uninstall --keep-data` to preserve saved data. Use `ls -l ~/.local/bin/rigscope` to check for a link to an older
 checkout. Back up a confirmed old launcher before removing it, then repeat
 `install` to create the new launcher. Older services with other names may need
 separate cleanup; do not stop unrelated services.
@@ -302,11 +340,22 @@ separate cleanup; do not stop unrelated services.
 Check `rigscope logs hub` and `rigscope doctor`. If port 8081 is already in use,
 identify the listener before stopping anything. For a fresh install, choose an
 unused port with `install --port 8086 --boot`, or use HTTPS mode with a private
-socket. To change a retained installation's local port, stop the hub and any
-collector whose destination moves, run `rigscope configure --port 8086`, then
-start them again. `--origin` and `--port` cannot be combined.
+socket. To change a retained installation's local port, run
+`rigscope configure --port 8086` and approve the stop prompt. Previously running
+components resume after the change. `--origin` and `--port` cannot be combined.
 
 ## Hardware
+
+GPU names use NVIDIA's reported model or the system's PCI name database when
+available. Otherwise a vendor label is shown, with the PCI address separately.
+A detected adapter can remain visible without telemetry: driver support and
+permissions determine which counters can be read. Intel integrated adapters do
+not necessarily expose utilization or dedicated VRAM through sysfs; shared
+system RAM is not reported as dedicated VRAM.
+
+History only adds historical GPU cards when stored series contain readings.
+Empty PCI placeholder series do not create an extra card while NVIDIA's UUID
+and model become available. Historical cards with readings remain accessible.
 
 Collection supports Linux. CPU, memory and process readings come from procfs.
 ARM and RISC-V CPU names are recognized; utilization uses per-core counters.

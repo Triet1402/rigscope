@@ -213,3 +213,9 @@ test('buildInventory: no display devices means no GPUs detected', () => {
   assert.equal(inventory.capabilities.gpus.reason, 'no GPUs detected');
   assert.doesNotThrow(() => parseInventory(inventory));
 });
+
+test('PCI matching normalizes NVIDIA domain width without merging distinct domains', async () => {
+  const { normalizePciBusId } = await import('../collector/sampling/inventory');
+  assert.equal(normalizePciBusId('00000000:C1:00.0'), normalizePciBusId('0000:c1:00.0'));
+  assert.notEqual(normalizePciBusId('0001:c1:00.0'), normalizePciBusId('0000:c1:00.0'));
+});
