@@ -3,7 +3,6 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { WebSocket } from 'ws';
-import { COLLECTOR_PROTOCOL_VERSION } from '../src/contracts';
 import type { CollectorConfig } from './config';
 import type { CollectorIdentity } from './identity';
 import { OutboxBudget } from './destinations/budget';
@@ -32,7 +31,7 @@ export async function runDurableCollector(config: CollectorConfig, identity: Col
     for (const [index, endpoint] of config.destinations.entries()) {
       connections.push(HubConnection.open({
         index, endpoint, stateDir, baseIntervalMs: config.intervalMs, identity,
-        budget, allocateSequence: () => sequence.next(), sampler, collectorVersion: COLLECTOR_PROTOCOL_VERSION,
+        budget, allocateSequence: () => sequence.next(), sampler,
         socketFactory: (url, options) => new WebSocket(url, { headers: options.headers,
           handshakeTimeout: options.handshakeTimeoutMs, maxPayload: options.maxPayloadBytes, perMessageDeflate: false }),
         onEvent: line => console.log(`collector ${line}`),

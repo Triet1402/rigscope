@@ -33,7 +33,7 @@ The installed `rigscope system` command and `dist/system.cjs` use the same code.
   collector/state.json                 rigscope-collector 0600
   collector/outbox/                    durable collector outboxes
   backups/                             root:root 0700, pre-upgrade/pre-rollback SQLite copies
-  system-install.json                  root:root 0600, version 2 component state/versions/backups/adoption
+  system-install.json                  root:root 0600, canonical component state/versions/backups/adoption
   power-access.json                    root:root 0600, original counter modes for reversal
 /etc/systemd/system/rigscope-hub.service       root:root 0644, hub boot unit
 /etc/systemd/system/rigscope-collector.service root:root 0644, collector boot unit
@@ -96,7 +96,16 @@ node dist/system.cjs logs hub --follow
 copies a non-root-owned Node executable into the root-owned prefix, installs
 production dependencies when `--install-deps` is given, writes private
 configuration and both units, creates both accounts, then switches `current`.
-Staging happens before any service is stopped.
+Staging happens before any service is stopped. The state file has no format
+version; its required `components` object records hub and collector enablement.
+
+A pre-canonical system installation is reset, not migrated. `system install` and
+`system upgrade --apply` stage and validate the replacement release, stop both
+units completely, then remove the old configuration and history and install
+the canonical layout fresh. Back up `/var/lib/rigscope` first if that history
+must be kept; there is no rollback to the old format. Later upgrades that stay
+canonical keep accounts, history, settings, collector identities and pending
+samples, and rollback keeps its paired database backup.
 
 - With `--enable`, `--role local` initially enables both components.
 - With `--enable`, `--role hub` initially enables only the hub.

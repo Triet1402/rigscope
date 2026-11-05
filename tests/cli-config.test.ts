@@ -6,8 +6,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   collectorHasDestinations, componentEnabled, configureComponent, connectUrl, enabledComponents, hubEnvironment,
-  initialize, pairColocatedCollector, readSetup, writeSetup,
+  initialize, installationNeedsReset, pairColocatedCollector, readSetup, writeSetup,
 } from '../src/cli/config';
+import { configureAccess, planAccessChange } from '../src/cli/access';
 import { parseCollectorConfig } from '../collector/config';
 import { parseHubConfig } from '../src/hub/config';
 import { hashPassword, verifyPassword } from '../src/hub/auth/password';
@@ -143,7 +144,7 @@ test('enabling a collector preserves existing remote destinations instead of pai
   try {
     initialize(dir, {role: 'hub', origin: 'https://rig.example.com'});
     const remote = {url: 'wss://other.example.com/api/collector/connect', token: 'remote-token'};
-    const state = {version: 1, collectorId: 'remote-collector', destinations: [remote]};
+    const state = {collectorId: 'remote-collector', destinations: [remote]};
     writeFileSync(join(dir, 'collector', 'state.json'), `${JSON.stringify(state)}\n`, {mode: 0o600});
     const collector = configureComponent(dir, 'collector', {enabled: true});
     assert.deepEqual(collector.config.collectors, [], 'no colocated credential is invented for a remote collector');
@@ -272,46 +273,151 @@ test('disabled components retain credentials, destinations and files', () => {
   } finally { rmSync(dir, {recursive: true, force: true}); }
 });
 
-test('version 1 configuration reads with legacy component meaning and is not rewritten by a read', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'rigscope-v1-'));
+test('canonical configuration round-trips without a version key and keeps components', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'rigscope-canonical-'));
   try {
-    const passwordHash = hashPassword('retained-password');
-    const legacy = {version: 1, role: 'local', port: 9134, users: [{username: 'owner', passwordHash, machineIds: '*', admin: true}],
-      collectors: [{collectorId: 'old-collector', machineId: 'old-machine', token: 'old-token'}]};
-    const raw = `${JSON.stringify(legacy, null, 2)}\n`;
-    writeFileSync(join(dir, 'config.json'), raw, {mode: 0o600});
-    const config = readSetup(dir)!;
-    assert.equal(config.version, 1);
-    assert.equal(componentEnabled(config, 'hub'), true);
-    assert.equal(componentEnabled(config, 'collector'), true);
-    assert.deepEqual(enabledComponents(config), ['hub', 'collector']);
-    assert.equal(readFileSync(join(dir, 'config.json'), 'utf8'), raw, 'read-only status leaves version 1 untouched');
+    const setup = initialize(dir, {port: '9134'});
+    const raw = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8'));
+    assert.equal('version' in raw, false);
+    assert.deepEqual(raw.components, {hub: {enabled: true}, collector: {enabled: true}});
 
+    const config = readSetup(dir)!;
+    assert.deepEqual(enabledComponents(config), ['hub', 'collector']);
     writeSetup(dir, config);
-    const upgraded = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8'));
-    assert.equal(upgraded.version, 2);
-    assert.deepEqual(upgraded.components, {hub: {enabled: true}, collector: {enabled: true}});
-    assert.deepEqual(upgraded.users, legacy.users);
-    assert.deepEqual(upgraded.collectors, legacy.collectors);
+    const written = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8'));
+    assert.equal('version' in written, false);
+    assert.deepEqual(written.components, raw.components);
+    assert.deepEqual(written.users, setup.config.users);
+    assert.deepEqual(written.collectors, setup.config.collectors);
+    assert.deepEqual(readSetup(dir), config);
   } finally { rmSync(dir, {recursive: true, force: true}); }
 });
 
-test('version 1 roles map to hub-only and collector-only component state', () => {
-  const root = mkdtempSync(join(tmpdir(), 'rigscope-v1-roles-'));
+test('initialize refuses an older configuration shape and leaves its state untouched', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'rigscope-refuse-legacy-'));
   try {
     const passwordHash = hashPassword('retained-password');
-    const write = (name: string, role: string, users: unknown[], collectors: unknown[]) => {
-      const dir = join(root, name);
-      mkdirSync(dir, {recursive: true, mode: 0o700});
-      writeFileSync(join(dir, 'config.json'), JSON.stringify({version: 1, role, port: 9136, users, collectors}), {mode: 0o600});
-      return readSetup(dir)!;
-    };
-    const users = [{username: 'owner', passwordHash, machineIds: '*', admin: true}];
-    const hub = write('hub', 'hub', users, []);
-    assert.deepEqual(enabledComponents(hub), ['hub']);
-    const collector = write('collector', 'collector', [], []);
-    assert.deepEqual(enabledComponents(collector), ['collector']);
+    const legacy = {version: 2, role: 'local', port: 9134,
+      users: [{username: 'owner', passwordHash, machineIds: '*', admin: true}],
+      collectors: [{collectorId: 'old-collector', machineId: 'old-machine', token: 'old-token'}],
+      components: {hub: {enabled: true}, collector: {enabled: false}}};
+    const raw = `${JSON.stringify(legacy, null, 2)}\n`;
+    writeFileSync(join(dir, 'config.json'), raw, {mode: 0o600});
+    mkdirSync(join(dir, 'collector'), {recursive: true, mode: 0o700});
+    const collector = `${JSON.stringify({version: 2, collectorId: 'old-collector', destinations: []})}\n`;
+    writeFileSync(join(dir, 'collector', 'state.json'), collector, {mode: 0o600});
+
+    assert.equal(installationNeedsReset(dir), true);
+    assert.throws(() => initialize(dir, {role: 'hub', port: '9135'}), /older configuration or state shape/);
+    assert.equal(readFileSync(join(dir, 'config.json'), 'utf8'), raw, 'initialize never deletes the config');
+    assert.equal(readFileSync(join(dir, 'collector', 'state.json'), 'utf8'), collector, 'initialize never deletes collector state');
+  } finally { rmSync(dir, {recursive: true, force: true}); }
+});
+
+test('incompatible state is detected structurally without deleting the managed runtime', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'rigscope-incompatible-detect-'));
+  try {
+    mkdirSync(join(dir, 'collector'), {recursive: true, mode: 0o700});
+    mkdirSync(join(dir, 'hub'), {recursive: true, mode: 0o700});
+    mkdirSync(join(dir, 'backups'), {recursive: true, mode: 0o700});
+    mkdirSync(join(dir, 'runtime'), {recursive: true, mode: 0o700});
+    writeFileSync(join(dir, 'config.json'), `${JSON.stringify({version: 2, role: 'local', port: 9134})}\n`, {mode: 0o600});
+    writeFileSync(join(dir, 'collector', 'state.json'), `${JSON.stringify({version: 2, collectorId: 'old', destinations: []})}\n`, {mode: 0o600});
+    writeFileSync(join(dir, 'release-state.json'), `${JSON.stringify({formatVersion: 1, stateDir: dir})}\n`, {mode: 0o600});
+    writeFileSync(join(dir, 'hub', 'telemetry.sqlite'), 'old database\n', {mode: 0o600});
+
+    assert.equal(installationNeedsReset(dir), true);
+    assert.throws(() => initialize(dir), /older configuration or state shape/);
+    for (const path of ['config.json', 'release-state.json', join('collector', 'state.json'), 'hub', 'backups', 'runtime']) {
+      assert.equal(existsSync(join(dir, path)), true, `${path} is retained until a coordinated reset`);
+    }
+  } finally { rmSync(dir, {recursive: true, force: true}); }
+});
+
+test('obsolete collector endpoints and enrollment state require coordinated reset', () => {
+  const root = mkdtempSync(join(tmpdir(), 'rigscope-wire-reset-'));
+  try {
+    for (const fixture of ['destination', 'pending', 'enrollment']) {
+      const dir = join(root, fixture);
+      initialize(dir);
+      if (fixture === 'enrollment') {
+        writeFileSync(join(dir, 'hub', 'enrollment.json'), JSON.stringify({version: 1, enrollments: [], consumed: []}), {mode: 0o600});
+      } else {
+        const path = join(dir, 'collector', 'state.json');
+        const state = JSON.parse(readFileSync(path, 'utf8'));
+        const url = 'ws://127.0.0.1:8081/api/collector/v1/connect';
+        if (fixture === 'destination') state.destinations[0].url = url;
+        else state.pendingEnrollments = [{url, requestId: 'pending', recoverySecret: 'a'.repeat(32)}];
+        writeFileSync(path, JSON.stringify(state), {mode: 0o600});
+      }
+      const before = readFileSync(join(dir, 'config.json'), 'utf8');
+      if (fixture === 'enrollment') {
+        assert.equal(installationNeedsReset(dir), true, fixture);
+        assert.throws(() => initialize(dir), /older configuration or state shape/);
+      } else {
+        assert.throws(() => installationNeedsReset(dir), /Invalid saved state/);
+        assert.throws(() => initialize(dir), /Invalid saved state/);
+      }
+      assert.equal(readFileSync(join(dir, 'config.json'), 'utf8'), before);
+    }
   } finally { rmSync(root, {recursive: true, force: true}); }
+});
+
+test('malformed auxiliary state cannot trigger deletion of canonical history', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'rigscope-corrupt-state-'));
+  try {
+    initialize(dir);
+    writeFileSync(join(dir, 'hub', 'telemetry.sqlite'), 'retained history', {mode: 0o600});
+    for (const raw of ['{truncated', 'null', '{}']) {
+      writeFileSync(join(dir, 'release-state.json'), raw, {mode: 0o600});
+      assert.throws(() => installationNeedsReset(dir), /Invalid saved state/);
+      assert.equal(readFileSync(join(dir, 'hub', 'telemetry.sqlite'), 'utf8'), 'retained history');
+    }
+  } finally { rmSync(dir, {recursive: true, force: true}); }
+});
+
+test('a canonical configuration and canonical release state need no reset', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'rigscope-canonical-detect-'));
+  try {
+    const setup = initialize(dir, {port: '9134'});
+    writeFileSync(join(dir, 'release-state.json'), `${JSON.stringify({
+      stateDir: dir, currentVersion: '1.0.0', previousVersion: null, backups: {}, lastActivation: null, lastRollback: null,
+    })}\n`, {mode: 0o600});
+    const before = readFileSync(join(dir, 'config.json'), 'utf8');
+    assert.equal(installationNeedsReset(dir), false);
+    const again = initialize(dir);
+    assert.equal(again.created, false);
+    assert.deepEqual(again.config, setup.config);
+    assert.equal(readFileSync(join(dir, 'config.json'), 'utf8'), before, 'canonical reinstall retains settings and data');
+  } finally { rmSync(dir, {recursive: true, force: true}); }
+});
+
+test('a port-only access change updates local config and the colocated collector destination', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'rigscope-port-change-'));
+  try {
+    const setup = initialize(dir, {port: '9137'});
+    const statePath = join(dir, 'collector', 'state.json');
+    const before = JSON.parse(readFileSync(statePath, 'utf8'));
+    assert.equal(before.destinations[0].url, 'ws://127.0.0.1:9137/api/collector/connect');
+
+    const plan = planAccessChange(dir, {port: '9138'});
+    assert.equal(plan.next.port, 9138);
+    assert.equal(plan.newEndpoint, 'ws://127.0.0.1:9138/api/collector/connect');
+    assert.equal(plan.collectorChanged, true);
+    assert.equal(plan.changed, true);
+
+    const result = configureAccess(dir, {port: '9138'});
+    assert.equal(result.changed, true);
+    assert.equal(readSetup(dir)!.port, 9138);
+    const state = JSON.parse(readFileSync(statePath, 'utf8'));
+    assert.equal(state.destinations[0].url, 'ws://127.0.0.1:9138/api/collector/connect');
+    assert.equal(state.destinations[0].token, before.destinations[0].token);
+    assert.equal(state.collectorId, before.collectorId);
+    assert.deepEqual(readSetup(dir)!.collectors, setup.config.collectors);
+
+    assert.throws(() => planAccessChange(dir, {origin: 'https://rig.example.com', port: '9139'}),
+      /--port is unused with --origin/);
+  } finally { rmSync(dir, {recursive: true, force: true}); }
 });
 
 test('an unconfigured collector exits cleanly while a selected hub still runs', async () => {

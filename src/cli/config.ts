@@ -8,6 +8,7 @@ import { parseHubConfig } from '../hub/config';
 import { parseBrowserUsers } from '../hub/auth/config';
 import { updateInstallation } from '../../collector/local-state';
 import { enrollCollector } from '../../collector/enroll';
+import { parseCollectorConfig } from '../../collector/config';
 import { openHubDatabase } from '../hub/storage/db';
 import { CollectorRegistry } from '../hub/enrollment/registry';
 import { writePrivateFile } from '../operations/fs';
@@ -17,14 +18,9 @@ export type Component = 'hub' | 'collector';
 export type ComponentState = { enabled: boolean };
 export type Components = Record<Component, ComponentState>;
 export const COMPONENTS: readonly Component[] = ['hub', 'collector'];
+export const RESET_PENDING_FILE = 'reset-pending.json';
 
 export type Setup = {
-  /**
-   * Version 1 files keep their original shape and are only upgraded when a
-   * mutating command writes them. Version 2 adds independent component state.
-   */
-  version: 1 | 2;
-  /** Compatibility preset; never the runtime source of component selection. */
   role: 'local' | 'hub' | 'collector';
   port: number;
   origin?: string;
@@ -32,7 +28,7 @@ export type Setup = {
   maxCollectorConnections?: number;
   users: { username: string; passwordHash: string; machineIds: '*'; admin: true }[];
   collectors: { collectorId: string; machineId: string; token: string }[];
-  components?: Components;
+  components: Components;
 };
 export const DEFAULT_SHARING = {cpu: true, memory: true, swap: true, gpus: true, disks: true, network: true,
   networkAddresses: false, processes: true, processArguments: false};
@@ -55,8 +51,7 @@ export function readPrivate(path: string): string {
   return readFileSync(path, 'utf8');
 }
 
-/** Version 1 has no component state; preserve its original meaning. */
-export function legacyComponents(role: Setup['role']): Components {
+export function defaultComponents(role: Setup['role']): Components {
   return {
     hub: {enabled: role !== 'collector'},
     collector: {enabled: role !== 'hub'},
@@ -65,8 +60,7 @@ export function legacyComponents(role: Setup['role']): Components {
 function isComponentState(value: unknown): value is ComponentState {
   return value !== null && typeof value === 'object' && typeof (value as {enabled?: unknown}).enabled === 'boolean';
 }
-function normalizeComponents(value: unknown, role: Setup['role']): Components {
-  if (value === undefined) return legacyComponents(role);
+function requireComponents(value: unknown): Components {
   if (value === null || typeof value !== 'object') throw new Error('Invalid config.json; restore its private backup.');
   const record = value as Record<string, unknown>;
   if (!isComponentState(record.hub) || !isComponentState(record.collector)) {
@@ -76,11 +70,10 @@ function normalizeComponents(value: unknown, role: Setup['role']): Components {
 }
 
 export function componentEnabled(config: Setup, component: Component): boolean {
-  return (config.components ?? legacyComponents(config.role))[component].enabled;
+  return config.components[component].enabled;
 }
 export function enabledComponents(config: Setup): Component[] {
-  const components = config.components ?? legacyComponents(config.role);
-  return COMPONENTS.filter(component => components[component].enabled);
+  return COMPONENTS.filter(component => config.components[component].enabled);
 }
 function hubConfigured(config: Setup): boolean {
   return componentEnabled(config, 'hub') && config.users.length > 0;
@@ -90,28 +83,130 @@ export function readSetup(dir: string): Setup | null {
   let raw: string;
   try { raw = readPrivate(join(dir, 'config.json')); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; }
-  const parsed = JSON.parse(raw) as Setup;
-  if ((parsed.version !== 1 && parsed.version !== 2) || !['local', 'hub', 'collector'].includes(parsed.role) ||
+  const parsed = JSON.parse(raw) as Record<string, unknown>;
+  if ('version' in parsed || 'formatVersion' in parsed) {
+    throw new Error('This installation uses an older configuration shape. Run rigscope install or rigscope upgrade to reset it.');
+  }
+  if (!['local', 'hub', 'collector'].includes(parsed.role as string) ||
+      typeof parsed.port !== 'number' || !Number.isInteger(parsed.port) || parsed.port < 1 || parsed.port > 65535 ||
       !Array.isArray(parsed.users) || !Array.isArray(parsed.collectors) ||
-      parsed.users.some(user => !isPasswordHash(user.passwordHash))) throw new Error('Invalid config.json; restore its private backup.');
-  // Normalize in memory only: read-only commands must not rewrite a version 1
-  // file, and both versions expose the same component contract to callers.
-  const config: Setup = {...parsed, components: normalizeComponents(parsed.components, parsed.role)};
+      (parsed.users as {passwordHash?: unknown}[]).some(user => !isPasswordHash(user.passwordHash))) {
+    throw new Error('Invalid config.json; restore its private backup.');
+  }
+  const config: Setup = {
+    role: parsed.role as Setup['role'],
+    port: parsed.port,
+    ...(parsed.origin === undefined ? {} : {origin: parsed.origin as string}),
+    ...(parsed.socket === undefined ? {} : {socket: parsed.socket as string}),
+    ...(parsed.maxCollectorConnections === undefined ? {} : {maxCollectorConnections: parsed.maxCollectorConnections as number}),
+    users: parsed.users as Setup['users'],
+    collectors: parsed.collectors as Setup['collectors'],
+    components: requireComponents(parsed.components),
+  };
   parseHubConfig(hubEnvironment(dir, config));
   parseBrowserUsers(hubEnvironment(dir, config));
   if (componentEnabled(config, 'hub') && config.users.length === 0) throw new Error('Configure at least one hub user.');
   return config;
 }
 
+type JsonFile = {
+  present: boolean;
+  value: Record<string, unknown> | null;
+};
+
+function readJsonFile(path: string): JsonFile {
+  let raw: string;
+  try { raw = readPrivate(path); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {present: false, value: null}; throw error; }
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not an object');
+    return {present: true, value: parsed as Record<string, unknown>};
+  } catch {
+    throw new Error(`Invalid saved state at ${path}; restore it or cleanly uninstall and reinstall. No state was reset.`);
+  }
+}
+
+function isCanonicalSetupFile(value: Record<string, unknown>): boolean {
+  if ('version' in value || 'formatVersion' in value) return false;
+  if (!['local', 'hub', 'collector'].includes(value.role as string)) return false;
+  if (typeof value.port !== 'number' || !Number.isInteger(value.port) || value.port < 1 || value.port > 65535) return false;
+  if (!Array.isArray(value.users) || !Array.isArray(value.collectors)) return false;
+  if ((value.users as {passwordHash?: unknown}[]).some(user => !isPasswordHash(user?.passwordHash))) return false;
+  try { requireComponents(value.components); }
+  catch { return false; }
+  return true;
+}
+
+function isCanonicalCollectorFile(value: Record<string, unknown>): boolean {
+  if ('version' in value || 'formatVersion' in value) return false;
+  if (typeof value.collectorId !== 'string' || !/^[\x21-\x7e]{1,128}$/.test(value.collectorId)) return false;
+  if (!Array.isArray(value.destinations)) return false;
+  try {
+    if (value.destinations.length > 0) parseCollectorConfig({COLLECTOR_HUBS: JSON.stringify(value.destinations)});
+    if (Array.isArray(value.pendingEnrollments)) {
+      for (const pending of value.pendingEnrollments) {
+        if (pending === null || typeof pending !== 'object') return false;
+        parseCollectorConfig({COLLECTOR_HUBS: JSON.stringify([{url: pending.url, token: 'pending-enrollment'}])});
+      }
+    }
+  } catch { return false; }
+  return value.pendingEnrollments === undefined || Array.isArray(value.pendingEnrollments);
+}
+
+function isCanonicalReleaseFile(dir: string, value: Record<string, unknown>): boolean {
+  if ('version' in value || 'formatVersion' in value) return false;
+  if (value.stateDir !== dir) return false;
+  return value.backups === undefined ||
+    (value.backups !== null && typeof value.backups === 'object' && !Array.isArray(value.backups));
+}
+
+function fileNeedsReset(path: string, canonical: (value: Record<string, unknown>) => boolean): boolean {
+  const file = readJsonFile(path);
+  if (!file.present || file.value === null) return false;
+  if (canonical(file.value)) return false;
+  if ('version' in file.value || 'formatVersion' in file.value) return true;
+  throw new Error(`Invalid saved state at ${path}; restore it or cleanly uninstall and reinstall. No state was reset.`);
+}
+
 /**
- * Persist the shared version 2 shape. Mutations never downgrade a file.
- * `role` stays the initial preset for source compatibility; component state is
- * authoritative for every version 2 read or runtime decision.
+ * True when this directory holds configuration or state that the canonical
+ * reader cannot use. Detection is structural: required fields and the absence
+ * of a format version, never a version-number map. Reset is deliberately not
+ * performed here; install and upgrade coordinate it after replacement is staged.
  */
+export function installationNeedsReset(dir: string): boolean {
+  return existsSync(join(dir, RESET_PENDING_FILE)) ||
+    fileNeedsReset(join(dir, 'config.json'), isCanonicalSetupFile) ||
+    fileNeedsReset(join(dir, 'collector', 'state.json'), isCanonicalCollectorFile) ||
+    fileNeedsReset(join(dir, 'hub', 'enrollment.json'), value =>
+      Object.keys(value).every(key => key === 'enrollments' || key === 'consumed') &&
+      Array.isArray(value.enrollments) && Array.isArray(value.consumed)) ||
+    fileNeedsReset(join(dir, 'release-state.json'), value => isCanonicalReleaseFile(dir, value));
+}
+
+/** Reuse the selected installation preset when replacing its settings. */
+export function installationRole(dir: string): Setup['role'] | undefined {
+  for (const name of [RESET_PENDING_FILE, 'config.json']) {
+    const role = readJsonFile(join(dir, name)).value?.role;
+    if (role === 'local' || role === 'hub' || role === 'collector') return role;
+  }
+  return undefined;
+}
+
+/** Persist the one canonical configuration shape. */
 export function writeSetup(dir: string, config: Setup): void {
   privateDirectory(dir);
-  const components = normalizeComponents(config.components ?? legacyComponents(config.role), config.role);
-  const next: Setup = {...config, version: 2, components};
+  const next: Setup = {
+    role: config.role,
+    port: config.port,
+    ...(config.origin === undefined ? {} : {origin: config.origin}),
+    ...(config.socket === undefined ? {} : {socket: config.socket}),
+    ...(config.maxCollectorConnections === undefined ? {} : {maxCollectorConnections: config.maxCollectorConnections}),
+    users: config.users,
+    collectors: config.collectors,
+    components: requireComponents(config.components),
+  };
   writePrivateFile(join(dir, 'config.json'), `${JSON.stringify(next, null, 2)}\n`);
 }
 
@@ -125,7 +220,7 @@ export function hubEnvironment(dir: string, config: Setup): Record<string, strin
   };
 }
 
-function validatePort(value: string | undefined, fallback = 8081): number {
+export function validatePort(value: string | undefined, fallback = 8081): number {
   const port = Number(value ?? String(fallback));
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('--port must be 1–65535.');
   return port;
@@ -288,41 +383,52 @@ export async function pairColocatedCollector(dir: string): Promise<Setup> {
   return readSetup(dir)!;
 }
 
+type SetupOptions = {role?: string; port?: string; origin?: string; socket?: string};
+
+/** Validate fresh-setup options without touching the installation directory. */
+export function validateSetupOptions(options: SetupOptions = {}): {role: Setup['role']; port: number; origin?: string; socket?: string} {
+  const role = (options.role ?? 'local') as Setup['role'];
+  if (!['local', 'hub', 'collector'].includes(role)) throw new Error('--role must be local, hub, or collector.');
+  const port = validatePort(options.port);
+  if (options.socket && !options.origin) throw new Error('--socket requires --origin.');
+  if (options.origin && role === 'collector') throw new Error('--origin requires a hub; use rigscope connect for a collector.');
+  return {
+    role,
+    port,
+    ...(options.origin === undefined ? {} : {origin: options.origin}),
+    ...(options.socket === undefined ? {} : {socket: options.socket}),
+  };
+}
+
 function baseConfig(dir: string, role: Setup['role'], port: number, password?: string, options: {origin?: string; socket?: string} = {}): Setup {
   return {
-    version: 2,
     role,
     port,
     ...(options.origin ? {origin: options.origin, socket: options.socket ?? join(dir, 'run', 'hub.sock')} : {}),
     users: password ? [{username: 'owner', passwordHash: hashPassword(password), machineIds: '*', admin: true}] : [],
     collectors: [],
-    components: legacyComponents(role),
+    components: defaultComponents(role),
   };
 }
 
-export function initialize(dir: string, options: {role?: string; port?: string; origin?: string; socket?: string} = {}): {config: Setup; password?: string; created: boolean} {
+export function initialize(dir: string, options: SetupOptions = {}): {config: Setup; password?: string; created: boolean} {
   privateDirectory(dir);
+  // Never mix the canonical configuration with an older state file. The
+  // coordinated install/upgrade reset owns that destructive transition.
+  if (installationNeedsReset(dir)) {
+    throw new Error('This installation uses an older configuration or state shape. Run rigscope install or rigscope upgrade to reset it.');
+  }
   const existing = readSetup(dir);
   if (existing) {
     if ((options.role && options.role !== existing.role) || (options.port && Number(options.port) !== existing.port) ||
         (options.origin && options.origin !== existing.origin) || (options.socket && options.socket !== existing.socket)) {
       throw new Error('Setup already exists with different settings. Uninstall keeps configuration and history. To change access, stop the service and run rigscope configure --origin https://your-hub (or --local). Use another --state-dir for a separate installation.');
     }
-    // `install` is a mutation, so this is the first safe point to upgrade a
-    // retained version 1 file. Read-only status never calls initialize.
-    if (existing.version !== 2) {
-      writeSetup(dir, existing);
-      return {config: readSetup(dir)!, created: false};
-    }
     return {config: existing, created: false};
   }
-  const role = (options.role ?? 'local') as Setup['role'];
-  if (!['local', 'hub', 'collector'].includes(role)) throw new Error('--role must be local, hub, or collector.');
-  const port = validatePort(options.port);
-  if (options.socket && !options.origin) throw new Error('--socket requires --origin.');
-  if (options.origin && role === 'collector') throw new Error('--origin requires a hub; use rigscope connect for a collector.');
-  const password = componentEnabled(baseConfig(dir, role, port), 'hub') ? randomBytes(18).toString('base64url') : undefined;
-  let config = baseConfig(dir, role, port, password, {origin: options.origin, socket: options.socket});
+  const selected = validateSetupOptions(options);
+  const password = componentEnabled(baseConfig(dir, selected.role, selected.port), 'hub') ? randomBytes(18).toString('base64url') : undefined;
+  let config = baseConfig(dir, selected.role, selected.port, password, {origin: selected.origin, socket: selected.socket});
   parseHubConfig(hubEnvironment(dir, config));
   for (const name of ['hub', 'collector', 'run']) privateDirectory(join(dir, name));
   if (componentEnabled(config, 'hub') && componentEnabled(config, 'collector') && !existsSync(hubDatabase(dir))) {
@@ -344,9 +450,7 @@ export function configureComponent(dir: string, component: Component, options: {
   privateDirectory(dir);
   const existing = readSetup(dir);
   const port = options.port === undefined ? (existing?.port ?? 8081) : validatePort(options.port);
-  let config: Setup = existing
-    ? {...existing, components: {...(existing.components ?? legacyComponents(existing.role))}}
-    : baseConfig(dir, component, port);
+  let config: Setup = existing ?? baseConfig(dir, component, port);
   let password: string | undefined;
 
   if (component === 'hub') {
@@ -359,7 +463,7 @@ export function configureComponent(dir: string, component: Component, options: {
       config.socket = options.socket;
     }
     config.port = port;
-    config.components = {...(config.components ?? legacyComponents(config.role)), hub: {enabled: options.enabled}};
+    config.components = {...config.components, hub: {enabled: options.enabled}};
     if (options.enabled && config.users.length === 0) {
       password = randomBytes(18).toString('base64url');
       config.users = [{username: 'owner', passwordHash: hashPassword(password), machineIds: '*', admin: true}];
@@ -371,7 +475,7 @@ export function configureComponent(dir: string, component: Component, options: {
     if (options.origin !== undefined || options.socket !== undefined || options.port !== undefined) {
       throw new Error('Access options apply to the hub component.');
     }
-    config.components = {...(config.components ?? legacyComponents(config.role)), collector: {enabled: options.enabled}};
+    config.components = {...config.components, collector: {enabled: options.enabled}};
     for (const name of ['collector', 'run']) privateDirectory(join(dir, name));
     if (options.enabled && options.pairColocated !== false && hubConfigured(config) && !existsSync(hubDatabase(dir))) {
       config = pairColocatedCollectorConfig(dir, config);

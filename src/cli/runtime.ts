@@ -7,7 +7,7 @@ import { collectorHasDestinations, componentEnabled, enabledComponents, hubEnvir
 export function componentLeasePath(dir: string, component: Component): string {
   return join(dir, 'run', `${component}.lock`);
 }
-/** Pre-v2 combined supervisor lease; retained only to detect a migration. */
+/** Installation-wide lease that serializes mutating commands. */
 export function combinedLeasePath(dir: string): string {
   return join(dir, 'run', 'rigscope.lock');
 }
@@ -19,8 +19,8 @@ function label(component: Component): string {
 /**
  * Run the selected components in the foreground. A systemd unit passes one
  * component, so an independent failure only ends that component's supervisor.
- * Omitting the component keeps the pre-v2 combined supervisor working for a
- * trial or a not-yet-migrated unit.
+ * Omitting the component runs every enabled component for a trial or a manual
+ * foreground run.
  */
 export async function runInstallation(root: string, dir: string, component?: Component): Promise<number> {
   const config = readSetup(dir);

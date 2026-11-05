@@ -62,8 +62,6 @@ import {
   type MigrateRunner,
 } from "./database";
 
-export const RELEASE_FORMAT_VERSION = 1;
-export const INSTALL_STATE_FORMAT_VERSION = 1;
 export const HUB_SHUTDOWN_DEADLINE_MS = 5_000;
 export const COLLECTOR_SHUTDOWN_DEADLINE_MS = 3_000;
 
@@ -135,7 +133,6 @@ const PRIVATE_FILE_PATTERNS = [
 export type ReleaseArtifact = { path: string; bytes: number; sha256: string };
 
 export type ReleaseManifest = {
-  formatVersion: 1;
   name: string;
   version: string;
   createdAt: string;
@@ -204,7 +201,6 @@ export type InstallReport = {
 };
 
 type InstallState = {
-  formatVersion: 1;
   prefix: string;
   stateDir: string;
   database: string;
@@ -225,6 +221,18 @@ type InstallState = {
   } | null;
   updatedAt: string;
 };
+
+const INSTALL_STATE_KEYS = new Set([
+  "prefix",
+  "stateDir",
+  "database",
+  "currentVersion",
+  "previousVersion",
+  "releases",
+  "backups",
+  "lastActivation",
+  "updatedAt",
+]);
 
 function assertSafeRelativePath(path: string, label: string): string {
   if (typeof path !== "string" || path.length === 0 || path.length > 1024) {
@@ -346,7 +354,6 @@ function manifestForPackage(
       ? Object.keys(packageJson.dependencies as Record<string, unknown>).filter((key) => /^[A-Za-z0-9@/._-]+$/.test(key))
       : [];
   return {
-    formatVersion: RELEASE_FORMAT_VERSION,
     name,
     version: validateVersion(version),
     createdAt: new Date(now()).toISOString(),
@@ -455,8 +462,11 @@ function extractArchive(archive: string, destination: string): void {
 function validateManifest(root: string): ReleaseManifest {
   const manifestPath = join(root, "manifest.json");
   const raw = readJsonObject(manifestPath);
-  if (raw.formatVersion !== RELEASE_FORMAT_VERSION) {
-    throw new OperationsError("invalid-manifest", `unsupported release manifest format ${String(raw.formatVersion)}`);
+  if (Object.prototype.hasOwnProperty.call(raw, "formatVersion")) {
+    throw new OperationsError(
+      "invalid-manifest",
+      "release manifest uses an unfinished pre-canonical format; repackage the release without a format version",
+    );
   }
   if (typeof raw.name !== "string" || raw.name.length === 0 || raw.name.length > 128) {
     throw new OperationsError("invalid-manifest", "manifest name is invalid");
@@ -521,7 +531,6 @@ function validateManifest(root: string): ReleaseManifest {
     }
   }
   const manifest: ReleaseManifest = {
-    formatVersion: 1,
     name: raw.name,
     version,
     createdAt: typeof raw.createdAt === "string" ? raw.createdAt : "",
@@ -701,7 +710,6 @@ function missingProductionDependencies(releaseDir: string, manifest: ReleaseMani
 
 function installStateDefaults(prefix: string, stateDir: string, database: string): InstallState {
   return {
-    formatVersion: INSTALL_STATE_FORMAT_VERSION,
     prefix,
     stateDir,
     database,
@@ -714,44 +722,175 @@ function installStateDefaults(prefix: string, stateDir: string, database: string
   };
 }
 
+function installStateError(path: string, detail: string): never {
+  throw new OperationsError("invalid-state", `${detail}: ${path}`);
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function stateObject(value: unknown, path: string, field: string): Record<string, unknown> {
+  if (!isPlainRecord(value)) installStateError(path, `installation state ${field} must be a JSON object`);
+  return value;
+}
+
+function stateString(value: unknown, path: string, field: string): string {
+  if (typeof value !== "string" || value.length === 0) {
+    installStateError(path, `installation state ${field} must be a nonempty string`);
+  }
+  return value;
+}
+
+function stateInteger(value: unknown, path: string, field: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0) {
+    installStateError(path, `installation state ${field} must be a nonnegative integer`);
+  }
+  return value as number;
+}
+
+function stateNullableInteger(value: unknown, path: string, field: string): number | null {
+  return value === null ? null : stateInteger(value, path, field);
+}
+
+function stateVersion(value: unknown, path: string, field: string): string | null {
+  if (value === null) return null;
+  if (typeof value !== "string") installStateError(path, `installation state ${field} must be a version string or null`);
+  try {
+    return validateVersion(value);
+  } catch {
+    return installStateError(path, `installation state ${field} has an invalid version`);
+  }
+}
+
+function requiredStateVersion(value: unknown, path: string, field: string): string {
+  const version = stateVersion(value, path, field);
+  if (version === null) installStateError(path, `installation state ${field} must be a version string`);
+  return version;
+}
+
 function readInstallState(path: string, defaults: InstallState): InstallState {
   if (!existsSync(path)) return defaults;
-  const { value } = readJsonFile<InstallState>(path);
-  if (value === null || typeof value !== "object" || value.formatVersion !== INSTALL_STATE_FORMAT_VERSION) {
-    throw new OperationsError("invalid-state", `installation state has an unsupported format: ${path}`);
+  const { value } = readJsonFile<unknown>(path);
+  if (!isPlainRecord(value)) installStateError(path, "installation state must be a JSON object");
+  for (const key of ["formatVersion", "version"]) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      throw new OperationsError(
+        "invalid-state",
+        `installation state uses an unfinished pre-canonical format; stop the installation and reset or reinstall it without migration: ${path}`,
+      );
+    }
+  }
+  for (const key of Object.keys(value)) {
+    if (!INSTALL_STATE_KEYS.has(key)) {
+      installStateError(path, `installation state contains unsupported field ${JSON.stringify(key)}`);
+    }
   }
   if (value.prefix !== defaults.prefix || value.stateDir !== defaults.stateDir) {
     throw new OperationsError("invalid-state", "installation state belongs to a different prefix or state directory");
   }
-  const backups: InstallState["backups"] = {};
-  if (value.backups !== null && typeof value.backups === "object" && !Array.isArray(value.backups)) {
-    for (const [key, entry] of Object.entries(value.backups as Record<string, unknown>)) {
-      if (entry === null || typeof entry !== "object" || Array.isArray(entry)) continue;
-      const record = entry as Record<string, unknown>;
-      if (typeof record.path !== "string" || !Number.isSafeInteger(record.schemaVersion)) continue;
-      backups[key] = {
-        path: record.path,
-        schemaVersion: record.schemaVersion as number,
-        fromSchema: Number.isSafeInteger(record.fromSchema) ? (record.fromSchema as number) : null,
-        toSchema: Number.isSafeInteger(record.toSchema) ? (record.toSchema as number) : (record.schemaVersion as number),
-        createdAt: typeof record.createdAt === "string" ? record.createdAt : "",
-      };
+  const database = stateString(value.database, path, "database");
+  const currentVersion = stateVersion(value.currentVersion, path, "currentVersion");
+  const previousVersion = stateVersion(value.previousVersion, path, "previousVersion");
+  const updatedAt = stateString(value.updatedAt, path, "updatedAt");
+
+  const releases: InstallState["releases"] = {};
+  for (const [version, rawEntry] of Object.entries(stateObject(value.releases, path, "releases"))) {
+    try {
+      validateVersion(version);
+    } catch {
+      installStateError(path, `installation state releases contains an invalid release version ${JSON.stringify(version)}`);
     }
+    const entry = stateObject(rawEntry, path, `releases.${version}`);
+    releases[version] = {
+      schemaVersion: stateInteger(entry.schemaVersion, path, `releases.${version}.schemaVersion`),
+      installedAt: stateString(entry.installedAt, path, `releases.${version}.installedAt`),
+    };
+  }
+
+  const backups: InstallState["backups"] = {};
+  for (const [version, rawEntry] of Object.entries(stateObject(value.backups, path, "backups"))) {
+    const entry = stateObject(rawEntry, path, `backups.${version}`);
+    backups[version] = {
+      path: stateString(entry.path, path, `backups.${version}.path`),
+      schemaVersion: stateInteger(entry.schemaVersion, path, `backups.${version}.schemaVersion`),
+      fromSchema: stateNullableInteger(entry.fromSchema, path, `backups.${version}.fromSchema`),
+      toSchema: stateInteger(entry.toSchema, path, `backups.${version}.toSchema`),
+      createdAt: stateString(entry.createdAt, path, `backups.${version}.createdAt`),
+    };
+  }
+
+  let lastActivation: InstallState["lastActivation"] = null;
+  if (value.lastActivation !== null) {
+    const entry = stateObject(value.lastActivation, path, "lastActivation");
+    lastActivation = {
+      version: requiredStateVersion(entry.version, path, "lastActivation.version"),
+      previousVersion: stateVersion(entry.previousVersion, path, "lastActivation.previousVersion"),
+      schemaVersion: stateInteger(entry.schemaVersion, path, "lastActivation.schemaVersion"),
+      backupPath: entry.backupPath === null ? null : stateString(entry.backupPath, path, "lastActivation.backupPath"),
+      backupSchemaVersion: stateNullableInteger(
+        entry.backupSchemaVersion,
+        path,
+        "lastActivation.backupSchemaVersion",
+      ),
+      activatedAt: stateString(entry.activatedAt, path, "lastActivation.activatedAt"),
+    };
+  }
+
+  return {
+    prefix: defaults.prefix,
+    stateDir: defaults.stateDir,
+    database,
+    currentVersion,
+    previousVersion,
+    releases,
+    backups,
+    lastActivation,
+    updatedAt,
+  };
+}
+
+function canonicalInstallState(state: InstallState): InstallState {
+  const releases: InstallState["releases"] = {};
+  for (const [version, record] of Object.entries(state.releases)) {
+    releases[version] = { schemaVersion: record.schemaVersion, installedAt: record.installedAt };
+  }
+  const backups: InstallState["backups"] = {};
+  for (const [version, record] of Object.entries(state.backups)) {
+    backups[version] = {
+      path: record.path,
+      schemaVersion: record.schemaVersion,
+      fromSchema: record.fromSchema,
+      toSchema: record.toSchema,
+      createdAt: record.createdAt,
+    };
   }
   return {
-    ...defaults,
-    ...value,
-    database: typeof value.database === "string" ? value.database : defaults.database,
-    releases:
-      value.releases !== null && typeof value.releases === "object" && !Array.isArray(value.releases)
-        ? value.releases
-        : {},
+    prefix: state.prefix,
+    stateDir: state.stateDir,
+    database: state.database,
+    currentVersion: state.currentVersion,
+    previousVersion: state.previousVersion,
+    releases,
     backups,
+    lastActivation:
+      state.lastActivation === null
+        ? null
+        : {
+            version: state.lastActivation.version,
+            previousVersion: state.lastActivation.previousVersion,
+            schemaVersion: state.lastActivation.schemaVersion,
+            backupPath: state.lastActivation.backupPath,
+            backupSchemaVersion: state.lastActivation.backupSchemaVersion,
+            activatedAt: state.lastActivation.activatedAt,
+          },
+    updatedAt: state.updatedAt,
   };
 }
 
 function writeInstallState(path: string, state: InstallState): void {
-  writePrivateFile(path, `${JSON.stringify({ ...state, updatedAt: new Date().toISOString() }, null, 2)}\n`);
+  const canonical = { ...canonicalInstallState(state), updatedAt: new Date().toISOString() };
+  writePrivateFile(path, `${JSON.stringify(canonical, null, 2)}\n`);
 }
 
 function releaseDirFor(prefix: string, version: string): string {
@@ -1010,6 +1149,11 @@ export async function installRelease(options: InstallOptions): Promise<InstallRe
   ensurePublicDir(releasesDir);
   const source = resolvePath(options.source, "release source");
   const sourceStat = lstatSync(source);
+  // Validate the existing canonical state before staging anything. An
+  // unfinished pre-canonical state must be reset or reinstalled rather than
+  // silently migrated while a new release is being laid down.
+  const statePath = join(stateDir, "install-state.json");
+  const state = readInstallState(statePath, installStateDefaults(prefix, stateDir, database));
   const stage = join(releasesDir, `.stage-${randomUUID()}`);
   try {
     if (sourceStat.isFile()) {
@@ -1060,8 +1204,6 @@ export async function installRelease(options: InstallOptions): Promise<InstallRe
       hubEnv: env.hubEnv,
       collectorEnv: env.collectorEnv,
     });
-    const statePath = join(stateDir, "install-state.json");
-    const state = readInstallState(statePath, installStateDefaults(prefix, stateDir, database));
     state.releases[manifest.version] = {
       schemaVersion: manifest.schemaVersion,
       installedAt: new Date(now()).toISOString(),

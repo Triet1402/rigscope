@@ -10,9 +10,8 @@
  *   reserving one in-flight window slot so a long replay can never starve it,
  * - pumps replay batches through a token bucket, bounded by the hub's
  *   advertised window, the local window, record count and serialized bytes,
- * - negotiates optional metric-payload extensions per connection and
- *   serializes the base wire shape when the hub did not opt in (durable
- *   records are never rewritten),
+ * - serializes durable records exactly as stored, with every current metric
+ *   field; there is no wire projection or downgrade,
  * - tracks acknowledgements per batch with a per-batch timeout: accepted and
  *   rejected records leave the outbox, timed-out/disconnected batches are
  *   released for a later retry (the hub deduplicates),
@@ -32,7 +31,6 @@ import {
   MAX_DETAIL_BYTES,
   MAX_MESSAGE_BYTES,
   parseHubMessage,
-  projectTelemetryRecordForWire,
 } from '../../src/contracts';
 import type {
   AckMessage,
@@ -43,7 +41,6 @@ import type {
   DetailSubscribe,
   HelloMessage,
   InventoryMessage,
-  MetricExtension,
   RecordRef,
   StatusMessage,
   TelemetryRecord,
@@ -123,7 +120,6 @@ export type DestinationSessionOptions = {
   /** Nominal delivery cadence advertised in hello (milliseconds). */
   expectedIntervalMs: number;
   capabilities: CapabilityName[];
-  collectorVersion: string;
   socketFactory: SocketFactory;
   welcomeTimeoutMs?: number;
   idleTimeoutMs?: number;
@@ -226,9 +222,6 @@ export class DestinationSession {
   private readonly outbox: DestinationOutbox;
   private readonly expectedIntervalMs: number;
   private readonly capabilities: CapabilityName[];
-  private readonly collectorVersion: string;
-  /** Extensions negotiated for the current socket; empty means base wire shape. */
-  private metricExtensions: readonly MetricExtension[] = [];
   private readonly socketFactory: SocketFactory;
   private readonly welcomeTimeoutMs: number;
   private readonly idleTimeoutMs: number;
@@ -276,9 +269,6 @@ export class DestinationSession {
   constructor(options: DestinationSessionOptions) {
     assertExpectedIntervalMs(options.expectedIntervalMs);
     assertCapabilities(options.capabilities);
-    if (options.collectorVersion.length < 1 || options.collectorVersion.length > 64) {
-      throw new Error('collectorVersion must be 1..64 characters');
-    }
     const maxBatchBytes = options.maxBatchBytes ?? DEFAULT_MAX_BATCH_BYTES;
     if (!Number.isSafeInteger(maxBatchBytes) || maxBatchBytes < 1 || maxBatchBytes >= MAX_MESSAGE_BYTES) {
       throw new Error(`maxBatchBytes must be a safe integer below ${MAX_MESSAGE_BYTES}, got ${String(maxBatchBytes)}`);
@@ -303,7 +293,6 @@ export class DestinationSession {
     this.outbox = options.outbox;
     this.expectedIntervalMs = options.expectedIntervalMs;
     this.capabilities = [...options.capabilities];
-    this.collectorVersion = options.collectorVersion;
     this.socketFactory = options.socketFactory;
     this.welcomeTimeoutMs = options.welcomeTimeoutMs ?? DEFAULT_WELCOME_TIMEOUT_MS;
     this.idleTimeoutMs = options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
@@ -444,9 +433,6 @@ export class DestinationSession {
   private openSocket(): void {
     if (this.stopping) return;
     const epoch = ++this.epoch;
-    // Negotiation is connection-scoped: a new socket starts on the base wire
-    // shape until its own welcome advertises extensions.
-    this.metricExtensions = [];
     this.failedEpoch = -1;
     this.status = 'connecting';
 
@@ -507,7 +493,6 @@ export class DestinationSession {
       hostname: this.identity.hostname,
       capabilities: [...this.capabilities],
       expectedIntervalMs: this.expectedIntervalMs,
-      collectorVersion: this.collectorVersion,
     };
   }
 
@@ -590,7 +575,6 @@ export class DestinationSession {
     }
     this.status = 'welcomed';
     this.welcomedAtMs = this.now();
-    this.metricExtensions = [...(welcome.metricExtensions ?? [])];
     this.inFlightWindow = Math.max(1, Math.min(welcome.maxInFlightBatches, this.maxLocalInFlightBatches));
     this.replayTokens = 1;
     this.lastTokenRefillMs = this.now();
@@ -817,14 +801,9 @@ export class DestinationSession {
   }
 
   private buildSamplesMessage(mode: 'live' | 'replay', records: readonly TelemetryRecord[]): string {
-    // Project only at serialization time and only for this connection. The
-    // durable outbox record, record identity and acknowledgment refs are
-    // unchanged; a hub that did not advertise bottleneck-v1 gets exactly the
-    // base wire shape.
-    const wireRecords = records.map((record) =>
-      projectTelemetryRecordForWire(record, this.metricExtensions),
-    );
-    return JSON.stringify({ type: 'samples', mode, records: wireRecords });
+    // One canonical wire shape: every current metric field is serialized
+    // exactly as stored, with no negotiation, projection or downgrade.
+    return JSON.stringify({ type: 'samples', mode, records });
   }
 
   private handleAckTimeout(batchId: number): void {

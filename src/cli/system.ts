@@ -45,13 +45,14 @@ import { waitForHealth, type HealthTarget } from './health';
 import { acquireProcessLease } from '../runtime/process-lease';
 import { hashPassword } from '../hub/auth/password';
 import { enrollCollector } from '../../collector/enroll';
+import { CONNECT_PATH, validateHubUrl } from '../../collector/config';
+import { parseHubConfig, parsePublicOrigin } from '../hub/config';
 
 /**
- * Version 2 keeps independent hub/collector enabled state. Version 1 role
- * state is read through a compatibility mapping and is only rewritten by an
- * explicit lifecycle mutation; read-only status never touches the file.
+ * The system installation state has exactly one on-disk shape. Hub and
+ * collector enabled flags are always stored explicitly; there is no versioned
+ * compatibility path.
  */
-export const SYSTEM_STATE_FORMAT_VERSION = 2;
 export const SYSTEM_SCOPE = "system";
 export const DEFAULT_SYSTEM_ACCOUNTS = {
   hub: "rigscope-hub",
@@ -63,6 +64,8 @@ export const UNIT_NAMES = {
   hub: "rigscope-hub.service",
   collector: "rigscope-collector.service",
 } as const;
+/** Pre-component system installation used one combined unit. */
+const LEGACY_UNIT_NAMES = ["rigscope.service"] as const;
 export const RAPL_RULE_NAME = "90-rigscope-rapl.rules";
 export const SYSUSERS_NAME = "rigscope.conf";
 export const POWER_SYSUSERS_NAME = "rigscope-rapl.conf";
@@ -465,7 +468,8 @@ export function connectDestinationUrl(value: string): string {
   }
   if (url.search !== "" || url.hash !== "") throw new SystemError("invalid-url", "Hub URLs must not contain a query or fragment.");
   if (url.hostname === "localhost") url.hostname = "127.0.0.1";
-  if (url.pathname === "/") url.pathname = "/api/collector/connect";
+  if (url.pathname === "/") url.pathname = CONNECT_PATH;
+  if (url.pathname !== CONNECT_PATH) throw new SystemError('invalid-url', `Collector endpoint must be ${CONNECT_PATH}.`);
   return url.href;
 }
 
@@ -501,7 +505,6 @@ export function stateFilePath(paths: SystemPaths): string {
 }
 
 export type CollectorIdentity = {
-  version: 1;
   collectorId: string;
   destinations: Array<{ url: string; token: string; sharing?: Record<string, boolean> }>;
 };
@@ -519,8 +522,10 @@ function readCollectorIdentity(path: string): CollectorIdentity | null {
   }
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) throw new SystemError("invalid-file", `${path} is invalid`);
   const record = raw as Record<string, unknown>;
+  if (Object.prototype.hasOwnProperty.call(record, "version") || Object.prototype.hasOwnProperty.call(record, "formatVersion")) {
+    throw new SystemError("invalid-file", `${path} is pre-canonical; reinstall or reset collector state`);
+  }
   if (
-    (record.version !== undefined && record.version !== 1) ||
     typeof record.collectorId !== "string" ||
     !/^[\x21-\x7e]{1,128}$/.test(record.collectorId) ||
     !Array.isArray(record.destinations)
@@ -536,6 +541,10 @@ function readCollectorIdentity(path: string): CollectorIdentity | null {
     if (typeof destination.url !== "string" || typeof destination.token !== "string" || destination.token === "") {
       throw new SystemError("invalid-file", `${path} contains an invalid destination`);
     }
+    const issues: string[] = [];
+    if (!validateHubUrl(destination.url, 'saved collector destination', issues)) {
+      throw new SystemError('invalid-file', `${path} contains an incompatible collector endpoint; reset or reinstall it`);
+    }
     destinations.push({
       url: destination.url,
       token: destination.token,
@@ -544,7 +553,7 @@ function readCollectorIdentity(path: string): CollectorIdentity | null {
         : {}),
     });
   }
-  return { version: 1, collectorId: record.collectorId, destinations };
+  return { collectorId: record.collectorId, destinations };
 }
 
 function writeCollectorIdentity(path: string, identity: CollectorIdentity): void {
@@ -776,12 +785,9 @@ async function pairCollectorWithHub(options: {
     // The live hub updates its in-memory registry on enrollment. Do not stop
     // or restart it merely because a second local component is being enabled.
     if (existing !== null) {
-      // Normalize legacy collector state before the enrollment helper reads it.
-      writeCollectorIdentity(collectorStatePath(paths), existing);
       const registered = findCollectorInHubDatabase(paths, existing.collectorId);
       if (registered !== null) {
         const adopted: CollectorIdentity = {
-          version: 1,
           collectorId: existing.collectorId,
           destinations: [{ url: destination.url, token: registered.token, sharing: { ...SYSTEM_DEFAULT_SHARING } }],
         };
@@ -844,7 +850,7 @@ async function pairCollectorWithHub(options: {
       }
     }
   }
-  const next: CollectorIdentity = existing ?? { version: 1, collectorId: identity.collectorId, destinations: [] };
+  const next: CollectorIdentity = existing ?? { collectorId: identity.collectorId, destinations: [] };
   next.destinations = [
     {
       url: destination.url,
@@ -1145,9 +1151,8 @@ type AdoptionRecord = {
 };
 
 export type SystemInstallState = {
-  formatVersion: 2;
   scope: "system";
-  /** Initial install preset retained as compatibility metadata only. */
+  /** Initial install preset retained for display and future installs. */
   role: SystemRole;
   active: boolean;
   components: { hub: ComponentState; collector: ComponentState };
@@ -1221,6 +1226,14 @@ function readJsonObject(path: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function isCanonicalComponents(value: unknown): value is SystemInstallState["components"] {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const enabled = (entry: unknown): entry is ComponentState =>
+    entry !== null && typeof entry === "object" && !Array.isArray(entry) && typeof (entry as { enabled?: unknown }).enabled === "boolean";
+  return enabled(record.hub) && enabled(record.collector);
+}
+
 export function readSystemState(paths: SystemPaths): SystemInstallState | null {
   const path = stateFilePath(paths);
   if (!existsSync(path)) return null;
@@ -1228,7 +1241,7 @@ export function readSystemState(paths: SystemPaths): SystemInstallState | null {
   if (!stat.isFile() || stat.isSymbolicLink()) throw new SystemError("unsafe-path", `${path} must be a regular file`);
   if ((stat.mode & 0o077) !== 0) throw new SystemError("insecure-permissions", `${path} must be 0600`);
   const raw = readJsonObject(path);
-  if ((raw.formatVersion !== 1 && raw.formatVersion !== SYSTEM_STATE_FORMAT_VERSION) || raw.scope !== SYSTEM_SCOPE) {
+  if (raw.scope !== SYSTEM_SCOPE) {
     throw new SystemError("invalid-state", `${path} is not a Rigscope system installation state`);
   }
   const savedPaths = raw.paths as SystemPaths | undefined;
@@ -1240,34 +1253,43 @@ export function readSystemState(paths: SystemPaths): SystemInstallState | null {
   if (raw.role !== "local" && raw.role !== "hub" && raw.role !== "collector") {
     throw new SystemError("invalid-state", "system installation state has an invalid role");
   }
-  let components: SystemInstallState["components"];
-  if (raw.formatVersion === 1) {
-    // Read-only compatibility fallback: the legacy role maps to components in
-    // memory. No file is rewritten until an explicit lifecycle mutation.
-    const mapped = componentsForRole(raw.role as SystemRole);
-    components = { hub: { enabled: mapped.hub }, collector: { enabled: mapped.collector } };
-  } else {
-    const saved = raw.components as Partial<Record<Component, Partial<ComponentState>>> | undefined;
-    if (
-      saved === null ||
-      typeof saved !== "object" ||
-      saved.hub === null ||
-      saved.collector === null ||
-      typeof saved.hub !== "object" ||
-      typeof saved.collector !== "object" ||
-      typeof saved.hub.enabled !== "boolean" ||
-      typeof saved.collector.enabled !== "boolean"
-    ) {
-      throw new SystemError("invalid-state", "system installation state has invalid component enabled state");
-    }
-    components = { hub: { enabled: saved.hub.enabled }, collector: { enabled: saved.collector.enabled } };
+  const saved = raw.components;
+  if (!isCanonicalComponents(saved)) {
+    throw new SystemError("invalid-state", "system installation state has invalid component enabled state");
   }
+  if (Object.prototype.hasOwnProperty.call(raw, "formatVersion")) {
+    throw new SystemError("invalid-state", "system installation state has an obsolete format version; reinstall or upgrade to reset it");
+  }
+  const components = { hub: { enabled: saved.hub.enabled }, collector: { enabled: saved.collector.enabled } };
   return {
     ...(raw as unknown as SystemInstallState),
-    formatVersion: SYSTEM_STATE_FORMAT_VERSION,
     accounts,
     components,
   };
+}
+
+export function systemStateIsLegacy(paths: SystemPaths): boolean {
+  const path = stateFilePath(paths);
+  if (!existsSync(path)) return false;
+  let raw: Record<string, unknown>;
+  try {
+    raw = readJsonObject(path);
+  } catch {
+    // Malformed state is not legacy; the canonical reader reports it.
+    return false;
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, "formatVersion")) return true;
+  return !isCanonicalComponents(raw.components);
+}
+
+function legacySystemRole(paths: SystemPaths): SystemRole {
+  try {
+    const raw = readJsonObject(stateFilePath(paths));
+    if (raw.role === "local" || raw.role === "hub" || raw.role === "collector") return raw.role;
+  } catch {
+    /* fall back to the default preset */
+  }
+  return "local";
 }
 
 function writeSystemState(paths: SystemPaths, state: SystemInstallState): void {
@@ -1286,7 +1308,6 @@ function emptyState(options: {
   const timestamp = new Date(options.now()).toISOString();
   const components = options.components ?? componentsForRole(options.role);
   return {
-    formatVersion: SYSTEM_STATE_FORMAT_VERSION,
     scope: SYSTEM_SCOPE,
     role: options.role,
     active: true,
@@ -1313,7 +1334,11 @@ function validateVersion(value: unknown): string {
 }
 
 function releaseVersion(root: string): string {
-  return validateVersion(readJsonObject(join(root, "package.json")).version);
+  const metadata = readJsonObject(join(root, "package.json"));
+  if (Object.hasOwn(metadata, 'rigscopeConfigVersion')) {
+    throw new SystemError('invalid-release', 'release uses unfinished configuration metadata; select a canonical release');
+  }
+  return validateVersion(metadata.version);
 }
 
 function releaseSchemaVersion(root: string): number | null {
@@ -1477,49 +1502,121 @@ function extractArchive(archive: string, stage: string, host: SystemHost): void 
   assertNoSymlinks(stage);
 }
 
+type StagedRelease = {
+  version: string;
+  stageDir: string;
+  schemaVersion: number | null;
+  artifacts: string[];
+};
+
+function discardStagedRelease(staged: StagedRelease | null): void {
+  if (staged === null) return;
+  rmSync(staged.stageDir, { recursive: true, force: true });
+}
+
+function releaseTargetDir(paths: SystemPaths, version: string): string {
+  return join(paths.prefix, "releases", version);
+}
+
+function assertReleaseTargetAvailable(paths: SystemPaths, releaseDir: string, replaceRelease?: boolean): void {
+  if (!existsSync(releaseDir)) return;
+  const current = currentReleaseDir(paths);
+  const previous = previousReleaseDir(paths);
+  if (!replaceRelease || current === releaseDir || previous === releaseDir) {
+    throw new SystemError(
+      "release-exists",
+      `release ${basename(releaseDir)} is already installed${current === releaseDir || previous === releaseDir ? " or retained" : ""}; choose a new version`,
+    );
+  }
+}
+
+/**
+ * Copy and validate a complete replacement without touching the active
+ * installation. Staging lives directly under the prefix (not releases), so a
+ * reset that removes the old release tree cannot delete the candidate, and a
+ * source inside the currently installed release remains readable until the
+ * copy is finished.
+ */
 function stageRelease(options: {
   source: string;
   paths: SystemPaths;
   host: SystemHost;
-  replaceRelease?: boolean;
-  now: () => number;
-}): ReleaseStage {
-  const source = resolve(options.source);
+}): StagedRelease {
+  // Resolve the source first: operators may point at the `current` symlink or
+  // a path below it.
+  const source = realpathSync(resolve(options.source));
   const stat = lstatSync(source);
-  const releasesDir = join(options.paths.prefix, "releases");
-  ensureDirectory(releasesDir, 0o755);
-  const stage = join(releasesDir, `.stage-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-  mkdirSync(stage, { recursive: true, mode: 0o700 });
+  ensureDirectory(options.paths.prefix, 0o755);
+  const stageDir = join(options.paths.prefix, `.stage-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  mkdirSync(stageDir, { recursive: true, mode: 0o700 });
   try {
     if (stat.isDirectory() && !stat.isSymbolicLink()) {
-      copyReleaseAllowlisted(source, stage);
+      copyReleaseAllowlisted(source, stageDir);
     } else if (stat.isFile() && !stat.isSymbolicLink()) {
-      extractArchive(source, stage, options.host);
+      extractArchive(source, stageDir, options.host);
     } else {
       throw new SystemError("invalid-source", "release source must be a directory or .tar.gz archive");
     }
-    assertReleaseArtifacts(stage);
-    verifyReleaseManifest(stage);
-    const version = releaseVersion(stage);
-    const releaseDir = join(releasesDir, version);
-    if (existsSync(releaseDir)) {
-      const current = currentReleaseDir(options.paths);
-      const previous = previousReleaseDir(options.paths);
-      if (!options.replaceRelease || current === releaseDir || previous === releaseDir) {
-        throw new SystemError(
-          "release-exists",
-          `release ${version} is already installed${current === releaseDir || previous === releaseDir ? " or retained" : ""}; choose a new version`,
-        );
-      }
-      rmSync(releaseDir, { recursive: true, force: true });
-    }
-    renameSync(stage, releaseDir);
-    ensureDirectory(join(releaseDir, ".next", "cache"), 0o755);
-    return { version, releaseDir, schemaVersion: releaseSchemaVersion(releaseDir), artifacts: [...REQUIRED_ARTIFACTS] };
+    assertReleaseArtifacts(stageDir);
+    verifyReleaseManifest(stageDir);
+    return {
+      version: releaseVersion(stageDir),
+      stageDir,
+      schemaVersion: releaseSchemaVersion(stageDir),
+      artifacts: [...REQUIRED_ARTIFACTS],
+    };
   } catch (error) {
-    rmSync(stage, { recursive: true, force: true });
+    rmSync(stageDir, { recursive: true, force: true });
     throw error;
   }
+}
+
+function prepareStagedRelease(options: {
+  source: string;
+  paths: SystemPaths;
+  host: SystemHost;
+  installDeps?: boolean;
+  installDepsCommand?: string;
+}): StagedRelease {
+  const staged = stageRelease(options);
+  try {
+    if (options.installDeps === true) {
+      installDependencies(staged.stageDir, options.host, options.installDepsCommand ?? "npm");
+    }
+    const missing = missingDependencies(staged.stageDir);
+    if (missing.length > 0) {
+      throw new SystemError(
+        "missing-dependencies",
+        `production dependencies are missing (${missing.join(", ")}); stage with --install-deps or use a built release directory`,
+      );
+    }
+    chmodTree(staged.stageDir, options.host);
+    runRequired(options.host, "chown", ["-R", "root:root", staged.stageDir], "release ownership");
+    return staged;
+  } catch (error) {
+    discardStagedRelease(staged);
+    throw error;
+  }
+}
+
+function commitStagedRelease(options: {
+  staged: StagedRelease;
+  paths: SystemPaths;
+  replaceRelease?: boolean;
+}): ReleaseStage {
+  const releasesDir = join(options.paths.prefix, "releases");
+  ensureDirectory(releasesDir, 0o755);
+  const releaseDir = releaseTargetDir(options.paths, options.staged.version);
+  assertReleaseTargetAvailable(options.paths, releaseDir, options.replaceRelease);
+  if (existsSync(releaseDir)) rmSync(releaseDir, { recursive: true, force: true });
+  renameSync(options.staged.stageDir, releaseDir);
+  ensureDirectory(join(releaseDir, ".next", "cache"), 0o755);
+  return {
+    version: options.staged.version,
+    releaseDir,
+    schemaVersion: options.staged.schemaVersion,
+    artifacts: options.staged.artifacts,
+  };
 }
 
 function dependencyNames(root: string): string[] {
@@ -1621,7 +1718,10 @@ function ensureRootOwnedNode(options: {
   const real = realpathSync(selected);
   nodeVersion(options.host, real);
   const stat = statSync(real);
-  const unsafe = stat.uid !== 0 || (stat.mode & 0o022) !== 0 || options.copyNode === true;
+  // A Node executable inside an installed release is not safe to retain: a
+  // reset removes releases, so copy it into the stable prefix first.
+  const insideRelease = isWithin(join(options.paths.prefix, "releases"), real);
+  const unsafe = stat.uid !== 0 || (stat.mode & 0o022) !== 0 || options.copyNode === true || insideRelease;
   if (!unsafe || options.trustedNode === true) return real;
   const target = join(options.paths.prefix, "node", "node");
   if (!options.apply) return target;
@@ -1635,12 +1735,12 @@ function ensureRootOwnedNode(options: {
 
 type AdoptionSetup = {
   role: SystemRole;
+  components: ComponentSet;
   port: number;
   origin?: string;
   usersJson?: string;
   collectorsJson?: string;
   maxConnections?: number;
-  legacy: boolean;
 };
 
 function normalizedJsonArray(value: unknown, label: string): string | undefined {
@@ -1660,64 +1760,47 @@ function normalizedJsonArray(value: unknown, label: string): string | undefined 
 function validatedOrigin(value: unknown): string | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   if (typeof value !== "string") throw new SystemError("invalid-adoption", "adopted hub origin is not a URL");
-  let parsed: URL;
   try {
-    parsed = new URL(value);
+    parsePublicOrigin(value);
   } catch {
-    throw new SystemError("invalid-adoption", "adopted hub origin is not a URL");
+    throw new SystemError("invalid-adoption", "adopted hub origin must be an exact HTTPS origin");
   }
-  if (parsed.protocol !== "https:") throw new SystemError("invalid-adoption", "adopted hub origin must be https");
   return value;
 }
 
-function hasCollectorIdentity(source: string): boolean {
-  return existsSync(join(source, "collector", "state.json")) || existsSync(join(source, "collector", "collector.json"));
-}
-
 function readAdoptionSetup(source: string): AdoptionSetup {
-  const modernPath = join(source, "config.json");
-  const legacyPath = join(source, "hub-config.json");
-  if (existsSync(modernPath)) {
-    assertPrivateSourceFile(modernPath, "adopted setup");
-    const setup = readJsonObject(modernPath);
-    const role = setup.role;
-    if (setup.version !== 1 || typeof role !== "string" || !["local", "hub", "collector"].includes(role)) {
-      throw new SystemError("invalid-adoption", "adopted setup version or role is incompatible");
-    }
-    const port = Number(setup.port ?? 8081);
-    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new SystemError("invalid-adoption", "adopted hub port is invalid");
-    return {
-      role: role as SystemRole,
-      port,
-      origin: validatedOrigin(setup.origin),
-      usersJson: normalizedJsonArray(setup.users, "HUB_BROWSER_USERS"),
-      collectorsJson: normalizedJsonArray(setup.collectors, "HUB_COLLECTORS"),
-      maxConnections: Number.isSafeInteger(setup.maxCollectorConnections) ? Number(setup.maxCollectorConnections) : undefined,
-      legacy: false,
-    };
+  const configPath = join(source, "config.json");
+  if (!existsSync(configPath)) {
+    throw new SystemError("invalid-adoption", "adopted installation has no config.json");
   }
-  if (existsSync(legacyPath)) {
-    assertPrivateSourceFile(legacyPath, "adopted hub configuration");
-    const legacy = readJsonObject(legacyPath);
-    const hasHub = ["HUB_PUBLIC_ORIGIN", "HUB_BROWSER_USERS", "HUB_DATABASE_PATH", "HUB_HOST", "HUB_PORT"].some((key) => key in legacy);
-    const hasCollector = hasCollectorIdentity(source);
-    if (!hasHub && !hasCollector) throw new SystemError("invalid-adoption", "adopted configuration is neither a hub nor a collector setup");
-    return {
-      role: hasHub && hasCollector ? "local" : hasHub ? "hub" : "collector",
-      port: Number(legacy.HUB_PORT ?? 8081),
-      origin: validatedOrigin(legacy.HUB_PUBLIC_ORIGIN),
-      usersJson: normalizedJsonArray(legacy.HUB_BROWSER_USERS, "HUB_BROWSER_USERS"),
-      collectorsJson: normalizedJsonArray(legacy.HUB_COLLECTORS, "HUB_COLLECTORS"),
-      maxConnections: Number.isSafeInteger(Number(legacy.HUB_MAX_COLLECTOR_CONNECTIONS))
-        ? Number(legacy.HUB_MAX_COLLECTOR_CONNECTIONS)
-        : undefined,
-      legacy: true,
-    };
+  assertPrivateSourceFile(configPath, "adopted setup");
+  const setup = readJsonObject(configPath);
+  // Adoption accepts only the one canonical shape. An unfinished/versioned
+  // user configuration must be reset or reinstalled before it is adopted.
+  if (Object.prototype.hasOwnProperty.call(setup, "version") || Object.prototype.hasOwnProperty.call(setup, "formatVersion")) {
+    throw new SystemError("invalid-adoption", "adopted setup is pre-canonical; reset or reinstall it before adoption");
   }
-  if (hasCollectorIdentity(source) && existsSync(join(source, "collector"))) {
-    return { role: "collector", port: 8081, legacy: true };
+  const role = setup.role;
+  if (typeof role !== "string" || !["local", "hub", "collector"].includes(role)) {
+    throw new SystemError("invalid-adoption", "adopted setup role is incompatible");
   }
-  throw new SystemError("invalid-adoption", "adopted installation has no config.json or hub-config.json");
+  const port = Number(setup.port);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new SystemError("invalid-adoption", "adopted hub port is invalid");
+  if (!Array.isArray(setup.users) || !Array.isArray(setup.collectors)) {
+    throw new SystemError("invalid-adoption", "adopted setup must contain users and collectors arrays");
+  }
+  if (!isCanonicalComponents(setup.components)) {
+    throw new SystemError("invalid-adoption", "adopted setup has an invalid component enabled state");
+  }
+  return {
+    role: role as SystemRole,
+    components: componentSet({ hub: setup.components.hub.enabled, collector: setup.components.collector.enabled }),
+    port,
+    origin: validatedOrigin(setup.origin),
+    usersJson: normalizedJsonArray(setup.users, "HUB_BROWSER_USERS"),
+    collectorsJson: normalizedJsonArray(setup.collectors, "HUB_COLLECTORS"),
+    maxConnections: Number.isSafeInteger(setup.maxCollectorConnections) ? Number(setup.maxCollectorConnections) : undefined,
+  };
 }
 
 function resolveRole(options: { role?: SystemRole; adoptFrom?: string }): SystemRole {
@@ -2113,6 +2196,28 @@ function adoptUserState(options: {
   if (setup.role !== options.role && setup.role !== 'local') throw new SystemError("invalid-adoption", "adopted setup role is incompatible");
   const { port, origin } = setup;
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new SystemError("invalid-adoption", "adopted hub port is invalid");
+  // Validate every source file this adoption will copy before a reset can
+  // remove the current installation.
+  if (options.role !== 'collector') {
+    const sourceDatabase = join(source, "hub", "telemetry.sqlite");
+    if (existsSync(sourceDatabase)) {
+      assertPrivateSourceFile(sourceDatabase, "adopted database");
+      const database = new DatabaseSync(sourceDatabase, {readOnly: true});
+      try {
+        const row = database.prepare('PRAGMA integrity_check').get();
+        if (!row || Object.values(row)[0] !== 'ok') throw new SystemError('invalid-adoption', 'adopted database failed its integrity check');
+      } finally { database.close(); }
+    }
+    const sourceEnrollment = join(source, "hub", "enrollment.json");
+    if (existsSync(sourceEnrollment)) assertPrivateSourceFile(sourceEnrollment, "adopted enrollment");
+  }
+  if (options.role !== 'hub') {
+    const sourceCollectorState = join(source, "collector", "state.json");
+    if (existsSync(sourceCollectorState)) {
+      assertPrivateSourceFile(sourceCollectorState, "adopted collector state");
+      readCollectorIdentity(sourceCollectorState);
+    }
+  }
 
   const copied: AdoptionRecord["files"] = [];
   const warnings: string[] = [];
@@ -2205,11 +2310,8 @@ async function performAdoptionCopyAsync(options: {
       bytes: statSync(targetDatabase).size,
     });
   }
-  const sourceCollectorState = [
-    join(source, "collector", "state.json"),
-    join(source, "collector", "collector.json"),
-  ].find((candidate) => existsSync(candidate));
-  if (role !== "hub" && sourceCollectorState) {
+  const sourceCollectorState = join(source, "collector", "state.json");
+  if (role !== "hub" && existsSync(sourceCollectorState)) {
     assertPrivateSourceFile(sourceCollectorState, "adopted collector state");
     ensureDirectory(join(paths.stateDir, "collector"), 0o700, true);
     const targetCollector = collectorStatePath(paths);
@@ -2382,6 +2484,13 @@ function stopUnits(host: SystemHost, units: string[]): void {
     }
   }
   if (units.some(unit => systemdActive(host, unit))) throw new SystemError('service-active', 'system services did not stop; no files were restored');
+}
+
+function unitsForCleanup(paths: SystemPaths, host: SystemHost): string[] {
+  // Both current units are always stopped/removed. The old combined unit is
+  // only touched when it is actually installed so unrelated units are safe.
+  const legacy = LEGACY_UNIT_NAMES.filter((unit) => existsSync(join(paths.unitsDir, unit)) || systemdActive(host, unit));
+  return [...Object.values(UNIT_NAMES), ...legacy];
 }
 function startUnits(host: SystemHost, units: string[]): void {
   runRequired(host, "systemctl", ["daemon-reload"], "systemd daemon-reload");
@@ -2577,8 +2686,8 @@ function ensureComponentSetup(options: {
     if (!existsSync(collectorEnvPath(paths))) {
       writeManagedFile(collectorEnvPath(paths), collectorEnvTemplate(), 0o600, false);
     }
-    // Always write the current component unit so a legacy or hub-only install
-    // gains the current isolation directives and power membership on enable.
+    // Always write the current component unit so a hub-only install gains the
+    // current isolation directives and power membership on enable.
     const unit = renderSystemCollectorUnit({
       paths,
       accounts,
@@ -2608,11 +2717,33 @@ function ensurePowerAccess(paths: SystemPaths, accounts: SystemAccounts, host: S
   applyPowerAccess(paths, accounts, host);
 }
 
+function resetUnfinishedSystemState(options: { paths: SystemPaths; host: SystemHost; now: () => number }): void {
+  // The candidate is staged outside releases and the copied Node executable
+  // lives in prefix/node; both survive this guarded purge. The operation lock
+  // is outside the purged state/config trees as well.
+  uninstallSystem({
+    apply: true,
+    paths: options.paths,
+    host: options.host,
+    purgeData: true,
+    confirmPurgeHistory: true,
+    preserveNode: true,
+    now: options.now,
+  });
+}
+
+function installPreset(options: Pick<SystemInstallOptions, "adoptFrom">, role: SystemRole): ComponentSet {
+  if (options.adoptFrom !== undefined) {
+    return componentSet(readAdoptionSetup(resolve(options.adoptFrom)).components);
+  }
+  return componentsForRole(role);
+}
+
 function planSystemInstall(options: SystemInstallOptions): SystemPlan {
   const paths = validateSystemPaths(options.paths);
   const accounts = validateAccounts(options.accounts);
   const role = resolveRole(options);
-  const preset = componentSet(componentsForRole(role));
+  const preset = componentSet(installPreset(options, role));
   const power = options.power !== false && preset.collector;
   const initial = options.enable === true ? preset : { hub: false, collector: false };
   const files: SystemPlan["files"] = [
@@ -2646,7 +2777,11 @@ function planSystemInstall(options: SystemInstallOptions): SystemPlan {
   return { operation: "install", apply: options.apply === true, role, components: initial, paths, accounts, commands, files, notes };
 }
 
-export async function installSystem(options: SystemInstallOptions): Promise<SystemReport> {
+export function installSystem(options: SystemInstallOptions): Promise<SystemReport> {
+  return withSystemOperation(options, () => installSystemUnlocked(options));
+}
+
+async function installSystemUnlocked(options: SystemInstallOptions): Promise<SystemReport> {
   const host = options.host ?? createSystemHost();
   const now = options.now ?? Date.now;
   const paths = validateSystemPaths(options.paths);
@@ -2655,7 +2790,8 @@ export async function installSystem(options: SystemInstallOptions): Promise<Syst
   const plan = planSystemInstall({ ...options, paths, accounts, role });
   if (options.apply !== true) return { operation: "install", ok: true, apply: false, message: "plan only", plan };
   assertApply(host);
-  const existing = readSystemState(paths);
+  const legacy = systemStateIsLegacy(paths);
+  const existing = legacy ? null : readSystemState(paths);
   if (existing?.active === true) {
     throw new SystemError("already-installed", "a system installation already exists; use `rigscope system upgrade` or uninstall first");
   }
@@ -2667,134 +2803,144 @@ export async function installSystem(options: SystemInstallOptions): Promise<Syst
       `existing user service(s) detected (${detail}); stop them and use --adopt-user-state for explicit copy-based adoption`,
     );
   }
-  assertSystemStartAllowed(paths, options.start === true ? componentsForRole(role) : { hub: false, collector: false });
   const source = resolve(options.source);
   if (!existsSync(source)) throw new SystemError("missing-source", `release source does not exist: ${source}`);
-
-  ensureDirectory(paths.prefix, 0o755);
-  ensureDirectory(join(paths.prefix, "releases"), 0o755);
-  ensureDirectory(paths.stateDir, 0o755);
-  ensureDirectory(paths.configDir, 0o755);
-  ensureDirectory(paths.unitsDir, 0o755);
-  ensureDirectory(join(paths.stateDir, "hub"), 0o700, true);
-  ensureDirectory(join(paths.stateDir, "collector"), 0o700, true);
-  ensureDirectory(join(paths.stateDir, "backups"), 0o700, true);
-  ensureDirectory(join(paths.stateDir, "hub", "run"), 0o700, true);
-  assertManagedPathSafety(paths, isDefaultSystemLayout(paths));
-
-  const nodePath = ensureRootOwnedNode({ paths, host, nodePath: options.nodePath, copyNode: options.copyNode, trustedNode: options.trustedNode, apply: true });
-  const stage = stageRelease({ source, paths, host, replaceRelease: options.replaceRelease, now });
-  if (options.installDeps === true) {
-    installDependencies(stage.releaseDir, host, options.installDepsCommand ?? "npm");
-  }
-  const missing = missingDependencies(stage.releaseDir);
-  if (missing.length > 0) {
-    throw new SystemError(
-      "missing-dependencies",
-      `production dependencies are missing (${missing.join(", ")}); stage with --install-deps or use a built release directory`,
-    );
-  }
-  chmodTree(stage.releaseDir, host);
-  runRequired(host, "chown", ["-R", "root:root", stage.releaseDir], "release ownership");
-
-  let adoption: AdoptionResult | null = null;
-  if (options.adoptFrom) {
-    adoption = adoptUserState({ source: options.adoptFrom, paths, role, accounts, apply: true, host, now });
-    await performAdoptionCopyAsync({ source: options.adoptFrom, paths, role, host, copy: adoption });
-  }
-
   const port = options.port ?? 8081;
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new SystemError("invalid-argument", "--port must be 1-65535");
-  const preset = componentSet(componentsForRole(role));
+  parseHubConfig(options.origin === undefined
+    ? {HUB_HOST: '127.0.0.1', HUB_PORT: String(port)}
+    : {HUB_PUBLIC_ORIGIN: options.origin, HUB_SOCKET_PATH: hubSocketPath(paths)});
+  // Read and validate every adoption/option before the destructive reset.
+  const preset = componentSet(installPreset(options, role));
   const power = options.power !== false && preset.collector;
-  const hubEnv = adoption?.hubEnv ?? hubEnvTemplate(paths, options.origin, port);
-  const collectorEnv = adoption?.collectorEnv ?? collectorEnvTemplate();
-  // One complete package: both private environments and both units are always
-  // installed. --role only selects the initial enabled preset.
-  writeManagedFile(hubEnvPath(paths), hubEnv, 0o600, false);
-  writeManagedFile(collectorEnvPath(paths), collectorEnv, 0o600, false);
-  writeSysusersFiles(paths, accounts, "local", power, host);
+  if (options.adoptFrom) {
+    adoptUserState({ source: options.adoptFrom, paths, role, accounts, apply: false, host, now });
+  }
 
-  const hubUnit = renderSystemHubUnit({
+  assertManagedPathSafety(paths, isDefaultSystemLayout(paths));
+  ensureDirectory(paths.prefix, 0o755);
+
+  const nodePath = ensureRootOwnedNode({ paths, host, nodePath: options.nodePath, copyNode: options.copyNode, trustedNode: options.trustedNode, apply: true });
+  const staged = prepareStagedRelease({
+    source,
     paths,
-    accounts,
-    nodePath,
-    database: hubDatabasePath(paths),
-    enrollment: hubEnrollmentPath(paths),
-    socket: hubSocketPath(paths),
-    remote: adoption?.remote === true || typeof options.origin === "string",
-    powerAccess: false,
+    host,
+    installDeps: options.installDeps,
+    installDepsCommand: options.installDepsCommand,
   });
-  const collectorUnit = renderSystemCollectorUnit({
-    paths,
-    accounts,
-    nodePath,
-    collectorState: collectorStatePath(paths),
-    powerAccess: power,
-  });
-  writeUnitFile(paths, UNIT_NAMES.hub, `${hubUnit}\n`, true);
-  writeUnitFile(paths, UNIT_NAMES.collector, `${collectorUnit}\n`, true);
+  try {
+    // Nothing destructive happens until the complete replacement has been
+    // copied, manifest-checked and dependency-checked.
+    if (legacy) resetUnfinishedSystemState({ paths, host, now });
 
-  const validation = runRequired(host,'systemd-analyze',['verify','--man=no',...COMPONENTS.map(component=>join(paths.unitsDir,unitFor(component)))], 'native systemd unit validation');
-  if (/path is not absolute|bad unit file|fatal error|unknown (?:key|lvalue)|ignoring/i.test(validation.stderr)) {
-    throw new SystemError('invalid-unit','native systemd validation rejected a generated directive');
-  }
+    ensureDirectory(join(paths.prefix, "releases"), 0o755);
+    ensureDirectory(paths.stateDir, 0o755);
+    ensureDirectory(paths.configDir, 0o755);
+    ensureDirectory(paths.unitsDir, 0o755);
+    ensureDirectory(join(paths.stateDir, "hub"), 0o700, true);
+    ensureDirectory(join(paths.stateDir, "collector"), 0o700, true);
+    ensureDirectory(join(paths.stateDir, "backups"), 0o700, true);
+    ensureDirectory(join(paths.stateDir, "hub", "run"), 0o700, true);
 
-  if (power) ensurePowerAccess(paths, accounts, host);
+    const release = commitStagedRelease({ staged, paths, replaceRelease: options.replaceRelease });
 
-  chownAccount([join(paths.stateDir, "hub")], accounts.hub, accounts.hub, host);
-  chownAccount([join(paths.stateDir, "collector")], accounts.collector, accounts.collector, host);
-
-  const state = emptyState({ paths, accounts, role, components: { hub: false, collector: false }, nodePath, now });
-  state.currentVersion = stage.version;
-  state.releases[stage.version] = {
-    releaseDir: stage.releaseDir,
-    schemaVersion: stage.schemaVersion,
-    installedAt: new Date(now()).toISOString(),
-  };
-  state.adoption = adoption?.record ?? null;
-  state.power = power ? { enabled: true, rulePath: raplRulePath(paths), group: accounts.powerGroup } : null;
-  replaceSymlink(join(paths.prefix, "current"), stage.releaseDir, host);
-  writeSystemState(paths, state);
-
-  const wantsHub = preset.hub && (options.enable === true || options.start === true);
-  const wantsCollector = preset.collector && (options.enable === true || options.start === true);
-  let password: string | undefined;
-  const awaiting: Component[] = [];
-  if (wantsHub) password = ensureHubOwner(paths);
-  if (wantsCollector && !collectorConfigured(paths).configured) {
-    const pairing = await pairCollectorWithHub({ paths, accounts, host });
-    if (pairing.awaiting) awaiting.push("collector");
-  }
-
-  if (options.enable === true) {
-    enableUnits(host, unitNamesForComponents(preset));
-    state.components = { hub: { enabled: preset.hub }, collector: { enabled: preset.collector } };
-    writeSystemState(paths, state);
-  }
-  const started: Component[] = [];
-  if (options.start === true) {
-    assertSystemStartAllowed(paths, componentSet(preset));
-    if (preset.hub) started.push("hub");
-    if (preset.collector && !awaiting.includes("collector")) started.push("collector");
-    if (started.length > 0) {
-      startUnits(host, started.map(unitFor));
-      await verifySystemHealth(paths, state, host, options.startupTimeoutMs ?? 20_000, started);
+    let adoption: AdoptionResult | null = null;
+    if (options.adoptFrom) {
+      adoption = adoptUserState({ source: options.adoptFrom, paths, role, accounts, apply: true, host, now });
+      await performAdoptionCopyAsync({ source: options.adoptFrom, paths, role, host, copy: adoption });
     }
+
+    const hubEnv = adoption?.hubEnv ?? hubEnvTemplate(paths, options.origin, port);
+    const collectorEnv = adoption?.collectorEnv ?? collectorEnvTemplate();
+    // One complete package: both private environments and both units are always
+    // installed. --role only selects the initial enabled preset.
+    writeManagedFile(hubEnvPath(paths), hubEnv, 0o600, false);
+    writeManagedFile(collectorEnvPath(paths), collectorEnv, 0o600, false);
+    writeSysusersFiles(paths, accounts, "local", power, host);
+
+    const hubUnit = renderSystemHubUnit({
+      paths,
+      accounts,
+      nodePath,
+      database: hubDatabasePath(paths),
+      enrollment: hubEnrollmentPath(paths),
+      socket: hubSocketPath(paths),
+      remote: adoption?.remote === true || typeof options.origin === "string",
+      powerAccess: false,
+    });
+    const collectorUnit = renderSystemCollectorUnit({
+      paths,
+      accounts,
+      nodePath,
+      collectorState: collectorStatePath(paths),
+      powerAccess: power,
+    });
+    writeUnitFile(paths, UNIT_NAMES.hub, `${hubUnit}\n`, true);
+    writeUnitFile(paths, UNIT_NAMES.collector, `${collectorUnit}\n`, true);
+
+    const validation = runRequired(host,'systemd-analyze',['verify','--man=no',...COMPONENTS.map(component=>join(paths.unitsDir,unitFor(component)))], 'native systemd unit validation');
+    if (/path is not absolute|bad unit file|fatal error|unknown (?:key|lvalue)|ignoring/i.test(validation.stderr)) {
+      throw new SystemError('invalid-unit','native systemd validation rejected a generated directive');
+    }
+
+    if (power) ensurePowerAccess(paths, accounts, host);
+
+    chownAccount([join(paths.stateDir, "hub")], accounts.hub, accounts.hub, host);
+    chownAccount([join(paths.stateDir, "collector")], accounts.collector, accounts.collector, host);
+
+    const state = emptyState({ paths, accounts, role, components: { hub: false, collector: false }, nodePath, now });
+    state.currentVersion = release.version;
+    state.releases[release.version] = {
+      releaseDir: release.releaseDir,
+      schemaVersion: release.schemaVersion,
+      installedAt: new Date(now()).toISOString(),
+    };
+    state.adoption = adoption?.record ?? null;
+    state.power = power ? { enabled: true, rulePath: raplRulePath(paths), group: accounts.powerGroup } : null;
+    replaceSymlink(join(paths.prefix, "current"), release.releaseDir, host);
+    writeSystemState(paths, state);
+
+    const wantsHub = preset.hub && (options.enable === true || options.start === true);
+    const wantsCollector = preset.collector && (options.enable === true || options.start === true);
+    let password: string | undefined;
+    const awaiting: Component[] = [];
+    if (wantsHub) password = ensureHubOwner(paths);
+    if (wantsCollector && !collectorConfigured(paths).configured) {
+      const pairing = await pairCollectorWithHub({ paths, accounts, host });
+      if (pairing.awaiting) awaiting.push("collector");
+    }
+
+    if (options.enable === true) {
+      enableUnits(host, unitNamesForComponents(preset));
+      state.components = { hub: { enabled: preset.hub }, collector: { enabled: preset.collector } };
+      writeSystemState(paths, state);
+    }
+    const started: Component[] = [];
+    if (options.start === true) {
+      assertSystemStartAllowed(paths, componentSet(preset));
+      if (preset.hub) started.push("hub");
+      if (preset.collector && !awaiting.includes("collector")) started.push("collector");
+      if (started.length > 0) {
+        startUnits(host, started.map(unitFor));
+        await verifySystemHealth(paths, state, host, options.startupTimeoutMs ?? 20_000, started);
+      }
+    }
+    return {
+      operation: "install",
+      ok: true,
+      apply: true,
+      message: `installed ${release.version} for ${role} preset`,
+      version: release.version,
+      current: release.releaseDir,
+      previous: null,
+      state,
+      password,
+      ...(awaiting.length > 0 ? { awaitingConnection: awaiting } : {}),
+      warnings: adoption?.warnings ?? [],
+    };
+  } finally {
+    discardStagedRelease(staged);
   }
-  return {
-    operation: "install",
-    ok: true,
-    apply: true,
-    message: `installed ${stage.version} for ${role} preset`,
-    version: stage.version,
-    current: stage.releaseDir,
-    previous: null,
-    state,
-    password,
-    ...(awaiting.length > 0 ? { awaitingConnection: awaiting } : {}),
-    warnings: adoption?.warnings ?? [],
-  };
 }
 
 export type SystemStatusOptions = {
@@ -3259,11 +3405,6 @@ export async function connectSystem(options: SystemConnectOptions): Promise<Syst
     ensurePowerAccess(paths, state.accounts, host);
     state.power = { enabled: true, rulePath: raplRulePath(paths), group: state.accounts.powerGroup };
   }
-  const existingIdentity = readCollectorIdentity(collectorStatePath(paths));
-  if (existingIdentity !== null) {
-    // Normalize legacy adopted state before the shared enrollment helper reads it.
-    writeCollectorIdentity(collectorStatePath(paths), existingIdentity);
-  }
   const wasActive = systemdActive(host, UNIT_NAMES.collector);
   if (wasActive) {
     stopUnits(host, [UNIT_NAMES.collector]);
@@ -3312,6 +3453,63 @@ async function upgradeSystemUnlocked(options: SystemUpgradeOptions): Promise<Sys
   const host = options.host ?? createSystemHost();
   const now = options.now ?? Date.now;
   const paths = validateSystemPaths(options.paths);
+  if (systemStateIsLegacy(paths)) {
+    const source = resolve(options.source);
+    if (!existsSync(source)) throw new SystemError("missing-source", `release source does not exist: ${source}`);
+    const role = legacySystemRole(paths);
+    const preset = componentsForRole(role);
+    const enable = options.enable ?? (options.start === true || unitNamesForComponents(preset).some(unit => systemdEnabled(host, unit)));
+    const units = [...Object.values(UNIT_NAMES), ...LEGACY_UNIT_NAMES];
+    const plan: SystemPlan = {
+      operation: "upgrade",
+      apply: options.apply === true,
+      role,
+      components: preset,
+      paths,
+      accounts: validateAccounts(options.accounts),
+      commands: [
+        "copy and validate the replacement release",
+        ...units.map((unit) => `systemctl stop ${unit}`),
+        "verify every owned runtime lease is stopped",
+        "remove unfinished configuration, history and application releases",
+        "install the canonical layout from the validated replacement",
+        ...(enable ? unitNamesForComponents(preset).map(unit => `systemctl enable ${unit}`) : []),
+        ...(options.start ? unitNamesForComponents(preset).map((unit) => `systemctl start ${unit}`) : []),
+      ],
+      files: [
+        { path: stateFilePath(paths), mode: "0600", purpose: "canonical replacement state" },
+        { path: join(paths.stateDir, "backups"), mode: "0700", purpose: "removed with unfinished history" },
+      ],
+      notes: [
+        "An unfinished installation is reset, not migrated; its history and credentials are removed.",
+        "The replacement is copied and validated before any unit is stopped or state is removed.",
+        "Both owned units and legacy combined units are stopped before the reset.",
+      ],
+    };
+    if (options.apply !== true) return { operation: "upgrade", ok: true, apply: false, message: "plan only", plan };
+    // There is no canonical installation to upgrade: installSystemUnlocked
+    // stages the replacement first, then resets and installs the canonical
+    // layout. This caller already owns the system operation lock.
+    return installSystemUnlocked({
+      apply: true,
+      source: options.source,
+      role,
+      paths: options.paths,
+      accounts: options.accounts,
+      host: options.host,
+      start: options.start,
+      enable,
+      installDeps: options.installDeps,
+      installDepsCommand: options.installDepsCommand,
+      replaceRelease: options.replaceRelease,
+      startupTimeoutMs: options.startupTimeoutMs,
+      homeRoots: options.homeRoots,
+      // This is an existing system installation; unrelated user-scope units
+      // must not block its reset.
+      allowUserConflicts: options.allowUserConflicts ?? true,
+      now: options.now,
+    });
+  }
   const state = readSystemState(paths);
   if (state === null || !state.active) throw new SystemError("not-installed", "no active system installation; run install first");
   const activeComponents = COMPONENTS.filter((component) => systemdActive(host, unitFor(component)));
@@ -3336,59 +3534,66 @@ async function upgradeSystemUnlocked(options: SystemUpgradeOptions): Promise<Sys
   assertManagedPathSafety(paths, isDefaultSystemLayout(paths));
   const source = resolve(options.source);
   if (!existsSync(source)) throw new SystemError("missing-source", `release source does not exist: ${source}`);
-  const stage = stageRelease({ source, paths, host, replaceRelease: options.replaceRelease, now });
-  if (state.currentVersion === stage.version) {
-    throw new SystemError("same-version", `release ${stage.version} is already current; use a different version`);
-  }
-  if (options.installDeps === true) installDependencies(stage.releaseDir, host, options.installDepsCommand ?? "npm");
-  const missing = missingDependencies(stage.releaseDir);
-  if (missing.length > 0) throw new SystemError("missing-dependencies", `production dependencies are missing: ${missing.join(", ")}`);
-  chmodTree(stage.releaseDir, host);
-  runRequired(host, "chown", ["-R", "root:root", stage.releaseDir], "release ownership");
-
-  const oldCurrent = currentReleaseDir(paths);
-  if (oldCurrent === null) throw new SystemError("invalid-state", "current release symlink is missing");
-  const oldPrevious = previousReleaseDir(paths);
-  let backupPath: string | null = null;
-  let beforeSchema: number | null = null;
+  const staged = prepareStagedRelease({
+    source,
+    paths,
+    host,
+    installDeps: options.installDeps,
+    installDepsCommand: options.installDepsCommand,
+  });
   try {
-    stopUnits(host, activeUnits);
-    assertDirectoryStopped(paths.stateDir);
-    const lock = systemLockState(paths);
-    if (lock.live) throw new SystemError("duplicate-runtime", `hub did not stop cleanly; lock remains at ${lock.path}`);
-    const database = hubDatabasePath(paths);
-    if (existsSync(database)) {
-      ensureDirectory(join(paths.stateDir, "backups"), 0o700, true);
-      beforeSchema = databaseSchema(database);
-      backupPath = join(paths.stateDir, "backups", `pre-upgrade-${stage.version}-${newestTimestamp()}.sqlite`);
-      await backupDatabase(database, backupPath, host);
+    if (state.currentVersion === staged.version) {
+      throw new SystemError("same-version", `release ${staged.version} is already current; use a different version`);
     }
-    replaceSymlink(join(paths.prefix, "previous"), oldCurrent, host);
-    replaceSymlink(join(paths.prefix, "current"), stage.releaseDir, host);
-    state.previousVersion = state.currentVersion;
-    state.currentVersion = stage.version;
-    state.releases[stage.version] = {
-      releaseDir: stage.releaseDir,
-      schemaVersion: stage.schemaVersion,
-      installedAt: new Date(now()).toISOString(),
-    };
-    if (backupPath !== null) {
-      state.backups[basename(backupPath)] = {
-        path: backupPath,
-        schemaVersion: beforeSchema,
-        fromSchema: beforeSchema,
-        toSchema: stage.schemaVersion,
-        createdAt: new Date(now()).toISOString(),
-        fromVersion: state.previousVersion ?? undefined,
-        toVersion: stage.version,
+    // Fail before stopping a healthy runtime if the target directory cannot be
+    // replaced under the current --replace-release rules.
+    assertReleaseTargetAvailable(paths, releaseTargetDir(paths, staged.version), options.replaceRelease);
+
+    const oldCurrent = currentReleaseDir(paths);
+    if (oldCurrent === null) throw new SystemError("invalid-state", "current release symlink is missing");
+    const oldPrevious = previousReleaseDir(paths);
+    let backupPath: string | null = null;
+    let beforeSchema: number | null = null;
+    let release: ReleaseStage | null = null;
+    try {
+      stopUnits(host, activeUnits);
+      assertDirectoryStopped(paths.stateDir);
+      const lock = systemLockState(paths);
+      if (lock.live) throw new SystemError("duplicate-runtime", `hub did not stop cleanly; lock remains at ${lock.path}`);
+      const database = hubDatabasePath(paths);
+      if (existsSync(database)) {
+        ensureDirectory(join(paths.stateDir, "backups"), 0o700, true);
+        beforeSchema = databaseSchema(database);
+        backupPath = join(paths.stateDir, "backups", `pre-upgrade-${staged.version}-${newestTimestamp()}.sqlite`);
+        await backupDatabase(database, backupPath, host);
+      }
+      release = commitStagedRelease({ staged, paths, replaceRelease: options.replaceRelease });
+      replaceSymlink(join(paths.prefix, "previous"), oldCurrent, host);
+      replaceSymlink(join(paths.prefix, "current"), release.releaseDir, host);
+      state.previousVersion = state.currentVersion;
+      state.currentVersion = release.version;
+      state.releases[release.version] = {
+        releaseDir: release.releaseDir,
+        schemaVersion: release.schemaVersion,
+        installedAt: new Date(now()).toISOString(),
       };
-    }
-    writeSystemState(paths, state);
-    if (activeComponents.length > 0) {
-      startUnits(host, activeUnits);
-      await verifySystemHealth(paths,state,host,options.startupTimeoutMs ?? 20_000, activeComponents);
-    }
-  } catch (error) {
+      if (backupPath !== null) {
+        state.backups[basename(backupPath)] = {
+          path: backupPath,
+          schemaVersion: beforeSchema,
+          fromSchema: beforeSchema,
+          toSchema: release.schemaVersion,
+          createdAt: new Date(now()).toISOString(),
+          fromVersion: state.previousVersion ?? undefined,
+          toVersion: release.version,
+        };
+      }
+      writeSystemState(paths, state);
+      if (activeComponents.length > 0) {
+        startUnits(host, activeUnits);
+        await verifySystemHealth(paths,state,host,options.startupTimeoutMs ?? 20_000, activeComponents);
+      }
+    } catch (error) {
       await recoverFailedUpgrade({
         paths,
         state,
@@ -3401,30 +3606,42 @@ async function upgradeSystemUnlocked(options: SystemUpgradeOptions): Promise<Sys
         units: activeUnits,
       });
       throw error;
+    }
+    const upgraded = release!;
+    return {
+      operation: "upgrade",
+      ok: true,
+      apply: true,
+      message: `upgraded ${state.previousVersion ?? "previous"} -> ${upgraded.version}`,
+      version: upgraded.version,
+      current: upgraded.releaseDir,
+      previous: oldCurrent,
+      backupPath,
+      state,
+    };
+  } finally {
+    discardStagedRelease(staged);
   }
-  return {
-    operation: "upgrade",
-    ok: true,
-    apply: true,
-    message: `upgraded ${state.previousVersion ?? "previous"} -> ${stage.version}`,
-    version: stage.version,
-    current: stage.releaseDir,
-    previous: oldCurrent,
-    backupPath,
-    state,
-  };
 }
 
 export type SystemRollbackOptions = SystemLifecycleOptions & {
   now?: () => number;
 };
 
+function systemOperationLockPath(paths: SystemPaths): string {
+  // Keep the operation lease outside state/config: a reset or purge may remove
+  // both while this operation still owns the lease.
+  return join(paths.prefix, "run", "operation.lock");
+}
+
 async function withSystemOperation<T>(options: SystemLifecycleOptions, operation: () => Promise<T>): Promise<T> {
   if (!options.apply) return operation();
   const host = options.host ?? createSystemHost();
   assertApply(host);
   const paths = validateSystemPaths(options.paths);
-  const release = acquireProcessLease(join(paths.stateDir,'backups/operation.lock'));
+  ensureDirectory(paths.prefix, 0o755);
+  ensureDirectory(join(paths.prefix, "run"), 0o700, true);
+  const release = acquireProcessLease(systemOperationLockPath(paths));
   try {return await operation();} finally {release();}
 }
 
@@ -3544,6 +3761,8 @@ export type SystemUninstallOptions = SystemLifecycleOptions & {
   confirmPurgeHistory?: boolean;
   removeUsers?: boolean;
   purgeProgram?: boolean;
+  /** Internal reset hook: keep prefix/node for the staged replacement. */
+  preserveNode?: boolean;
   now?: () => number;
 };
 
@@ -3551,8 +3770,9 @@ export function uninstallSystem(options: SystemUninstallOptions = {}): SystemRep
   const host = options.host ?? createSystemHost();
   const now = options.now ?? Date.now;
   const paths = validateSystemPaths(options.paths);
-  const state = readSystemState(paths);
-  const units = [UNIT_NAMES.hub, UNIT_NAMES.collector];
+  const state = systemStateIsLegacy(paths) ? null : readSystemState(paths);
+  const plannedUnits = [...Object.values(UNIT_NAMES), ...LEGACY_UNIT_NAMES];
+  const units = options.apply === true ? unitsForCleanup(paths, host) : plannedUnits;
   const plan: SystemPlan = {
     operation: "uninstall",
     apply: options.apply === true,
@@ -3622,7 +3842,7 @@ export function uninstallSystem(options: SystemUninstallOptions = {}): SystemRep
   removeSymlink(join(paths.prefix, "current"));
   removeSymlink(join(paths.prefix, "previous"));
   rmSync(join(paths.prefix, "releases"), { recursive: true, force: true });
-  rmSync(join(paths.prefix, "node"), { recursive: true, force: true });
+  if (options.preserveNode !== true) rmSync(join(paths.prefix, "node"), { recursive: true, force: true });
   if (state !== null) {
     state.active = false;
     state.power = null;
@@ -4114,6 +4334,7 @@ export async function runSystemCommand(argv: string[]): Promise<number> {
         paths,
         host,
         start: boolValue(values, "start"),
+        enable: boolValue(values, "enable") || undefined,
         installDeps: boolValue(values, "install-deps"),
         installDepsCommand: stringValue(values, "install-deps-command"),
         replaceRelease: boolValue(values, "replace-release"),
@@ -4121,7 +4342,12 @@ export async function runSystemCommand(argv: string[]): Promise<number> {
       });
       if (json) console.log(formatSystemReport(report as unknown as Record<string, unknown>));
       else if (report.plan) console.log(humanPlan(report.plan));
-      else console.log(`${report.message}\nBackup: ${report.backupPath ?? "none"}`);
+      else {
+        // A reset during upgrade can create a fresh owner. Show it once, just
+        // like install, instead of hiding it behind the generic message.
+        printMutationReport(report);
+        console.log(`Backup: ${report.backupPath ?? "none"}`);
+      }
       return 0;
     }
     if (parsed.command === "rollback") {

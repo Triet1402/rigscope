@@ -48,6 +48,7 @@ import {
   validateSystemPaths,
   verifySystemHealth,
   readSystemState,
+  systemStateIsLegacy,
   type SystemHost,
   type SystemPaths,
 } from "../src/cli/system";
@@ -109,7 +110,7 @@ function fakeHost(options: { uid?: number; active?: string[]; enabled?: boolean 
         const stateFile = runOptions?.env?.COLLECTOR_STATE_FILE;
         const destination = runOptions?.env?.COLLECTOR_ENROLL_URL;
         if (stateFile && destination) {
-          write(stateFile, `${JSON.stringify({version:1,collectorId:'connected-collector',destinations:[{url:destination,token:'fixture-connected-token',sharing:{cpu:true,memory:true}}]})}\n`, 0o600);
+          write(stateFile, `${JSON.stringify({collectorId:'connected-collector',destinations:[{url:destination,token:'fixture-connected-token',sharing:{cpu:true,memory:true}}]})}\n`, 0o600);
         }
         return { status: 0, stdout: 'collector enrollment saved\n', stderr: '' };
       }
@@ -136,6 +137,14 @@ function fixtureRelease(root: string, version: string, schemaVersion = 1): strin
   write(join(source, ".next", "static", "app.js"), "// static\n");
   write(join(source, "README.md"), "fixture release\n");
   return source;
+}
+
+function writeUnfinishedState(paths: SystemPaths, options: { keepComponents?: boolean } = {}): Record<string, unknown> {
+  const current = JSON.parse(readFileSync(stateFilePath(paths), "utf8")) as Record<string, unknown>;
+  const legacy: Record<string, unknown> = { ...current, formatVersion: 1 };
+  if (options.keepComponents !== true) delete legacy.components;
+  write(stateFilePath(paths), `${JSON.stringify(legacy, null, 2)}\n`, 0o600);
+  return legacy;
 }
 
 function manifestize(source: string): void {
@@ -588,11 +597,11 @@ test("adoption is copy-only, refuses live owners, and leaves the user installati
   write(join(userState, "collector", "state.json"), `${JSON.stringify({ collectorId: "c1", destinations: [] })}\n`, 0o600);
   write(join(userState, "collector", "outbox", "abc", "outbox.sqlite"), "fixture-outbox\n", 0o600);
   write(join(userState, "config.json"), `${JSON.stringify({
-    version: 1,
     role: "local",
     port: 8081,
     users: [{ username: "owner", passwordHash: "fixture-hash", machineIds: "*", admin: true }],
     collectors: [{ collectorId: "c1", machineId: "m1", token: "fixture-token" }],
+    components: { hub: { enabled: true }, collector: { enabled: true } },
   })}\n`, 0o600);
   write(
     join(home, ".config", "systemd", "user", "rigscope-hub.service"),
@@ -733,7 +742,7 @@ test("hub-only preset installs both runtimes but enables only the hub", async ()
 test("adoption rejects a loose source configuration before copying credentials", async () => {
   const root = freshRoot("loose-adoption");
   const userState = join(root, "user-state");
-  write(join(userState, "config.json"), `${JSON.stringify({ version: 1, role: "collector", port: 8081, users: [], collectors: [] })}\n`, 0o644);
+  write(join(userState, "config.json"), `${JSON.stringify({ role: "collector", port: 8081, users: [], collectors: [], components: { hub: { enabled: false }, collector: { enabled: true } } })}\n`, 0o644);
   await assert.rejects(
     installSystem({
       apply: true,
@@ -767,29 +776,31 @@ test("a group/world-writable system state directory is refused", async () => {
     /group\/world-writable/,
   );
 });
-test("legacy hub-config.json adoption preserves origin, users and remaps the socket", async () => {
-  const root = freshRoot("legacy-adoption");
-  const userState = join(root, "legacy-state");
+test("canonical config adoption preserves origin, users and remaps the socket", async () => {
+  const root = freshRoot("canonical-adoption");
+  const userState = join(root, "canonical-state");
   createDatabase(join(userState, "hub", "telemetry.sqlite"), 1);
   write(join(userState, "hub", "enrollment.json"), '{"collectors":[]}\n', 0o600);
-  write(join(userState, "collector", "state.json"), `${JSON.stringify({ version: 1, collectorId: "legacy", destinations: [] })}\n`, 0o600);
-  const users = JSON.stringify([{ username: "owner", passwordHash: "legacy-hash", machineIds: "*", admin: true }]);
-  write(join(userState, "hub-config.json"), `${JSON.stringify({
-    NODE_ENV: "production",
-    HUB_PUBLIC_ORIGIN: "https://rig.example.com",
-    HUB_SOCKET_PATH: join(userState, "run", "hub.sock"),
-    HUB_STATE_FILE: join(userState, "hub", "enrollment.json"),
-    HUB_BROWSER_USERS: users,
+  write(join(userState, "collector", "state.json"), `${JSON.stringify({ collectorId: "canonical", destinations: [] })}\n`, 0o600);
+  const users = [{ username: "owner", passwordHash: "canonical-hash", machineIds: "*", admin: true }];
+  write(join(userState, "config.json"), `${JSON.stringify({
+    role: "local",
+    port: 8081,
+    origin: "https://rig.example.com",
+    socket: join(userState, "run", "hub.sock"),
+    users,
+    collectors: [],
+    components: { hub: { enabled: true }, collector: { enabled: true } },
   })}\n`, 0o600);
   const paths = pathsFor(root);
   const { report } = await installFixture({ root, version: "1.0.0", adoptFrom: userState, homeRoots: [] });
   assert.equal(report.ok, true);
   const hubEnv = readFileSync(hubEnvPath(paths), "utf8");
   assert.match(hubEnv, /HUB_PUBLIC_ORIGIN="https:\/\/rig\.example\.com"/);
-  assert.match(hubEnv, /HUB_BROWSER_USERS=".*legacy-hash.*"/);
+  assert.match(hubEnv, /HUB_BROWSER_USERS=".*canonical-hash.*"/);
   assert.ok(hubEnv.includes(`HUB_SOCKET_PATH="${join(paths.stateDir, "hub", "run", "hub.sock")}"`));
   assert.equal(hubEnv.includes(userState), false, "the old socket path is not copied as the system listener");
-  assert.equal(readFileSync(join(userState, "hub-config.json"), "utf8").includes("legacy-hash"), true);
+  assert.equal(readFileSync(join(userState, "config.json"), "utf8").includes("canonical-hash"), true);
 });
 test("a tampered release artifact is refused before activation", async () => {
   const root = freshRoot("tamper");
@@ -871,8 +882,8 @@ test('existing root-equivalent service accounts and permission reversal failures
 
 test('collector-only adoption preserves its identity while the independent hub stays running', async () => {
   const root=freshRoot('collector-adoption');const source=join(root,'source');
-  write(join(source,'config.json'),JSON.stringify({version:1,role:'local',port:8081,users:[],collectors:[]}),0o600);
-  write(join(source,'collector/state.json'),JSON.stringify({version:1,collectorId:'preserved-id',destinations:[]}),0o600);
+  write(join(source,'config.json'),JSON.stringify({role:'local',port:8081,users:[],collectors:[],components:{hub:{enabled:true},collector:{enabled:true}}}),0o600);
+  write(join(source,'collector/state.json'),JSON.stringify({collectorId:'preserved-id',destinations:[]}),0o600);
   write(join(source,'hub/telemetry.sqlite.hub.lock'),JSON.stringify({pid:process.pid,instance:'live-hub'}),0o600);
   const {paths}=await installFixture({root,role:'collector',adoptFrom:source});
   assert.equal(JSON.parse(readFileSync(collectorStatePath(paths),'utf8')).collectorId,'preserved-id');
@@ -880,36 +891,232 @@ test('collector-only adoption preserves its identity while the independent hub s
   assert.ok(existsSync(join(source,'hub/telemetry.sqlite.hub.lock')));
 });
 
-test('legacy v1 role state is read-only in status and persists as v2 on a lifecycle mutation', async () => {
-  const root = freshRoot('legacy-state');
+test('canonical system state has no formatVersion and legacy state is reset instead of migrated', async () => {
+  const root = freshRoot('canonical-state');
   const { paths, host } = await installFixture({ root, role: 'hub' });
   const current = JSON.parse(readFileSync(stateFilePath(paths), 'utf8')) as Record<string, unknown>;
-  const legacy: Record<string, unknown> = {
-    ...current,
-    formatVersion: 1,
-    role: 'hub',
-  };
-  delete legacy.components;
-  write(stateFilePath(paths), `${JSON.stringify(legacy, null, 2)}\n`, 0o600);
+  assert.equal(Object.prototype.hasOwnProperty.call(current, 'formatVersion'), false);
+  assert.deepEqual(current.components, { hub: { enabled: true }, collector: { enabled: false } });
+  const state = readSystemState(paths)!;
+  assert.equal(Object.prototype.hasOwnProperty.call(state, 'formatVersion'), false);
+  assert.deepEqual(state.components, { hub: { enabled: true }, collector: { enabled: false } });
 
-  const status = systemStatus({ paths, host: host.host, homeRoots: [] });
-  assert.equal(status.role, 'hub');
-  const components = status.components as Record<string, { enabled: boolean }>;
-  assert.equal(components.hub.enabled, true);
-  assert.equal(components.collector.enabled, false);
-  assert.equal(existsSync(paths.configDir), true);
-  const unchanged = JSON.parse(readFileSync(stateFilePath(paths), 'utf8')) as { formatVersion: number; components?: unknown };
-  assert.equal(unchanged.formatVersion, 1, 'read-only status must not rewrite legacy state');
-  assert.equal(unchanged.components, undefined);
+  // Even a file with canonical components is unfinished when it carries a
+  // format version: reads never silently translate it.
+  const versioned = writeUnfinishedState(paths, { keepComponents: true });
+  assert.deepEqual(versioned.components, { hub: { enabled: true }, collector: { enabled: false } });
+  assert.equal(systemStateIsLegacy(paths), true);
+  assert.throws(() => readSystemState(paths), /obsolete format version/);
 
+  // Missing component state is also unfinished and cannot be read.
+  writeUnfinishedState(paths);
+  assert.equal(systemStateIsLegacy(paths), true);
+  assert.throws(() => readSystemState(paths), /invalid component enabled state/);
+
+  // Reinstalling resets the legacy state rather than migrating it.
+  const { report } = await installFixture({ root, role: 'hub', host });
+  assert.equal(report.ok, true);
+  const reset = JSON.parse(readFileSync(stateFilePath(paths), 'utf8')) as Record<string, unknown>;
+  assert.equal(Object.prototype.hasOwnProperty.call(reset, 'formatVersion'), false);
+  assert.deepEqual(reset.components, { hub: { enabled: true }, collector: { enabled: false } });
+});
+
+test('an invalid replacement leaves unfinished runtime, state and history untouched', async () => {
+  const root = freshRoot('unfinished-invalid');
+  const { paths, host } = await installFixture({ root, role: 'hub' });
+  const database = hubDatabasePath(paths);
+  createDatabase(database, 1);
+  writeUnfinishedState(paths);
+  write(join(paths.unitsDir, 'rigscope.service'), '[Service]\n');
+  host.active.add('rigscope.service');
+  host.active.add('rigscope-hub.service');
+  const before = readFileSync(stateFilePath(paths), 'utf8');
+  const source = fixtureRelease(root, '1.0.0');
+  manifestize(source);
+  write(join(source, 'dist', 'hub.cjs'), '// tampered after manifest\n');
+
+  await assert.rejects(
+    installSystem({
+      apply: true,
+      source,
+      role: 'hub',
+      paths,
+      host: host.host,
+      nodePath: fixtureNode(root),
+      trustedNode: true,
+      homeRoots: [],
+    }),
+    /artifact hash changed|artifact size changed/,
+  );
+  await assert.rejects(
+    upgradeSystem({ apply: true, source, paths, host: host.host }),
+    /artifact hash changed|artifact size changed/,
+  );
+  const unfinished = fixtureRelease(root, '2.0.0');
+  write(join(unfinished, 'package.json'), JSON.stringify({name: 'rigscope', version: '2.0.0', rigscopeConfigVersion: 2}));
+  await assert.rejects(
+    installSystem({apply: true, source: unfinished, role: 'hub', paths, host: host.host, nodePath: fixtureNode(root), trustedNode: true, homeRoots: []}),
+    /unfinished configuration metadata/,
+  );
+
+  assert.equal(readFileSync(stateFilePath(paths), 'utf8'), before, 'unfinished state is not reset');
+  assert.equal(existsSync(database), true, 'history is not removed');
+  assert.ok(existsSync(join(paths.prefix, 'current')), 'the old runtime is still installed');
+  assert.equal(host.active.has('rigscope.service'), true, 'the old combined unit keeps running');
+  assert.equal(host.active.has('rigscope-hub.service'), true, 'the old hub keeps running');
+  assert.equal(readdirSync(paths.prefix).some((name) => name.startsWith('.stage-')), false, 'failed staging is cleaned');
+});
+
+test('invalid HTTPS access options leave unfinished system state untouched', async () => {
+  const root = freshRoot('unfinished-access');
+  const {paths, host} = await installFixture({root, role: 'hub'});
+  createDatabase(hubDatabasePath(paths), 1);
+  writeUnfinishedState(paths);
+  const before = readFileSync(stateFilePath(paths), 'utf8');
+  const source = fixtureRelease(root, '2.0.0');
+  for (const origin of ['http://remote.example.com', 'https://remote.example.com/path']) {
+    await assert.rejects(installSystem({
+      apply: true, source, role: 'hub', paths, host: host.host,
+      nodePath: fixtureNode(root), trustedNode: true, homeRoots: [], origin,
+    }), /HTTPS|origin/i);
+    assert.equal(readFileSync(stateFilePath(paths), 'utf8'), before);
+    assert.equal(existsSync(hubDatabasePath(paths)), true);
+  }
+});
+
+test('a valid install resets unfinished state after staging and removes old units/history', async () => {
+  const root = freshRoot('unfinished-install');
+  const { paths, host } = await installFixture({ root, role: 'hub', version: '1.0.0' });
+  const database = hubDatabasePath(paths);
+  createDatabase(database, 1);
+  write(join(paths.configDir, 'stale.env'), 'old config\n', 0o600);
+  write(join(paths.unitsDir, 'rigscope.service'), '[Service]\n');
+  host.active.add('rigscope.service');
+  host.active.add('rigscope-hub.service');
+  host.active.add('rigscope-collector.service');
+  writeUnfinishedState(paths);
+
+  const { report } = await installFixture({ root, role: 'hub', version: '2.0.0', host });
+  assert.equal(report.ok, true);
+  assert.equal(report.version, '2.0.0');
+  const state = readSystemState(paths)!;
+  assert.equal(Object.prototype.hasOwnProperty.call(state, 'formatVersion'), false);
+  assert.deepEqual(state.components, { hub: { enabled: true }, collector: { enabled: false } });
+  assert.equal(state.currentVersion, '2.0.0');
+  assert.equal(existsSync(database), false, 'unfinished history is removed');
+  assert.equal(existsSync(join(paths.configDir, 'stale.env')), false, 'unfinished configuration is removed');
+  assert.equal(existsSync(join(paths.unitsDir, 'rigscope.service')), false, 'the old combined unit is removed');
+  for (const unit of ['rigscope.service', 'rigscope-hub.service', 'rigscope-collector.service']) {
+    assert.equal(host.active.has(unit), false, `${unit} was stopped before the reset`);
+    assert.ok(host.commands.some((command) => command.join(' ') === `systemctl stop ${unit}`));
+  }
+  const currentPackage = JSON.parse(readFileSync(join(paths.prefix, 'current', 'package.json'), 'utf8')) as { version: string };
+  assert.equal(currentPackage.version, '2.0.0');
+});
+
+test('a valid upgrade resets unfinished state and reports the fresh owner password', async () => {
+  const root = freshRoot('unfinished-upgrade');
+  const { paths, host } = await installFixture({ root, role: 'hub', version: '1.0.0' });
+  const database = hubDatabasePath(paths);
+  createDatabase(database, 1);
+  writeUnfinishedState(paths);
+  host.active.add('rigscope-hub.service');
   host.host.verifyHealth = async () => {};
-  disableSystem({ apply: true, component: 'hub', paths, host: host.host });
-  const migrated = JSON.parse(readFileSync(stateFilePath(paths), 'utf8')) as {
-    formatVersion: number;
-    components: { hub: { enabled: boolean }; collector: { enabled: boolean } };
-  };
-  assert.equal(migrated.formatVersion, 2);
-  assert.deepEqual(migrated.components, { hub: { enabled: false }, collector: { enabled: false } });
+
+  const report = await upgradeSystem({
+    apply: true,
+    source: fixtureRelease(root, '2.0.0'),
+    paths,
+    host: host.host,
+    start: true,
+  });
+  assert.equal(report.version, '2.0.0');
+  assert.equal(typeof report.password, 'string');
+  assert.match(report.password as string, /^[A-Za-z0-9_-]{20,}$/);
+  const state = readSystemState(paths)!;
+  assert.equal(Object.prototype.hasOwnProperty.call(state, 'formatVersion'), false);
+  assert.equal(state.currentVersion, '2.0.0');
+  assert.equal(existsSync(database), false, 'reset history is not retained');
+  assert.equal(host.active.has('rigscope-hub.service'), true);
+  assert.equal(host.enabled.has('rigscope-hub.service'), true);
+  assert.deepEqual(state.components, {hub: {enabled: true}, collector: {enabled: false}});
+});
+
+test('a replacement staged from inside the current release survives the reset with its node executable', async () => {
+  const root = freshRoot('stage-inside-current');
+  const { paths, host } = await installFixture({ root, role: 'hub', version: '1.0.0' });
+  const database = hubDatabasePath(paths);
+  createDatabase(database, 1);
+  host.active.add('rigscope-hub.service');
+  writeUnfinishedState(paths);
+  // The candidate lives below the symlink that the reset removes.
+  const source = fixtureRelease(join(paths.prefix, 'current'), '2.0.0');
+
+  const report = await installSystem({
+    apply: true,
+    source,
+    role: 'hub',
+    paths,
+    host: host.host,
+    nodePath: fixtureNode(root),
+    copyNode: true,
+    homeRoots: [],
+    enable: true,
+  });
+  assert.equal(report.version, '2.0.0');
+  assert.ok(existsSync(join(paths.prefix, 'node', 'node')), 'the copied Node executable survives the reset');
+  assert.equal(readSystemState(paths)?.nodePath, join(paths.prefix, 'node', 'node'));
+  assert.equal(existsSync(join(paths.prefix, 'releases', '1.0.0')), false, 'the old release tree is reset');
+  const currentPackage = JSON.parse(readFileSync(join(paths.prefix, 'current', 'package.json'), 'utf8')) as { version: string };
+  assert.equal(currentPackage.version, '2.0.0');
+  assert.equal(existsSync(database), false);
+});
+
+test('a live runtime lease prevents an unfinished reset and preserves state and history', async () => {
+  const root = freshRoot('unfinished-live');
+  const { paths, host } = await installFixture({ root, role: 'hub', version: '1.0.0' });
+  const database = hubDatabasePath(paths);
+  createDatabase(database, 1);
+  writeUnfinishedState(paths);
+  const before = readFileSync(stateFilePath(paths), 'utf8');
+  write(`${database}.hub.lock`, `${JSON.stringify({ pid: process.pid, instance: 'live' })}\n`, 0o600);
+  host.active.add('rigscope-hub.service');
+
+  await assert.rejects(
+    installSystem({
+      apply: true,
+      source: fixtureRelease(root, '2.0.0'),
+      role: 'hub',
+      paths,
+      host: host.host,
+      nodePath: fixtureNode(root),
+      trustedNode: true,
+      homeRoots: [],
+    }),
+    /live or ambiguous runtime lock/,
+  );
+  assert.equal(readFileSync(stateFilePath(paths), 'utf8'), before, 'a live reset does not remove state');
+  assert.equal(existsSync(database), true, 'a live reset does not remove history');
+  assert.equal(readdirSync(paths.prefix).some((name) => name.startsWith('.stage-')), false, 'the rejected stage is cleaned');
+});
+
+test('canonical adoption preserves independently enabled components', async () => {
+  const root = freshRoot('adoption-components');
+  const source = join(root, 'adopted');
+  createDatabase(join(source, 'hub', 'telemetry.sqlite'), 1);
+  write(join(source, 'config.json'), `${JSON.stringify({
+    role: 'local',
+    port: 8081,
+    users: [],
+    collectors: [],
+    components: { hub: { enabled: true }, collector: { enabled: false } },
+  })}\n`, 0o600);
+  const { report, paths, host } = await installFixture({ root, role: 'local', adoptFrom: source, homeRoots: [] });
+  assert.equal(report.ok, true);
+  const state = readSystemState(paths)!;
+  assert.deepEqual(state.components, { hub: { enabled: true }, collector: { enabled: false } });
+  assert.equal(host.enabled.has('rigscope-hub.service'), true);
+  assert.equal(host.enabled.has('rigscope-collector.service'), false);
 });
 
 test('enable hub creates the owner once and prints its password only in that mutation', async () => {

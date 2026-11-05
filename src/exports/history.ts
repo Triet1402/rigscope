@@ -290,7 +290,6 @@ export function buildHistoryJson(input: HistoryExportInput): string {
   const document = {
     app: "Rigscope",
     kind: "history",
-    version: 1,
     exportedAt: iso(exportedAt),
     scope: {
       description: "Visible series from the loaded History result",

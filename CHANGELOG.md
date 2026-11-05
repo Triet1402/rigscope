@@ -1,5 +1,36 @@
 # Release notes
 
+## 0.1.3
+
+- Replace the unfinished versioned configuration formats with one canonical
+  on-disk shape. `config.json` and `system-install.json` require a `components`
+  object; collector state, `release-state.json`, `install-state.json`, release
+  manifests, package metadata, export documents and hub enrollment state carry
+  no format-version field. Adoption reads only a canonical `config.json`;
+  `hub-config.json` and `collector.json` fallbacks are not read. There is no
+  compatibility reader or in-place migration for the unfinished shapes.
+- Reset pre-canonical installations instead of migrating them. Stop the owned
+  hub and collector completely first: the latest CLI stages and validates the
+  replacement release, then removes the old configuration and history and
+  installs fresh. Run `npx --yes rigscope@latest upgrade` directly, because an
+  older installed CLI cannot stage a package without the removed metadata.
+  `rigscope install` and detected system installs reset the same way. Back up the
+  state directory first if that history must be kept; there is no rollback to the
+  old shape. Reset upgrades retain the installation preset, and interrupted
+  resets cannot reuse the unfinished runtime on retry.
+- Canonical upgrades still retain accounts, history, settings, collector
+  identities and pending samples. Rollback still returns to the retained previous
+  canonical runtime with its paired database backup. Database migration numbers
+  in `schema_migrations` remain independent implementation details.
+- Use one canonical collector endpoint and wire format. Remove collector-version
+  markers, metric-extension negotiation, old-peer payload projection and the old
+  endpoint/outbox migration. Hub and collector must use the canonical contract;
+  reinstall existing collectors when updating an unfinished installation.
+- Add `rigscope configure --port PORT` to change the local hub port while the
+  hub and collector are stopped, updating the colocated collector destination and
+  moving its outbox. `--origin` and `--port` cannot be combined; `--local
+  --port` is allowed.
+
 ## 0.1.2
 
 - Show History downtime shading as soon as the collector disconnects, and stop
@@ -48,5 +79,4 @@ hub federation and clustering are outside this release.
 
 See [installation](docs/installation.md) for hardware limits and
 [scale validation](docs/scale-validation.md) for measured synthetic workloads.
-Internal configuration, database and wire-protocol revisions are independent of
-the application version.
+Database migration numbers are independent of the application version.

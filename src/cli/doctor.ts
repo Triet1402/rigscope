@@ -375,8 +375,8 @@ export async function diagnoseInstallation(
     const statePath = join(dir, 'collector', 'state.json');
     try {
       const raw = readPrivate(statePath);
-      const state = JSON.parse(raw) as { version?: number; collectorId?: string; destinations?: unknown[] };
-      if (state.version !== 1 || typeof state.collectorId !== 'string' || !Array.isArray(state.destinations)) {
+      const state = JSON.parse(raw) as { collectorId?: string; destinations?: unknown[] };
+      if (typeof state.collectorId !== 'string' || !Array.isArray(state.destinations)) {
         throw new Error('collector state is invalid');
       }
       add({

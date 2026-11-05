@@ -25,27 +25,48 @@ test('installation identity survives restarts; independent private destination c
   assert.equal(readFileSync(path, 'utf8'), '{broken');
 });
 
-test('upgrade normalizes saved destination and enrollment URLs without changing private identity or policy', t => {
-  const dir = mkdtempSync(join(tmpdir(), 'rigscope-state-upgrade-'));
+test('versioned collector state is rejected without rewriting the file', t => {
+  const dir = mkdtempSync(join(tmpdir(), 'rigscope-state-versioned-'));
+  t.after(() => rmSync(dir, {recursive: true, force: true}));
+  const path = join(dir, 'collector.json');
+  for (const versionField of ['version', 'formatVersion']) {
+    const original = JSON.stringify({
+      [versionField]: 1,
+      collectorId: 'existing-installation',
+      destinations: [{url: 'wss://hub.example:8081/api/collector/connect', token: 'private-credential'}],
+      pendingEnrollments: [],
+    });
+    writeFileSync(path, original, {mode: 0o600});
+    assert.throws(() => updateInstallation(path), /older versioned shape/);
+    assert.equal(readFileSync(path, 'utf8'), original, `${versionField} state must be left byte-for-byte unchanged`);
+  }
+});
+
+test('saved obsolete endpoints are rejected instead of normalized', t => {
+  const dir = mkdtempSync(join(tmpdir(), 'rigscope-state-obsolete-'));
   t.after(() => rmSync(dir, {recursive: true, force: true}));
   const path = join(dir, 'collector.json');
   const oldUrl = 'wss://hub.example:8081/api/collector/v1/connect';
-  const newUrl = 'wss://hub.example:8081/api/collector/connect';
-  const original = {
-    version: 1, collectorId: 'existing-installation',
-    destinations: [{url: oldUrl, token: 'private-credential', intervalMs: 15000, sharing: {cpu: true, memory: false}}],
-    pendingEnrollments: [{url: oldUrl, requestId: 'pending-request', recoverySecret: 'a'.repeat(32)}],
-  };
-  writeFileSync(path, JSON.stringify(original), {mode: 0o600});
-  const expected = {...original,
-    destinations: original.destinations.map(d => ({...d, url: newUrl})),
-    pendingEnrollments: original.pendingEnrollments.map(p => ({...p, url: newUrl})),
-  };
-  assert.deepEqual(updateInstallation(path), expected);
-  assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), expected);
-  assert.deepEqual(updateInstallation(path), expected, 'migration can run again safely');
-  assert.equal(statSync(path).mode & 0o777, 0o600);
-  assert.equal(parseCollectorConfig({COLLECTOR_HUBS: JSON.stringify(original.destinations)}).destinations[0].url, newUrl);
+  for (const original of [
+    {
+      collectorId: 'existing-installation',
+      destinations: [{url: oldUrl, token: 'private-credential', intervalMs: 15000, sharing: {cpu: true, memory: false}}],
+    },
+    {
+      collectorId: 'existing-installation',
+      destinations: [{url: 'wss://hub.example:8081/api/collector/connect', token: 'private-credential'}],
+      pendingEnrollments: [{url: oldUrl, requestId: 'pending-request', recoverySecret: 'a'.repeat(32)}],
+    },
+  ]) {
+    const raw = JSON.stringify(original);
+    writeFileSync(path, raw, {mode: 0o600});
+    assert.throws(() => updateInstallation(path), /path must be exactly \/api\/collector\/connect/);
+    assert.equal(readFileSync(path, 'utf8'), raw, 'rejected state is never silently rewritten');
+  }
+  assert.throws(
+    () => parseCollectorConfig({COLLECTOR_HUBS: JSON.stringify([{url: oldUrl, token: 'private-credential'}])}),
+    /path must be exactly \/api\/collector\/connect/,
+  );
 });
 
 test('sharing and cadence filters are independent and cannot mutate the shared record', () => {

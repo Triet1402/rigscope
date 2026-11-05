@@ -20,7 +20,6 @@ import { OperationsError } from '../operations/fs';
 import { ensurePrivateDir, writePrivateFile } from '../operations/fs';
 import { validateVersion } from '../operations/fs';
 
-export const RUNTIME_STATE_FORMAT_VERSION = 1;
 export const RUNTIME_STATE_FILE = 'release-state.json';
 
 export type RuntimeBackupRecord = {
@@ -38,7 +37,6 @@ export type RuntimeBackupRecord = {
 };
 
 export type RuntimeState = {
-  formatVersion: 1;
   stateDir: string;
   currentVersion: string | null;
   previousVersion: string | null;
@@ -81,7 +79,6 @@ export function databasePath(dir: string): string {
 
 export function emptyRuntimeState(dir: string): RuntimeState {
   return {
-    formatVersion: RUNTIME_STATE_FORMAT_VERSION,
     stateDir: dir,
     currentVersion: null,
     previousVersion: null,
@@ -112,8 +109,8 @@ export function readRuntimeState(dir: string): RuntimeState | null {
     throw new OperationsError('invalid-state', `runtime state is not an object: ${path}`);
   }
   const record = value as Record<string, unknown>;
-  if (record.formatVersion !== RUNTIME_STATE_FORMAT_VERSION) {
-    throw new OperationsError('invalid-state', `runtime state has an unsupported format: ${path}`);
+  if (Object.hasOwn(record, 'formatVersion') || Object.hasOwn(record, 'version')) {
+    throw new OperationsError('invalid-state', `runtime state must use the canonical shape; reset or reinstall unfinished state: ${path}`);
   }
   if (record.stateDir !== dir) {
     throw new OperationsError('invalid-state', `runtime state belongs to a different installation: ${path}`);
@@ -145,7 +142,6 @@ export function readRuntimeState(dir: string): RuntimeState | null {
     }
   }
   return {
-    formatVersion: 1,
     stateDir: dir,
     currentVersion: typeof record.currentVersion === 'string' ? record.currentVersion : null,
     previousVersion: typeof record.previousVersion === 'string' ? record.previousVersion : null,
@@ -167,12 +163,12 @@ export function writeRuntimeState(dir: string, state: RuntimeState): void {
   const path = runtimeStatePath(dir);
   writePrivateFile(
     path,
-    `${JSON.stringify({ ...state, formatVersion: RUNTIME_STATE_FORMAT_VERSION, stateDir: dir, updatedAt: new Date().toISOString() }, null, 2)}\n`,
+    `${JSON.stringify({ ...state, stateDir: dir, updatedAt: new Date().toISOString() }, null, 2)}\n`,
   );
 }
 
 /** Read the installed package metadata without following a hostile symlink. */
-export function runtimePackage(runtimeDir: string): { name: string; version: string; configVersion: number } {
+export function runtimePackage(runtimeDir: string): { name: string; version: string } {
   const path = join(appRoot(runtimeDir), 'package.json');
   let stat;
   try {
@@ -194,17 +190,10 @@ export function runtimePackage(runtimeDir: string): { name: string; version: str
     throw new OperationsError('runtime-invalid', `runtime package metadata is incomplete: ${path}`);
   }
   validateVersion(record.version);
-  const configVersion = record.rigscopeConfigVersion ?? 1;
-  if (!Number.isSafeInteger(configVersion) || Number(configVersion) < 1) {
-    throw new OperationsError('runtime-invalid', `runtime configuration version is invalid: ${path}`);
+  if (Object.hasOwn(record, 'rigscopeConfigVersion')) {
+    throw new OperationsError('runtime-incompatible', 'Runtime uses unfinished configuration metadata; select a canonical release before resetting or upgrading.');
   }
-  return { name: record.name, version: record.version, configVersion: Number(configVersion) };
-}
-
-export function assertComponentRuntime(runtimeDir: string): void {
-  if (runtimePackage(runtimeDir).configVersion < 2) {
-    throw new OperationsError('runtime-incompatible', 'This runtime predates independent components. Upgrade with the existing installed rigscope upgrade --from <new-archive> command before changing component settings. Rollback requires a release that supports component configuration.');
-  }
+  return { name: record.name, version: record.version };
 }
 
 export function runtimeVersion(runtimeDir: string): string {

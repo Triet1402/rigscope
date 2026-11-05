@@ -274,7 +274,6 @@ export function buildProcessJson(input: ProcessExportInput): string {
   const document = {
     app: "Rigscope",
     kind: "processes",
-    version: 1,
     exportedAt: iso(exportedAt),
     scope: {
       description: "Filtered process snapshot from the loaded view",

@@ -1,19 +1,22 @@
 /**
- * Component lifecycle fixtures: independent units, legacy migration, omitted
- * versus explicit operations, mixed activity across upgrade/rollback and
- * uninstall retention. Nothing here starts a real service.
+ * Component lifecycle fixtures: independent units, incompatible-state reset,
+ * omitted versus explicit operations, mixed activity across upgrade/rollback
+ * and uninstall retention. Nothing here starts a real service.
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { spawn } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { configureComponent, initialize, readSetup, type Component } from '../src/cli/config';
+import { configureComponent, initialize, installationNeedsReset, readSetup, type Component } from '../src/cli/config';
 import { diagnoseInstallation } from '../src/cli/doctor';
 import { startInstallation } from '../src/cli/lifecycle';
+import { resetInstallation } from '../src/cli/reset';
 import {
-  migrateLegacyService,
+  combinedUnitName,
+  combinedUnitPath,
   serviceStatus,
   startupStatus,
   systemctl,
@@ -25,7 +28,7 @@ import {
 import { rollbackInstallation, upgradeInstallation, type ServiceController } from '../src/cli/upgrade';
 import { inspectDatabase, SUPPORTED_SCHEMA_VERSION } from '../src/operations/database';
 import { openHubDatabase } from '../src/hub/storage/db';
-import { emptyRuntimeState, writeRuntimeState } from '../src/cli/release-state';
+import { emptyRuntimeState, runtimeVersion, writeRuntimeState } from '../src/cli/release-state';
 import { acquireProcessLease } from '../src/runtime/process-lease';
 
 const ROOT = mkdtempSync(join(tmpdir(), 'rigscope-component-'));
@@ -41,7 +44,7 @@ function fresh(name: string): string {
 function writeRuntime(runtimeDir: string, version: string): void {
   const app = join(runtimeDir, 'node_modules', 'rigscope');
   for (const directory of ['dist', '.next']) mkdirSync(join(app, directory), { recursive: true, mode: 0o755 });
-  writeFileSync(join(app, 'package.json'), `${JSON.stringify({ name: 'rigscope', version, rigscopeConfigVersion: 2 })}\n`);
+  writeFileSync(join(app, 'package.json'), `${JSON.stringify({ name: 'rigscope', version })}\n`);
   for (const file of ['dist/cli.cjs', 'dist/hub.cjs', 'dist/collector.cjs', 'dist/ops.cjs', '.next/BUILD_ID']) {
     writeFileSync(join(app, file), 'fixture\n');
   }
@@ -138,26 +141,28 @@ function clearLog(system: FakeSystem): void {
   writeFileSync(system.log, '');
 }
 
-function makeLegacyConfig(dir: string, role: 'local' | 'hub' | 'collector'): void {
-  const config = readSetup(dir)!;
-  const value = {
-    version: 1,
-    role,
-    port: config.port,
-    ...(config.origin ? { origin: config.origin, socket: config.socket } : {}),
-    users: config.users,
-    collectors: config.collectors,
-  };
-  writeFileSync(join(dir, 'config.json'), `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+function writeIncompatibleState(dir: string): void {
+  mkdirSync(join(dir, 'collector'), {recursive: true, mode: 0o700});
+  mkdirSync(join(dir, 'hub'), {recursive: true, mode: 0o700});
+  mkdirSync(join(dir, 'backups'), {recursive: true, mode: 0o700});
+  writeFileSync(join(dir, 'config.json'), `${JSON.stringify({
+    version: 2, role: 'local', port: 19215,
+    users: [{username: 'owner', passwordHash: 'old-hash', machineIds: '*', admin: true}],
+    collectors: [{collectorId: 'old-collector', machineId: 'old-machine', token: 'old-token'}],
+    components: {hub: {enabled: true}, collector: {enabled: true}},
+  })}\n`, {mode: 0o600});
+  writeFileSync(join(dir, 'collector', 'state.json'),
+    `${JSON.stringify({version: 2, collectorId: 'old-collector', destinations: []})}\n`, {mode: 0o600});
+  writeFileSync(join(dir, 'release-state.json'),
+    `${JSON.stringify({formatVersion: 1, stateDir: dir})}\n`, {mode: 0o600});
+  writeFileSync(join(dir, 'hub', 'telemetry.sqlite'), 'old history\n', {mode: 0o600});
+  writeFileSync(join(dir, 'backups', 'old.sqlite'), 'old backup\n', {mode: 0o600});
 }
 
-function writeLegacyUnit(dir: string, options: { recognized?: boolean } = {}): string {
+function ownedUnit(dir: string, component?: Component): string {
   const target = join(dir, 'runtime', 'node_modules', 'rigscope', 'bin', 'rigscope.cjs');
-  const command = options.recognized === false ? '/bin/true' : `"${process.execPath}" "${target}" run --state-dir "${dir}"`;
-  const path = unitPath(dir);
-  mkdirSync(unitPath(dir).replace(/\/[^/]+$/, ''), { recursive: true });
-  writeFileSync(path, `[Unit]\nDescription=Rigscope system monitor\n\n[Service]\nExecStart=${command}\n\n[Install]\nWantedBy=default.target\n`, { mode: 0o600 });
-  return path;
+  const suffix = component ? ` run ${component}` : '';
+  return `[Service]\nExecStart=/usr/bin/node ${target}${suffix} --state-dir ${dir}\n`;
 }
 
 test('component units are independent and omitted operations select enabled components only', () => {
@@ -202,142 +207,6 @@ test('component units are independent and omitted operations select enabled comp
     systemctl(dir, 'start');
     calls = systemctlCalls(system);
     assert.deepEqual(calls, [{ command: 'start', unit: unitName(dir, 'hub') }]);
-  } finally {
-    system.restore();
-  }
-});
-
-test('read-only status reports the legacy unit without migrating it', () => {
-  const system = fakeSystem();
-  try {
-    const dir = join(fresh('legacy-read'), 'state');
-    initialize(dir, { role: 'hub', port: '19202' });
-    makeLegacyConfig(dir, 'hub');
-    writeRuntime(join(dir, 'runtime'), '1.0.0');
-    const legacyPath = writeLegacyUnit(dir);
-    setUnits(system, { [unitName(dir)]: { active: true, enabled: true, pid: 1234 } });
-    clearLog(system);
-
-    const hub = serviceStatus(dir, 'hub');
-    assert.equal(hub.active, true);
-    assert.equal(hub.enabled, true);
-    assert.equal(hub.legacy, true);
-    assert.equal(startupStatus(dir, 'hub').enabled, true);
-    assert.equal(existsSync(legacyPath), true, 'status must not remove the legacy unit');
-    assert.equal(existsSync(unitPath(dir, 'hub')), false);
-    const mutations = systemctlCalls(system).filter((call) => ['start', 'stop', 'enable', 'disable', 'daemon-reload'].includes(call.command));
-    assert.deepEqual(mutations, []);
-  } finally {
-    system.restore();
-  }
-});
-
-test('explicit migration stops the legacy unit before starting independent components', () => {
-  const system = fakeSystem();
-  try {
-    const dir = join(fresh('legacy-local'), 'state');
-    initialize(dir, { port: '19203' });
-    makeLegacyConfig(dir, 'local');
-    writeRuntime(join(dir, 'runtime'), '1.0.0');
-    const legacyPath = writeLegacyUnit(dir);
-    setUnits(system, { [unitName(dir)]: { active: true, enabled: true, pid: 1111 } });
-    clearLog(system);
-
-    assert.equal(migrateLegacyService(dir), true);
-    const calls = systemctlCalls(system);
-    const stopLegacy = calls.findIndex((call) => call.command === 'stop' && call.unit === unitName(dir));
-    const startHub = calls.findIndex((call) => call.command === 'start' && call.unit === unitName(dir, 'hub'));
-    const startCollector = calls.findIndex((call) => call.command === 'start' && call.unit === unitName(dir, 'collector'));
-    assert.ok(stopLegacy >= 0);
-    assert.ok(startHub > stopLegacy);
-    assert.ok(startCollector > stopLegacy);
-    assert.equal(existsSync(legacyPath), false);
-    assert.ok(existsSync(unitPath(dir, 'hub')));
-    assert.ok(existsSync(unitPath(dir, 'collector')));
-
-    const states = unitStates(system);
-    assert.equal(states[unitName(dir)]?.active, false);
-    assert.equal(states[unitName(dir, 'hub')]?.active, true);
-    assert.equal(states[unitName(dir, 'collector')]?.active, true);
-    assert.equal(states[unitName(dir, 'hub')]?.enabled, true);
-    assert.equal(states[unitName(dir, 'collector')]?.enabled, true);
-  } finally {
-    system.restore();
-  }
-});
-
-test('migrating a hub preset does not start or enable the disabled collector', () => {
-  const system = fakeSystem();
-  try {
-    const dir = join(fresh('legacy-hub'), 'state');
-    initialize(dir, { role: 'hub', port: '19204' });
-    makeLegacyConfig(dir, 'hub');
-    writeRuntime(join(dir, 'runtime'), '1.0.0');
-    writeLegacyUnit(dir);
-    setUnits(system, { [unitName(dir)]: { active: true, enabled: true } });
-    clearLog(system);
-
-    writeService(dir);
-    const calls = systemctlCalls(system);
-    assert.equal(calls.some((call) => call.unit === unitName(dir, 'collector') && ['start', 'enable'].includes(call.command)), false);
-    assert.ok(calls.some((call) => call.unit === unitName(dir, 'hub') && call.command === 'start'));
-    const states = unitStates(system);
-    assert.equal(states[unitName(dir, 'hub')]?.active, true);
-    assert.equal(states[unitName(dir, 'collector')]?.active ?? false, false);
-  } finally {
-    system.restore();
-  }
-});
-
-test('pre-refactor runtimes keep their working legacy unit until upgraded through the installed CLI', () => {
-  const system = fakeSystem();
-  try {
-    const dir = join(fresh('legacy-old-runtime'), 'state');
-    initialize(dir, {role: 'hub'});
-    makeLegacyConfig(dir, 'hub');
-    writeRuntime(join(dir, 'runtime'), '1.0.0');
-    writeFileSync(join(dir, 'runtime', 'node_modules', 'rigscope', 'package.json'), JSON.stringify({name: 'rigscope', version: '1.0.0'}));
-    const path = writeLegacyUnit(dir);
-    const config = readFileSync(join(dir, 'config.json'), 'utf8');
-    setUnits(system, {[unitName(dir)]: {active: true, enabled: true}});
-    clearLog(system);
-    assert.throws(() => migrateLegacyService(dir), /existing installed rigscope upgrade/);
-    assert.equal(existsSync(path), true);
-    assert.equal(unitStates(system)[unitName(dir)]!.active, true);
-    assert.equal(readFileSync(join(dir, 'config.json'), 'utf8'), config);
-    assert.equal(systemctlCalls(system).length, 0);
-  } finally { system.restore(); }
-});
-
-test('rollback refuses a runtime that cannot read component configuration before stopping services', async () => {
-  const dir = join(fresh('rollback-old-config'), 'state');
-  initialize(dir, {role: 'hub'});
-  writeRuntime(join(dir, 'runtime'), '2.0.0');
-  writeRuntime(join(dir, 'runtime-previous'), '1.0.0');
-  writeFileSync(join(dir, 'runtime-previous', 'node_modules', 'rigscope', 'package.json'), JSON.stringify({name: 'rigscope', version: '1.0.0'}));
-  await assert.rejects(rollbackInstallation({dir}, {
-    service: {
-      status: () => { throw new Error('must not inspect services'); },
-      stop: () => { throw new Error('must not stop services'); },
-      start: () => { throw new Error('must not start services'); },
-    },
-  }), /Rollback requires a release that supports component configuration/);
-  assert.equal(JSON.parse(readFileSync(join(dir, 'runtime', 'node_modules', 'rigscope', 'package.json'), 'utf8')).version, '2.0.0');
-});
-
-test('an unrecognized legacy unit is never replaced or stopped', () => {
-  const system = fakeSystem();
-  try {
-    const dir = join(fresh('legacy-foreign'), 'state');
-    initialize(dir, { role: 'hub', port: '19205' });
-    makeLegacyConfig(dir, 'hub');
-    writeRuntime(join(dir, 'runtime'), '1.0.0');
-    const legacyPath = writeLegacyUnit(dir, { recognized: false });
-    setUnits(system, { [unitName(dir)]: { active: true, enabled: true } });
-    clearLog(system);
-    assert.throws(() => writeService(dir), /unrecognized service file/);
-    assert.equal(existsSync(legacyPath), true);
-    assert.equal(systemctlCalls(system).some((call) => ['start', 'stop', 'disable'].includes(call.command)), false);
   } finally {
     system.restore();
   }
@@ -390,32 +259,6 @@ test('starting an unenrolled collector reports awaiting connection without a res
   }
 });
 
-test('a legacy lifecycle command migrates before acting on only the selected component', () => {
-  const system = fakeSystem();
-  try {
-    const dir = join(fresh('legacy-stop'), 'state');
-    initialize(dir, { port: '19215' });
-    makeLegacyConfig(dir, 'local');
-    writeRuntime(join(dir, 'runtime'), '1.0.0');
-    writeLegacyUnit(dir);
-    setUnits(system, { [unitName(dir)]: { active: true, enabled: true } });
-    clearLog(system);
-
-    systemctl(dir, 'stop', false, 'hub');
-    const calls = systemctlCalls(system);
-    const stopLegacy = calls.findIndex((call) => call.command === 'stop' && call.unit === unitName(dir));
-    const stopHub = calls.findIndex((call) => call.command === 'stop' && call.unit === unitName(dir, 'hub'));
-    assert.ok(stopLegacy >= 0);
-    assert.ok(stopHub > stopLegacy);
-    assert.equal(existsSync(unitPath(dir)), false);
-    const states = unitStates(system);
-    assert.equal(states[unitName(dir, 'hub')]?.active, false);
-    assert.equal(states[unitName(dir, 'collector')]?.active, true, 'the unselected component keeps its prior activity');
-  } finally {
-    system.restore();
-  }
-});
-
 test('uninstall removes component units and runtimes but retains configuration and data', () => {
   const system = fakeSystem();
   try {
@@ -441,6 +284,262 @@ test('uninstall removes component units and runtimes but retains configuration a
     system.restore();
   }
 });
+
+test('uninstall cleanup removes an owned historical combined unit', () => {
+  const system = fakeSystem();
+  try {
+    const dir = join(fresh('uninstall-combined'), 'state');
+    initialize(dir, { port: '19216' });
+    writeRuntime(join(dir, 'runtime'), '1.0.0');
+    mkdirSync(join(system.configHome, 'systemd', 'user'), { recursive: true });
+    writeFileSync(combinedUnitPath(dir), ownedUnit(dir), { mode: 0o600 });
+    setUnits(system, { [combinedUnitName(dir)]: { active: true, enabled: true, pid: 55 } });
+    clearLog(system);
+    uninstallService(dir);
+    assert.equal(existsSync(combinedUnitPath(dir)), false);
+    const calls = systemctlCalls(system);
+    assert.ok(calls.some((call) => call.command === 'stop' && call.unit === combinedUnitName(dir)));
+    assert.ok(calls.some((call) => call.command === 'disable' && call.unit === combinedUnitName(dir)));
+  } finally {
+    system.restore();
+  }
+});
+
+test('reset replaces an incompatible runtime, removes every owned unit, and deletes state', () => {
+  const system = fakeSystem();
+  try {
+    const root = fresh('reset-replace');
+    const dir = join(root, 'state');
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    chmodSync(dir, 0o700);
+    writeIncompatibleState(dir);
+    writeRuntime(join(dir, 'runtime'), '1.0.0');
+    writeFileSync(join(dir, 'runtime', 'old-marker'), 'old\n');
+    mkdirSync(join(system.configHome, 'systemd', 'user'), { recursive: true });
+    writeFileSync(unitPath(dir, 'hub'), ownedUnit(dir, 'hub'), { mode: 0o600 });
+    writeFileSync(combinedUnitPath(dir), ownedUnit(dir), { mode: 0o600 });
+    setUnits(system, {
+      [unitName(dir, 'hub')]: { active: true, enabled: true, pid: 111 },
+      [combinedUnitName(dir)]: { active: true, enabled: true, pid: 222 },
+    });
+    clearLog(system);
+
+    const stage = join(root, 'stage');
+    writeRuntime(stage, '9.9.9');
+    const report = resetInstallation({ dir, stage, setup: { port: '19217' } });
+
+    assert.equal(report.created, true);
+    assert.ok(report.password);
+    assert.equal(runtimeVersion(join(dir, 'runtime')), '9.9.9', 'the staged replacement is active');
+    assert.equal(existsSync(join(dir, 'runtime', 'old-marker')), false, 'the incompatible runtime is removed');
+    assert.equal(existsSync(join(dir, 'runtime-previous')), false, 'an unusable runtime is not retained for rollback');
+    assert.equal(existsSync(stage), false, 'the staged tree became the active runtime');
+
+    assert.equal(existsSync(unitPath(dir, 'hub')), false);
+    assert.equal(existsSync(combinedUnitPath(dir)), false);
+    const calls = systemctlCalls(system);
+    for (const unit of [unitName(dir, 'hub'), combinedUnitName(dir)]) {
+      assert.ok(calls.some((call) => call.command === 'stop' && call.unit === unit), `${unit} is stopped`);
+      assert.ok(calls.some((call) => call.command === 'disable' && call.unit === unit), `${unit} is disabled`);
+    }
+
+    const config = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8')) as Record<string, unknown>;
+    assert.equal('version' in config, false);
+    assert.equal(config.port, 19217);
+    assert.deepEqual(config.components, { hub: { enabled: true }, collector: { enabled: true } });
+    const collector = JSON.parse(readFileSync(join(dir, 'collector', 'state.json'), 'utf8')) as Record<string, unknown>;
+    assert.equal('version' in collector, false);
+    assert.equal((collector.destinations as { url: string }[])[0]!.url, 'ws://127.0.0.1:19217/api/collector/connect');
+    assert.equal(existsSync(join(dir, 'hub', 'telemetry.sqlite')), false, 'old history is removed');
+    assert.equal(existsSync(join(dir, 'backups', 'old.sqlite')), false, 'old backups are removed');
+    assert.equal(installationNeedsReset(dir), false);
+  } finally {
+    system.restore();
+  }
+});
+
+test('reset refuses an invalid replacement before stopping services or deleting state', () => {
+  const system = fakeSystem();
+  try {
+    const root = fresh('reset-invalid');
+    const dir = join(root, 'state');
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    chmodSync(dir, 0o700);
+    writeIncompatibleState(dir);
+    writeRuntime(join(dir, 'runtime'), '1.0.0');
+    mkdirSync(join(system.configHome, 'systemd', 'user'), { recursive: true });
+    writeFileSync(unitPath(dir, 'hub'), ownedUnit(dir, 'hub'), { mode: 0o600 });
+    setUnits(system, { [unitName(dir, 'hub')]: { active: true, enabled: true, pid: 333 } });
+    const configBefore = readFileSync(join(dir, 'config.json'), 'utf8');
+    const collectorBefore = readFileSync(join(dir, 'collector', 'state.json'), 'utf8');
+    clearLog(system);
+
+    const stage = join(root, 'invalid-stage');
+    mkdirSync(stage, { recursive: true, mode: 0o700 });
+    chmodSync(stage, 0o700);
+    assert.throws(() => resetInstallation({ dir, stage, setup: { port: '19218' } }), /replacement runtime|missing/i);
+    writeRuntime(stage, '9.9.9');
+    const metadata = join(stage, 'node_modules', 'rigscope', 'package.json');
+    writeFileSync(metadata, JSON.stringify({name: 'rigscope', version: '9.9.9', rigscopeConfigVersion: 2}));
+    assert.throws(() => resetInstallation({dir, stage}), /canonical|unfinished/i);
+
+    assert.equal(readFileSync(join(dir, 'config.json'), 'utf8'), configBefore);
+    assert.equal(readFileSync(join(dir, 'collector', 'state.json'), 'utf8'), collectorBefore);
+    assert.equal(readFileSync(join(dir, 'hub', 'telemetry.sqlite'), 'utf8'), 'old history\n');
+    assert.equal(runtimeVersion(join(dir, 'runtime')), '1.0.0');
+    assert.ok(existsSync(unitPath(dir, 'hub')));
+    assert.equal(unitStates(system)[unitName(dir, 'hub')]?.active, true, 'services are untouched');
+    assert.deepEqual(systemctlCalls(system), []);
+  } finally {
+    system.restore();
+  }
+});
+
+test('an interrupted reset remains detectable until replacement initialization succeeds', () => {
+  const system = fakeSystem();
+  try {
+    const root = fresh('reset-retry');
+    const dir = join(root, 'state');
+    mkdirSync(dir, {recursive: true, mode: 0o700});
+    writeIncompatibleState(dir);
+    writeRuntime(join(dir, 'runtime'), '1.0.0');
+    const stage = join(root, 'stage');
+    writeRuntime(stage, '9.9.9');
+    assert.throws(() => resetInstallation({dir, stage, setup: {role: 'hub'}}, {
+      activate: () => { throw new Error('activation unavailable'); },
+    }), /activation unavailable/);
+    assert.equal(existsSync(join(dir, 'config.json')), false);
+    assert.equal(installationNeedsReset(dir), true);
+    assert.throws(() => initialize(dir), /older configuration or state shape/);
+    resetInstallation({dir, stage, setup: {role: 'hub'}});
+    assert.equal(runtimeVersion(join(dir, 'runtime')), '9.9.9');
+    assert.equal(installationNeedsReset(dir), false);
+    assert.equal(readSetup(dir)?.role, 'hub');
+  } finally { system.restore(); }
+});
+
+test('reset validates access options before stopping services or deleting state', () => {
+  const system = fakeSystem();
+  try {
+    const root = fresh('reset-access');
+    const dir = join(root, 'state');
+    mkdirSync(dir, {recursive: true, mode: 0o700});
+    writeIncompatibleState(dir);
+    writeRuntime(join(dir, 'runtime'), '1.0.0');
+    const stage = join(root, 'stage');
+    writeRuntime(stage, '9.9.9');
+    const configBefore = readFileSync(join(dir, 'config.json'), 'utf8');
+    for (const setup of [
+      {origin: 'http://remote.example.com'},
+      {origin: 'https://remote.example.com', socket: 'relative.sock'},
+    ]) {
+      assert.throws(() => resetInstallation({dir, stage, setup}), /HTTPS|absolute path/i);
+      assert.equal(readFileSync(join(dir, 'config.json'), 'utf8'), configBefore);
+      assert.equal(readFileSync(join(dir, 'hub', 'telemetry.sqlite'), 'utf8'), 'old history\n');
+      assert.equal(runtimeVersion(join(dir, 'runtime')), '1.0.0');
+      assert.deepEqual(systemctlCalls(system), []);
+    }
+  } finally { system.restore(); }
+});
+
+test('reset refuses a live lease PID whose identity is unrelated', { timeout: 30000 }, async () => {
+  const system = fakeSystem();
+  let unrelated: ReturnType<typeof spawn> | undefined;
+  try {
+    const root = fresh('reset-unrelated');
+    const dir = join(root, 'state');
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    chmodSync(dir, 0o700);
+    mkdirSync(join(dir, 'run'), { recursive: true, mode: 0o700 });
+    chmodSync(join(dir, 'run'), 0o700);
+    writeIncompatibleState(dir);
+    writeRuntime(join(dir, 'runtime'), '1.0.0');
+
+    const unrelatedEnv = { ...process.env };
+    for (const key of ['RIGSCOPE_STATE_DIR', 'RIGSCOPE_HUB_LOCK_FILE', 'HUB_STATE_FILE', 'HUB_DATABASE_PATH', 'COLLECTOR_STATE_FILE', 'COLLECTOR_HEALTH_FILE']) {
+      delete unrelatedEnv[key];
+    }
+    unrelatedEnv.HUB_DATABASE_PATH = join(`${dir}-sibling`, 'hub', 'telemetry.sqlite');
+    unrelated = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', `${dir}-sibling`], {
+      stdio: 'ignore',
+      env: unrelatedEnv,
+    });
+    assert.ok(unrelated.pid);
+    const unrelatedPid = unrelated.pid!;
+    writeFileSync(join(dir, 'run', 'rigscope.lock'), JSON.stringify({ pid: unrelatedPid, instance: 'stale' }), { mode: 0o600 });
+    const configBefore = readFileSync(join(dir, 'config.json'), 'utf8');
+
+    const stage = join(root, 'stage');
+    writeRuntime(stage, '9.9.9');
+    assert.throws(() => resetInstallation({ dir, stage, setup: { port: '19220' } }), /refusing to signal an unrelated process/);
+    assert.equal(readFileSync(join(dir, 'config.json'), 'utf8'), configBefore);
+    assert.equal(readFileSync(join(dir, 'hub', 'telemetry.sqlite'), 'utf8'), 'old history\n');
+    assert.equal(runtimeVersion(join(dir, 'runtime')), '1.0.0');
+    assert.doesNotThrow(() => process.kill(unrelatedPid, 0), 'the unrelated process is left alone');
+  } finally {
+    if (unrelated && unrelated.pid) {
+      try { process.kill(unrelated.pid, 'SIGKILL'); } catch { /* already stopped */ }
+    }
+    system.restore();
+  }
+});
+
+test('reset stops an identified foreground process before deleting its state', { timeout: 30000 }, async () => {
+  const system = fakeSystem();
+  let child: ReturnType<typeof spawn> | undefined;
+  try {
+    const root = fresh('reset-process');
+    const dir = join(root, 'state');
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    chmodSync(dir, 0o700);
+    mkdirSync(join(dir, 'run'), { recursive: true, mode: 0o700 });
+    chmodSync(join(dir, 'run'), 0o700);
+    writeIncompatibleState(dir);
+    writeRuntime(join(dir, 'runtime'), '1.0.0');
+
+    const marker = join(root, 'stopped');
+    const lock = join(dir, 'run', 'rigscope.lock');
+    const script = join(root, 'hold.ts');
+    writeFileSync(script, `
+import { writeFileSync } from 'node:fs';
+import { acquireProcessLease } from ${JSON.stringify(join(import.meta.dirname, '..', 'src', 'runtime', 'process-lease.ts'))};
+acquireProcessLease(process.argv[2]);
+process.on('SIGTERM', () => { writeFileSync(process.argv[3], 'stopped'); process.exit(0); });
+setInterval(() => {}, 1000);
+`);
+    child = spawn(process.execPath, [
+      '--import', 'tsx', script, lock, marker, '--state-dir', dir,
+    ], { stdio: 'ignore', env: { ...process.env } });
+    await waitFor(() => existsSync(lock) && existsSync(dir), 5000);
+
+    const stage = join(root, 'stage');
+    writeRuntime(stage, '9.9.9');
+    const report = resetInstallation({ dir, stage, setup: { port: '19219' } });
+
+    assert.equal(report.created, true);
+    assert.equal(existsSync(marker), true, 'the process received the stop request before state deletion');
+    assert.equal(existsSync(join(dir, 'hub', 'telemetry.sqlite')), false);
+    assert.equal(runtimeVersion(join(dir, 'runtime')), '9.9.9');
+    await new Promise<void>((resolve) => {
+      if (child!.exitCode !== null || child!.signalCode !== null) resolve();
+      else child!.once('exit', () => resolve());
+    });
+    assert.throws(() => process.kill(child!.pid!, 0), /ESRCH/, 'the foreground process is gone');
+  } finally {
+    if (child && child.pid) {
+      try { process.kill(child.pid, 'SIGKILL'); } catch { /* already stopped */ }
+    }
+    system.restore();
+  }
+});
+
+async function waitFor(condition: () => boolean, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error('condition was not reached before the deadline');
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
 
 type ComponentState = { active: boolean; enabled: boolean };
 type ControllerCall = { operation: 'stop' | 'start' | 'setStartup'; component: Component; enabled?: boolean };

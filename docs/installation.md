@@ -27,7 +27,7 @@ install or source checkout is needed. The launcher and services use the installe
 runtime, so removing the npx cache does not break them.
 
 Releases are on [npm](https://www.npmjs.com/package/rigscope). `@latest` selects
-the current stable release; replace it with `@0.1.0` to select that exact version.
+the current stable release; replace it with `@0.1.3` to select that exact version.
 
 ### Installation options
 
@@ -53,7 +53,7 @@ For a downloaded package or one built from source, run from the directory
 containing the archive, or give its absolute path:
 
 ```sh
-npx --yes --package ./rigscope-0.1.0.tgz rigscope install --boot
+npx --yes --package ./rigscope-0.1.3.tgz rigscope install --boot
 ```
 
 The same installation options apply. npm still needs registry access or cached
@@ -79,7 +79,9 @@ role is a preset. Use `rigscope enable collector` to add local collection to a
 hub-only installation.
 
 `uninstall` keeps accounts, history, identity, pending samples and backups.
-Reinstalling reuses that data, including the existing password.
+Reinstalling reuses that data, including the existing password. This retention
+applies to canonical installations. Upgrading from a pre-canonical format resets
+configuration and history; back up the state directory first.
 
 ## Access from another computer
 
@@ -151,6 +153,10 @@ npx --yes rigscope@latest configure \
 npx --yes rigscope@latest install --boot
 ```
 
+For a local port, use `configure --local --port 8086` instead. `configure` cannot
+combine `--origin` and `--port`, because HTTPS mode uses a private Unix socket
+instead of the port.
+
 ## Add machines and hubs
 
 1. On the hub, choose **Add machine**, then **New machine**. Create a connection
@@ -192,7 +198,9 @@ A managed runtime directory cannot be used for `try`.
 
 `rigscope config` prints the private `config.json` path. The installed launcher
 selects its own state directory. `--state-dir PATH` or `RIGSCOPE_STATE_DIR`
-selects another installation, with separate data and service names.
+selects another installation, with separate data and service names. The file has
+one canonical shape: it has no version field, and its required `components` object
+records hub and collector enablement.
 
 Settings include component enablement, port, HTTPS origin and socket. Keep state
 directories at mode `0700` and configuration files at `0600`. Restart after edits.
@@ -216,9 +224,35 @@ It gets `rigscope@latest` from npm, backs up the hub database and replaces the
 managed runtime. Accounts, history and collector settings are retained. Only
 components that were running are restarted; startup settings stay the same.
 
+This retention applies to installations written in the canonical format. On a
+pre-canonical installation, the unfinished format is reset once rather than
+migrated: the latest CLI stages and validates the replacement, stops the hub and
+collector completely, then removes the old configuration and history and
+installs fresh. Back up the state directory first if that history must be kept.
+There is no migration and no rollback to the old format; `install` also resets
+detected pre-canonical state.
+
+An older installed CLI cannot stage a package without the removed configuration
+format metadata. From a pre-canonical installation, run the latest CLI directly:
+
+```sh
+npx --yes rigscope@latest upgrade
+```
+
+Or remove the services and reinstall:
+
+```sh
+rigscope uninstall
+npx --yes rigscope@latest install --boot
+```
+
+Both paths stop the owned services and reset the pre-canonical configuration and
+history. Future upgrades that stay in the canonical format keep accounts, history,
+settings and collector identities.
+
 | Alternative | Command |
 | --- | --- |
-| Select an exact published version | `rigscope upgrade --from rigscope@0.1.0` |
+| Select an exact published version | `rigscope upgrade --from rigscope@0.1.3` |
 | Install a local archive | `rigscope upgrade --from ./rigscope-VERSION.tgz` |
 | Return to the retained previous runtime | `rigscope rollback` |
 
@@ -268,8 +302,9 @@ separate cleanup; do not stop unrelated services.
 Check `rigscope logs hub` and `rigscope doctor`. If port 8081 is already in use,
 identify the listener before stopping anything. For a fresh install, choose an
 unused port with `install --port 8086 --boot`, or use HTTPS mode with a private
-socket. An existing installation refuses a different `--port` during reinstall;
-reinstalling alone does not reset its settings.
+socket. To change a retained installation's local port, stop the hub and any
+collector whose destination moves, run `rigscope configure --port 8086`, then
+start them again. `--origin` and `--port` cannot be combined.
 
 ## Hardware
 

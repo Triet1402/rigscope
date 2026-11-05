@@ -69,42 +69,6 @@ export type CapabilityName = (typeof CAPABILITY_NAMES)[number];
 export const METRIC_FAMILIES = ["cpu", "memory", "swap", "gpus", "disks", "network"] as const;
 export type MetricFamily = (typeof METRIC_FAMILIES)[number];
 
-/**
- * Optional metric-payload extensions negotiated per connection.
- *
- * `bottleneck-v1` means a samples record may carry the optional CPU, memory,
- * disks, filesystem and disk-device fields documented on those types. A
- * collector sends those fields only after a hub advertises this extension in
- * its welcome; otherwise it serializes the base wire shape.
- */
-export const METRIC_EXTENSION_NAMES = ["bottleneck-v1"] as const;
-export type MetricExtension = (typeof METRIC_EXTENSION_NAMES)[number];
-
-/**
- * Collector runtime protocol version advertised in `hello.collectorVersion`.
- *
- * This is the wire-protocol revision, not the npm package version. Legacy
- * hubs accept any bounded collectorVersion string, so this exact marker is
- * how an upgraded collector opts in to optional welcome fields without adding
- * unknown hello keys (which old hubs reject). Bump it only when the
- * hello/welcome contract gains a capability both peers must agree on.
- */
-export const COLLECTOR_PROTOCOL_VERSION = "0.3.0";
-
-/**
- * Exact `hello.collectorVersion` values whose collectors understand the
- * optional `welcome.metricExtensions` field. Unknown or arbitrary newer
- * versions are deliberately not treated as compatible: their wire semantics
- * are unknown, and an old strict collector must never receive an extra
- * welcome key. A new build opts in by being listed here.
- */
-export const METRIC_EXTENSION_PROTOCOL_VERSIONS: readonly string[] = [COLLECTOR_PROTOCOL_VERSION];
-
-/** True only for an exact, known metric-extension-capable collector version. */
-export function collectorSupportsMetricExtensions(collectorVersion: string): boolean {
-  return METRIC_EXTENSION_PROTOCOL_VERSIONS.includes(collectorVersion);
-}
-
 export type CpuMetric =
   | {
       status: "ok";
@@ -199,6 +163,12 @@ export type InterfaceReading =
 
 export type NetworkMetric = { status: "ok"; interfaces: InterfaceReading[] } | Unavailable;
 
+/**
+ * Canonical metrics payload. Every connection carries the full current field
+ * set: optional readings (temperature, power, PSI, inode counts, I/O latency)
+ * are present only when the collector can read them, with no per-connection
+ * negotiation or base-vs-extended downgrade.
+ */
 export type MetricsPayload = {
   cpu: CpuMetric;
   memory: MemoryMetric;
@@ -337,7 +307,6 @@ export type HelloMessage = {
   hostname: string;
   capabilities: CapabilityName[];
   expectedIntervalMs: number;
-  collectorVersion: string;
 };
 export type SamplesMessage = { type: "samples"; mode: "live" | "replay"; records: TelemetryRecord[] };
 export type InventoryMessage = { type: "inventory"; capturedAt: string; inventory: Inventory };
@@ -368,13 +337,6 @@ export type WelcomeMessage = {
   delivery: "durable";
   /** Maximum unacknowledged samples messages the collector may have outstanding. */
   maxInFlightBatches: number;
-  /**
-   * Metric-payload extensions this connection may send. Absent means base wire
-   * shape only. An upgraded hub includes this only for an exact known
-   * extended collector version, so legacy strict collectors keep receiving
-   * the unchanged welcome shape.
-   */
-  metricExtensions?: MetricExtension[];
 };
 export type AckMessage = {
   type: "ack";
@@ -402,7 +364,7 @@ export function parseCollectorMessage(value: unknown): CollectorMessage {
   const o = obj(value, "collector message");
   switch (o.type) {
     case "hello": {
-      keys(o, ["type", "collectorId", "runId", "bootId", "hostname", "capabilities", "expectedIntervalMs", "collectorVersion"], "hello");
+      keys(o, ["type", "collectorId", "runId", "bootId", "hostname", "capabilities", "expectedIntervalMs"], "hello");
       const caps = arr(o.capabilities, "hello.capabilities", 1, CAPABILITY_NAMES.length).map((c) => oneOf(c, CAPABILITY_NAMES, "hello.capabilities"));
       if (new Set(caps).size !== caps.length || !caps.includes("metrics")) throw new Error("invalid hello: capabilities must be unique and include metrics");
       return {
@@ -410,7 +372,6 @@ export function parseCollectorMessage(value: unknown): CollectorMessage {
         collectorId: id(o.collectorId, "collectorId"), runId: id(o.runId, "runId"),
         bootId: text(o.bootId, "bootId", 0, MAX_ID), hostname: text(o.hostname, "hostname", 0, MAX_HOSTNAME),
         capabilities: caps, expectedIntervalMs: int(o.expectedIntervalMs, "expectedIntervalMs", MIN_EXPECTED_INTERVAL_MS, MAX_EXPECTED_INTERVAL_MS),
-        collectorVersion: text(o.collectorVersion, "collectorVersion", 1, 64),
       };
     }
     case "samples": {
@@ -457,16 +418,9 @@ export function parseHubMessage(value: unknown): HubMessage {
   const o = obj(value, "hub message");
   switch (o.type) {
     case "welcome": {
-      keys(o, ["type", "hubRunId", "machineId", "delivery", "maxInFlightBatches"], "welcome", ["metricExtensions"]);
+      keys(o, ["type", "hubRunId", "machineId", "delivery", "maxInFlightBatches"], "welcome");
       if (o.delivery !== "durable") throw new Error(`invalid welcome: unexpected delivery ${desc(o.delivery)}`);
-      const welcome: WelcomeMessage = { type: "welcome", hubRunId: id(o.hubRunId, "hubRunId"), machineId: id(o.machineId, "machineId"), delivery: "durable", maxInFlightBatches: int(o.maxInFlightBatches, "maxInFlightBatches", 1, 64) };
-      if (hasOwn(o, "metricExtensions")) {
-        const extensions = arr(o.metricExtensions, "welcome.metricExtensions", 1, METRIC_EXTENSION_NAMES.length)
-          .map((extension) => oneOf(extension, METRIC_EXTENSION_NAMES, "welcome.metricExtensions"));
-        if (new Set(extensions).size !== extensions.length) throw new Error("invalid welcome: metricExtensions must be unique");
-        welcome.metricExtensions = extensions;
-      }
-      return welcome;
+      return { type: "welcome", hubRunId: id(o.hubRunId, "hubRunId"), machineId: id(o.machineId, "machineId"), delivery: "durable", maxInFlightBatches: int(o.maxInFlightBatches, "maxInFlightBatches", 1, 64) };
     }
     case "ack": {
       keys(o, ["type", "accepted", "rejected"], "ack", ["retryAfterMs"]);
@@ -622,60 +576,6 @@ export function parseMetricsPayload(value: unknown): MetricsPayload {
         }))),
       };
     }),
-  };
-}
-
-/**
- * Projects one durable telemetry record onto the base wire shape negotiated
- * for a connection.
- *
- * When `bottleneck-v1` is present the record is returned unchanged (a new hub
- * preserves every extended field). Otherwise only the optional fields added
- * after the base contract are removed; envelopes, legacy fields, unavailable
- * families, gap records and sharing-policy results are retained. The input
- * object is never mutated: an outbox keeps the enhanced durable record while
- * each connection decides what it may serialize.
- */
-export function projectTelemetryRecordForWire(
-  record: TelemetryRecord,
-  extensions: readonly MetricExtension[],
-): TelemetryRecord {
-  if (extensions.includes("bottleneck-v1") || record.kind !== "metrics") return record;
-  return { ...record, payload: projectMetricsPayloadToBaseWire(record.payload) };
-}
-
-/** Base-shape metrics payload for hubs that did not negotiate `bottleneck-v1`. */
-export function projectMetricsPayloadToBaseWire(payload: MetricsPayload): MetricsPayload {
-  return {
-    cpu: projectCpuToBaseWire(payload.cpu),
-    memory: projectMemoryToBaseWire(payload.memory),
-    swap: payload.swap,
-    gpus: payload.gpus,
-    disks: projectDisksToBaseWire(payload.disks),
-    network: payload.network,
-  };
-}
-
-function projectCpuToBaseWire(cpu: CpuMetric): CpuMetric {
-  if (cpu.status !== "ok") return cpu;
-  return { status: "ok", usagePercent: cpu.usagePercent, perCore: [...cpu.perCore] };
-}
-
-function projectMemoryToBaseWire(memory: MemoryMetric): MemoryMetric {
-  if (memory.status !== "ok") return memory;
-  return { status: "ok", usedBytes: memory.usedBytes, totalBytes: memory.totalBytes };
-}
-
-function projectDisksToBaseWire(disks: DisksMetric): DisksMetric {
-  if (disks.status !== "ok") return disks;
-  return {
-    status: "ok",
-    filesystems: disks.filesystems.map((filesystem) => filesystem.status === "ok"
-      ? { id: filesystem.id, status: "ok", usedBytes: filesystem.usedBytes, totalBytes: filesystem.totalBytes }
-      : filesystem),
-    devices: disks.devices.map((device) => device.status === "ok"
-      ? { id: device.id, status: "ok", readBytesPerSec: device.readBytesPerSec, writeBytesPerSec: device.writeBytesPerSec }
-      : device),
   };
 }
 
@@ -859,7 +759,7 @@ function nullable<T>(v: unknown, parse: (v: unknown) => T): T | null {
 }
 
 /**
- * Optional wire field: absent stays absent (old collectors and stored records),
+ * Optional wire field: absent stays absent (hardware without the reading),
  * a present null means explicitly unavailable, and any other value is parsed.
  */
 function optionalNullable<T>(

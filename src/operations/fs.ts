@@ -305,7 +305,7 @@ export function findHubLock(databasePath: string): string | null {
     `${absolute}.hub.lock`,
     join(parent, "hub.lock"),
     join(parent, "hub.pid"),
-    // `run/hub.lock` is the v2 component supervisor lease, not a database
+    // `run/hub.lock` is the component supervisor lease, not a database
     // lease. Treating it as a hub lock would make an upgrade's own held lease
     // look like a live hub during database backup/restore.
   ];

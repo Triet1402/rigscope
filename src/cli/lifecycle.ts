@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { enabledComponents, readPrivate, readSetup, type Component } from './config';
 import { runtimeVersion } from './release-state';
-import { migrateLegacyService, serviceStatus, systemctl, unitPath } from './services';
+import { serviceStatus, systemctl, unitPath } from './services';
 import { verifyRunningInstallation } from './upgrade';
 import { acquireProcessLease } from '../runtime/process-lease';
 
@@ -16,7 +16,6 @@ export function collectorEnrolled(dir: string): boolean {
 export type StartDependencies = {
   status?: typeof serviceStatus;
   start?: typeof systemctl;
-  migrate?: typeof migrateLegacyService;
   verify?: typeof verifyRunningInstallation;
 };
 
@@ -54,10 +53,6 @@ export async function startInstallation(
   const config = readSetup(dir);
   if (!config) throw new Error('No background service installed. Run rigscope install first.');
   if (!existsSync(join(dir, 'runtime'))) throw new Error('No background service installed. Run rigscope install first.');
-  try { (injected.migrate ?? migrateLegacyService)(dir); }
-  catch (error) {
-    throw new Error(`${error instanceof Error ? error.message : 'Legacy service migration failed.'}`);
-  }
   const selected = component ? [component] : enabledComponents(config);
   if (selected.length === 0) throw new Error('No enabled components. Run rigscope enable hub or rigscope enable collector.');
   for (const target of selected) {

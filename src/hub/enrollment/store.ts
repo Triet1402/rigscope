@@ -35,7 +35,6 @@ import { dirname } from "node:path";
 import { type HubIdentityConfig } from "../config";
 import { acquireProcessLease, ProcessLeaseError } from "../../runtime/process-lease";
 
-const STATE_VERSION = 1;
 const MAX_COLLECTOR_ID_LENGTH = 128;
 const MAX_MACHINE_ID_LENGTH = 128;
 const MAX_TOKEN_LENGTH = 256;
@@ -98,7 +97,6 @@ type PersistedConsumption = {
 };
 
 type PersistedState = {
-  version: number;
   enrollments: PersistedIdentity[];
   consumed: PersistedConsumption[];
 };
@@ -173,7 +171,7 @@ export class EnrollmentStore {
     let releaseLock: () => void;
     try {
       // Shared runtime lease: live owners refuse; proven-dead owners recover;
-      // incomplete/unsafe legacy lock files fail closed for manual inspection.
+      // incomplete/unsafe lock files fail closed for manual inspection.
       releaseLock = acquireProcessLease(`${this.storePath}.lock`);
     } catch (error) {
       if (error instanceof ProcessLeaseError) {
@@ -400,8 +398,8 @@ export class EnrollmentStore {
       throw new EnrollmentStoreError("invalid-state", "state file must be a JSON object");
     }
     const state = parsed as Record<string, unknown>;
-    if (state.version !== STATE_VERSION) {
-      throw new EnrollmentStoreError("invalid-state", "state file has an unsupported version");
+    if (Object.keys(state).some(key => key !== 'enrollments' && key !== 'consumed')) {
+      throw new EnrollmentStoreError('invalid-state', 'state file must use the canonical enrollment shape; reset or reinstall unfinished state');
     }
     if (!Array.isArray(state.enrollments) || !Array.isArray(state.consumed)) {
       throw new EnrollmentStoreError("invalid-state", "state file must contain enrollments and consumed arrays");
@@ -462,7 +460,6 @@ export class EnrollmentStore {
 
   private persistState(next: { enrollments: PersistedIdentity[]; consumed: PersistedConsumption[] }): void {
     const state: PersistedState = {
-      version: STATE_VERSION,
       enrollments: next.enrollments,
       consumed: next.consumed,
     };

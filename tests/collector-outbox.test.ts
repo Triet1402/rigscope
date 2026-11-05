@@ -239,62 +239,76 @@ test('restart recovers pending and in-flight records from a previous run', () =>
   }
 });
 
-test('upgrade recovers old URL queues and decodes metrics and offered gaps for the current wire contract', () => {
-  const stateDir = freshDir('upgrade');
-  const previousDir = outboxDirFor(stateDir, 'wss://hub.example/api/collector/v1/connect');
+test('current-endpoint retained queue replays metrics and offered gaps with privacy reapplied', () => {
+  const stateDir = freshDir('retained');
   const dir = outboxDirFor(stateDir, 'wss://hub.example/api/collector/connect');
-  const oldMetrics = {...metrics(1, T0), protocolVersion: 2};
+  const retained = metrics(1, T0);
   const gap: GapRecord = {...IDENTITY, sequence: 2, capturedAt: iso(T0), kind: 'gap',
     payload: {fromCapturedAt: iso(T0), toCapturedAt: iso(T0), droppedRecords: 3, reason: 'outbox-age'}};
-  const original = DestinationOutbox.open({dir: previousDir, identity: IDENTITY, allocateSequence: () => 100});
-  original.append(oldMetrics);
+  const original = DestinationOutbox.open({dir, identity: IDENTITY, allocateSequence: () => 100});
+  original.append(retained);
   original.close();
-  const db = new DatabaseSync(join(previousDir, 'outbox.sqlite'));
-  const json = JSON.stringify({...gap, protocolVersion: 2});
+  const db = new DatabaseSync(join(dir, 'outbox.sqlite'));
+  const json = JSON.stringify(gap);
   db.prepare("INSERT INTO outbox_records (run_id,sequence,captured_at,kind,state,gap_reason,offered,bytes,json) VALUES (?,?,?,'gap','inflight',?,1,?,?)")
     .run(gap.runId, gap.sequence, gap.capturedAt, gap.payload.reason, Buffer.byteLength(json), json);
   db.close();
 
-  const reopened = DestinationOutbox.open({dir, previousDir, identity: {...IDENTITY, runId: 'run-new'}, allocateSequence: () => 100});
+  const reopened = DestinationOutbox.open({dir, identity: {...IDENTITY, runId: 'run-new'}, allocateSequence: () => 100});
   try {
     const records = replay(reopened);
-    assert.deepEqual(records, [metrics(1, T0), gap]);
+    assert.deepEqual(records, [retained, gap]);
     assert.doesNotThrow(() => parseCollectorMessage({type: 'samples', mode: 'replay', records}));
     const filter = createMetricsFilter({url: 'unused', token: 'private', sharing: {cpu: true, memory: false}}, 5000);
     reopened.filterPending(record => filter(record, 0)!);
     const filtered = replay(reopened);
     assert.doesNotThrow(() => parseCollectorMessage({type: 'samples', mode: 'replay', records: filtered}));
     assert.equal((filtered[0] as MetricsRecord).payload.memory.status, 'unavailable');
-    assert.deepEqual(filtered[1], gap, 'offered gap identities and payloads survive the upgrade');
+    assert.deepEqual(filtered[1], gap, 'offered gap identities and payloads survive a restart');
     reopened.acknowledge(filtered, []);
     assert.equal(reopened.status().pendingRecords, 0);
   } finally { reopened.close(); }
-  const again = DestinationOutbox.open({dir, previousDir, identity: IDENTITY, allocateSequence: () => 100});
-  assert.equal(again.status().pendingRecords, 0, 'a completed migration cannot resurrect acknowledged records');
+  const again = DestinationOutbox.open({dir, identity: IDENTITY, allocateSequence: () => 100});
+  assert.equal(again.status().pendingRecords, 0, 'a completed replay cannot resurrect acknowledged records');
   again.close();
 });
 
-test('upgrade merges old and current URL queues without losing records or duplicating identities', () => {
-  const stateDir = freshDir('upgrade-merge');
-  const previousDir = outboxDirFor(stateDir, 'wss://hub.example/api/collector/v1/connect');
-  const dir = outboxDirFor(stateDir, 'wss://hub.example/api/collector/connect');
-  for (const [location, sequences] of [[previousDir, [1, 2]], [dir, [2, 3]]] as const) {
-    const box = DestinationOutbox.open({dir: location, identity: IDENTITY, allocateSequence: () => 100});
-    for (const sequence of sequences) box.append({...metrics(sequence, T0 + sequence), protocolVersion: 2} as MetricsRecord);
-    box.close();
-  }
-  const migrated = DestinationOutbox.open({dir, previousDir, identity: IDENTITY, allocateSequence: () => 100});
+test('an unfinished outbox schema is rejected without migrating its records', () => {
+  const {dir, outbox} = openOutbox('unfinished-schema');
+  const record = metrics(1, T0);
+  outbox.append(record);
+  outbox.close();
+  const file = join(dir, 'outbox.sqlite');
+  const database = new DatabaseSync(file);
+  database.exec('ALTER TABLE outbox_records DROP COLUMN offered');
+  database.close();
+  assert.throws(() => DestinationOutbox.open({dir, identity: IDENTITY, allocateSequence: () => 100}), /canonical|reset|reinstall/i);
+  const unchanged = new DatabaseSync(file, {readOnly: true});
   try {
-    const records = replay(migrated);
-    assert.deepEqual(records.map(r => r.sequence).sort(), [1, 2, 3]);
-    assert.doesNotThrow(() => parseCollectorMessage({type: 'samples', mode: 'replay', records}));
-    const db = new DatabaseSync(join(dir, 'outbox.sqlite'), {readOnly: true});
-    try {
-      const accounting = db.prepare('SELECT SUM(bytes) AS accounted, SUM(length(CAST(json AS BLOB))) AS actual FROM outbox_records').get()!;
-      assert.equal(migrated.status().pendingBytes, accounting.actual);
-      assert.equal(accounting.accounted, accounting.actual);
-    } finally { db.close(); }
-  } finally { migrated.close(); }
+    assert.equal(unchanged.prepare('PRAGMA table_info(outbox_records)').all().some(column => column.name === 'offered'), false);
+    assert.deepEqual(JSON.parse(String(unchanged.prepare('SELECT json FROM outbox_records').get()!.json)), record);
+  } finally { unchanged.close(); }
+});
+
+test('an obsolete endpoint queue is never merged into the canonical outbox', () => {
+  const stateDir = freshDir('obsolete-queue');
+  const obsoleteDir = outboxDirFor(stateDir, 'wss://hub.example/api/collector/v1/connect');
+  const dir = outboxDirFor(stateDir, 'wss://hub.example/api/collector/connect');
+  const obsolete = DestinationOutbox.open({dir: obsoleteDir, identity: IDENTITY, allocateSequence: () => 100});
+  obsolete.append(metrics(9, T0));
+  obsolete.close();
+  const current = DestinationOutbox.open({dir, identity: IDENTITY, allocateSequence: () => 100});
+  current.append(metrics(1, T0 + 1));
+  current.close();
+
+  const reopened = DestinationOutbox.open({dir, identity: IDENTITY, allocateSequence: () => 100});
+  try {
+    assert.deepEqual(replay(reopened).map(record => record.sequence), [1], 'only the canonical queue is replayed');
+  } finally { reopened.close(); }
+  const untouched = DestinationOutbox.open({dir: obsoleteDir, identity: IDENTITY, allocateSequence: () => 100});
+  try {
+    assert.deepEqual(replay(untouched).map(record => record.sequence), [9], 'obsolete data is left untouched, never merged');
+  } finally { untouched.close(); }
 });
 
 // ---------------------------------------------------------------------------

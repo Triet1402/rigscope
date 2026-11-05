@@ -17,7 +17,7 @@ function command(executable, args, options = {}) {
   return result.stdout;
 }
 async function main() {
-  const archive = path.resolve(process.argv[2] || 'rigscope-0.1.0.tgz');
+  const archive = path.resolve(process.argv[2] || `rigscope-${require('../package.json').version}.tgz`);
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'rigscope-operations-'));
   fs.chmodSync(fixture, 0o700);
   const state = path.join(fixture, 'state');

@@ -51,7 +51,7 @@ async function fixture(t: test.TestContext) {
   const ws = new WebSocket(`ws://127.0.0.1:${port}/api/collector/connect`, { headers: { Authorization: 'Bearer public-test-token' } });
   await once(ws, 'open');
   const hello = once(ws, 'message');
-  ws.send(JSON.stringify({ type: 'hello', ...identity, capabilities: ['metrics', 'inventory', 'processes'], expectedIntervalMs: 5000, collectorVersion: 'test' }));
+  ws.send(JSON.stringify({ type: 'hello', ...identity, capabilities: ['metrics', 'inventory', 'processes'], expectedIntervalMs: 5000 }));
   const welcome = parseHubMessage(JSON.parse(String((await hello)[0])));
   assert.equal(welcome.type, 'welcome');
   t.after(async () => {
@@ -62,7 +62,7 @@ async function fixture(t: test.TestContext) {
   return { dir, db, storage, state, sessions, user, denied, ws, base, headers, interests };
 }
 
-test('v2 commit/ack, lost-ack deduplication, scoped History and replay-only ingestion', async t => {
+test('canonical commit/ack, lost-ack deduplication, scoped History and replay-only ingestion', async t => {
   const f = await fixture(t);
   const sampler = createSyntheticMetricsSampler(identity, { sequence: createSequenceAllocator() });
   const record = sampler.next();

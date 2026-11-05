@@ -184,6 +184,76 @@ test("package archive excludes private/cache/source files and records a verifiab
   assert.ok(statSync(output).size > 0);
 });
 
+test("install state uses the canonical shape and unfinished state requires an explicit reset", async () => {
+  const source = buildBuiltSource("1.4.0");
+  const output = join(freshDir("canonical-state-package"), "release.tar.gz");
+  await packageRelease({ source, output });
+  const root = freshDir("canonical-state-root");
+  const prefix = join(root, "prefix");
+  const stateDir = join(root, "state");
+  const unitsDir = join(root, "units");
+  const database = join(stateDir, "hub", "telemetry.sqlite");
+  const staged = await installRelease({ source: output, prefix, stateDir, unitsDir, database });
+  const statePath = join(stateDir, "install-state.json");
+  const state = JSON.parse(readFileSync(statePath, "utf8")) as Record<string, unknown>;
+
+  assert.equal(Object.prototype.hasOwnProperty.call(state, "formatVersion"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(state, "version"), false);
+  assert.deepEqual(Object.keys(state).sort(), [
+    "backups",
+    "currentVersion",
+    "database",
+    "lastActivation",
+    "prefix",
+    "previousVersion",
+    "releases",
+    "stateDir",
+    "updatedAt",
+  ]);
+  const manifest = readReleaseManifest(staged.releaseDir);
+  assert.equal(Object.prototype.hasOwnProperty.call(manifest, "formatVersion"), false);
+
+  // A state file from the unfinished format is rejected, never rewritten or
+  // silently migrated. The operator must stop the installation and reinstall.
+  writeFileSync(statePath, `${JSON.stringify({ ...state, formatVersion: 1 }, null, 2)}\n`, { mode: 0o600 });
+  const before = readFileSync(statePath, "utf8");
+  await assert.rejects(
+    installRelease({ source: output, prefix, stateDir, unitsDir, database }),
+    /unfinished pre-canonical format.*reset or reinstall/i,
+  );
+  assert.equal(readFileSync(statePath, "utf8"), before, "an unfinished state file is left untouched");
+  addProductionDependencies(staged.releaseDir, manifest);
+  await assert.rejects(
+    activateRelease({ prefix, stateDir, database, version: staged.version, confirmStopped: true }),
+    /unfinished pre-canonical format.*reset or reinstall/i,
+  );
+});
+
+test("install rejects a release manifest from the unfinished format", async () => {
+  const source = buildBuiltSource("1.5.0");
+  const archive = join(freshDir("manifest-version-package"), "release.tar.gz");
+  await packageRelease({ source, output: archive });
+  const extracted = freshDir("manifest-version-extracted");
+  const result = spawnSync("tar", ["-xzf", archive, "-C", extracted], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  const manifest = JSON.parse(readFileSync(join(extracted, "manifest.json"), "utf8")) as ReleaseManifest & {
+    formatVersion?: number;
+  };
+  manifest.formatVersion = 1;
+  writeFileSync(join(extracted, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o644 });
+  const root = freshDir("manifest-version-root");
+  await assert.rejects(
+    installRelease({
+      source: extracted,
+      prefix: join(root, "prefix"),
+      stateDir: join(root, "state"),
+      unitsDir: join(root, "units"),
+      database: join(root, "state", "hub", "telemetry.sqlite"),
+    }),
+    /unfinished pre-canonical format.*repackage/i,
+  );
+});
+
 test("install/package reject a missing built artifact", async () => {
   const source = buildBuiltSource("1.0.1");
   rmSync(join(source, "dist", "ops.cjs"));

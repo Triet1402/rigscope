@@ -1,4 +1,4 @@
-/** Explicit synthetic v2 fixtures and contract validation. */
+/** Explicit synthetic fixtures and canonical contract validation. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -6,7 +6,7 @@ import { parseInventory, parseTelemetryRecord } from '../src/contracts';
 import { createSequenceAllocator } from '../collector/sampling/sequence';
 import { createSyntheticMetricsSampler } from '../collector/sampling/synthetic';
 
-test('synthetic v2 sampler: contract-valid records, inventory and sequence', () => {
+test('synthetic sampler: contract-valid records, inventory and sequence', () => {
   const sampler = createSyntheticMetricsSampler(
     {collectorId: 'mock-collector', runId: 'mock-run', bootId: 'mock-boot'},
     {sequence: createSequenceAllocator(), now: () => 1_700_000_000_000, rand: () => 0.5},
@@ -32,7 +32,7 @@ test('synthetic v2 sampler: contract-valid records, inventory and sequence', () 
   assert.deepEqual(sampler.failures(), []);
 });
 
-test('synthetic v2 sampler: values are stable for a pinned clock and random source', () => {
+test('synthetic sampler: values are stable for a pinned clock and random source', () => {
   const make = () =>
     createSyntheticMetricsSampler(
       {collectorId: 'c', runId: 'r', bootId: 'b'},

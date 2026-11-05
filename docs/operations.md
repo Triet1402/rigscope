@@ -56,6 +56,14 @@ Credentials, collector identities and pending samples are retained.
 `release-state.json` records which backup belongs to each runtime. Upgrading a
 stopped installation leaves it stopped and reports live checks as skipped.
 
+This retention applies to installations written in the canonical format. On a
+pre-canonical installation, a one-time reset stages and validates the replacement
+release, stops the hub and collector completely, then removes
+the old configuration and history and installing the latest release fresh. Back
+up the state directory first if that history must be kept. There is no migration
+to the canonical format and no rollback to that old shape. Future upgrades that
+stay canonical keep accounts, history, settings and collector identities.
+
 ### Roll back
 
 ```sh
@@ -66,9 +74,11 @@ Rollback uses `runtime-previous` and runs the same health checks. If that runtim
 can read the current database, post-upgrade data stays intact. Otherwise it
 restores the paired pre-upgrade backup and saves the replaced database.
 
-A missing compatible backup stops rollback. Older installations without a
-recorded backup can supply a compatible copy with `--backup PATH`. Never point
-old code at a newer database schema.
+A missing compatible backup stops rollback. Installations without a recorded
+backup can supply a compatible copy with `--backup PATH`. Never point old code at
+a newer database schema. Rollback only applies to the previous canonical runtime;
+a pre-canonical installation is reset by upgrade instead, with no path back to
+that format.
 
 ## Password recovery
 
@@ -94,10 +104,14 @@ managed account.
 
 Follow the commands in [Remote access](installation.md#access-from-another-computer).
 `configure` requires a stopped hub and, when changing its local collector's
-destination, a stopped collector.
+destination, a stopped collector. `--origin` changes HTTPS access, `--local`
+returns to loopback, and `--port PORT` changes the local hub port (combine it
+with `--local` when leaving HTTPS). `--origin` and `--port` cannot be combined
+because HTTPS mode uses a private Unix socket instead of the port; `--local
+--port` is allowed.
 
-It validates the HTTPS origin and private socket, backs up the old settings, and
-updates the matching local collector destination. It moves that destination's
+It validates the HTTPS origin, private socket or port, backs up the old settings,
+and updates the matching local collector destination. It moves that destination's
 whole queue directory, including SQLite WAL files. Credentials and other hubs
 stay unchanged. An existing target queue stops the conversion to avoid merging
 or discarding pending records. Accounts and the hub history database are retained.
@@ -173,12 +187,18 @@ The installer creates:
   collector/collector.json      collector identity/enrollment (created by collector)
   outbox/<sha256(url)[0:16]>/   per-destination collector outboxes
   backups/                      private pre-upgrade/pre-activation database copies
-  install-state.json            versions, schema backups, no credentials
+  install-state.json            canonical versions/schema backups, no credentials
   run/                          private runtime directory for a Unix socket
 <units-dir>/
   rigscope-hub.service
   rigscope-collector.service
 ```
+
+`manifest.json` and `install-state.json` have one canonical shape with no
+format-version field. An install state from the unfinished pre-canonical layout
+is rejected rather than migrated or rewritten. Stop the old hub and collector,
+then remove the old prefix and state directory (or reinstall) and stage the latest
+release. There is no rollback to that old layout.
 
 Staging does not switch `current` or start anything. After production
 dependencies are installed and the old hub is stopped, activate explicitly:
@@ -443,14 +463,10 @@ detail remains request-scoped and is never persisted or included in the backup
 set. Separate machines and hubs are upgraded independently. System installations
 use the component controls in [System installation](system-installation.md#system-component-lifecycle).
 
-On upgrade from the previous collector endpoint, saved `/api/collector/v1/connect`
-URLs normalize to `/api/collector/connect` without changing identity, credentials,
-sharing policy or pending enrollment recovery proofs. The collector recovers the
-old URL's outbox before connecting. If both queue directories exist, it imports
-missing record identities in a transaction before removing the old directory.
-Stored metrics and gaps with the previous `protocolVersion: 2` envelope are
-decoded into the current wire format at the outbox boundary; record identities
-and previously offered gap payloads are preserved. Wire parsers remain strict.
+The collector uses only `/api/collector/connect` and the canonical record shape.
+There is no old-endpoint normalization, outbox migration or old-peer payload
+conversion. Reset unfinished installations and re-enroll their collectors;
+canonical upgrades retain their identities, credentials and pending samples.
 
 ## Measurement
 

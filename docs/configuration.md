@@ -3,6 +3,8 @@
 For an installation made with `rigscope install`, use `rigscope config` to find
 its private settings. See [Hub configuration](installation.md#hub-configuration)
 and [Remote access](installation.md#access-from-another-computer) for managed setup.
+The private `config.json` has one canonical shape: it has no version field, and
+its required `components` object records hub and collector enablement.
 
 The environment variables below apply to source development and services that
 run the hub or collector directly. Setting them in your shell does not change

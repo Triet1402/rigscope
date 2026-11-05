@@ -4,14 +4,13 @@ import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import {
-  componentEnabled,
   enabledComponents,
   privateDirectory,
   readSetup,
   type Component,
   type Setup,
 } from './config';
-import { assertComponentRuntime, assertRuntimeArtifacts, runtimeVersion } from './release-state';
+import { assertRuntimeArtifacts, runtimeVersion } from './release-state';
 
 export const COMPONENTS: readonly Component[] = ['hub', 'collector'];
 
@@ -20,15 +19,24 @@ function installationHash(dir: string): string {
 }
 
 /**
- * The unqualified name is the legacy combined supervisor. Component units are
- * independent so one component can be replaced without restarting the other.
+ * Component units are independent so one component can be replaced without
+ * restarting the other.
  */
-export function unitName(dir: string, component?: Component): string {
-  const hash = installationHash(dir);
-  return component ? `rigscope-${hash}-${component}.service` : `rigscope-${hash}.service`;
+export function unitName(dir: string, component: Component): string {
+  return `rigscope-${installationHash(dir)}-${component}.service`;
 }
-export function unitPath(dir: string, component?: Component): string {
+export function unitPath(dir: string, component: Component): string {
   return join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'systemd', 'user', unitName(dir, component));
+}
+/**
+ * Historical combined supervisor unit. Only cleanup reads or removes this name;
+ * current installs always use independent component units.
+ */
+export function combinedUnitName(dir: string): string {
+  return `rigscope-${installationHash(dir)}.service`;
+}
+export function combinedUnitPath(dir: string): string {
+  return join(unitDirectory(), combinedUnitName(dir));
 }
 function unitDirectory(): string {
   return join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'systemd', 'user');
@@ -70,11 +78,6 @@ export function systemctl(dir: string, command: string, quiet = false, component
     try { runSystemctl(null, command, quiet); }
     catch { throw new Error('Could not reload the user service manager. Check systemctl --user daemon-reload.'); }
     return;
-  }
-  if (['start', 'stop', 'restart', 'enable', 'disable'].includes(command) && existsSync(legacyUnitPath(dir))) {
-    // A lifecycle command is an explicit mutation, so this is a safe point to
-    // convert the recognized combined unit. Read-only status never reaches it.
-    migrateLegacyService(dir);
   }
   const targets = selectedUnits(dir, component);
   if (targets.length === 0) return;
@@ -131,28 +134,6 @@ function inspectedUnit(unit: string, installed: boolean, component?: Component):
   }
 }
 
-function legacyUnitPath(dir: string): string {
-  return unitPath(dir);
-}
-
-function legacyUnitStatus(dir: string, component: Component): ServiceStatus | null {
-  const legacy = legacyUnitPath(dir);
-  if (!existsSync(legacy)) return null;
-  const config = readConfig(dir);
-  const covers = config ? componentEnabled(config, component) : true;
-  const status = inspectedUnit(unitName(dir), true);
-  return {
-    ...status,
-    installed: true,
-    active: covers && status.active,
-    enabled: covers && status.enabled,
-    subState: covers ? status.subState : 'disabled',
-    execMainPid: covers ? status.execMainPid : null,
-    component,
-    legacy: true,
-  };
-}
-
 export function serviceActive(dir: string, component?: Component): boolean {
   return serviceStatus(dir, component).active;
 }
@@ -167,22 +148,17 @@ export type ServiceStatus = {
   execMainPid: number | null;
   error: string | null;
   component?: Component;
-  /** True when this state is represented by the old combined unit. */
-  legacy?: boolean;
   components?: Partial<Record<Component, ServiceStatus>>;
 };
 
 /**
  * Read-only service state. systemd is optional: a foreground installation or
  * a test environment without a user manager reports inactive instead of
- * crashing the command. Omitted component aggregates enabled components; it
- * never migrates or rewrites units.
+ * crashing the command. Omitted component aggregates enabled components.
  */
 export function serviceStatus(dir: string, component?: Component): ServiceStatus {
   if (component) {
-    const path = unitPath(dir, component);
-    const status = inspectedUnit(unitName(dir, component), existsSync(path), component);
-    return status.installed ? status : legacyUnitStatus(dir, component) ?? status;
+    return inspectedUnit(unitName(dir, component), existsSync(unitPath(dir, component)), component);
   }
   const components: Partial<Record<Component, ServiceStatus>> = {};
   for (const selected of COMPONENTS) components[selected] = serviceStatus(dir, selected);
@@ -190,7 +166,7 @@ export function serviceStatus(dir: string, component?: Component): ServiceStatus
   const activeStatuses = enabledComponentsList.map(selected => components[selected]!).filter(Boolean);
   if (activeStatuses.length === 0) {
     return {
-      unit: unitName(dir),
+      unit: '',
       installed: false,
       active: false,
       enabled: false,
@@ -200,11 +176,9 @@ export function serviceStatus(dir: string, component?: Component): ServiceStatus
       components,
     };
   }
-  const legacyOnly = activeStatuses.every(status => status.legacy === true);
-  const unit = legacyOnly ? unitName(dir) : activeStatuses.map(status => status.unit).join(' ');
   const errors = activeStatuses.map(status => status.error).filter((value): value is string => value !== null);
   return {
-    unit,
+    unit: activeStatuses.map(status => status.unit).join(' '),
     installed: activeStatuses.every(status => status.installed),
     active: activeStatuses.some(status => status.active),
     enabled: activeStatuses.every(status => status.enabled === true),
@@ -252,47 +226,6 @@ function writeComponentUnit(dir: string, component: Component): void {
 }
 
 /**
- * Convert a recognized legacy combined unit into independent component units.
- * This is a lifecycle mutation: read-only status never calls it. The old
- * supervisor is stopped before any component starts, so migration cannot
- * leave duplicate hub/collector processes. Prior activity and startup flags
- * are applied to the enabled components.
- */
-export function migrateLegacyService(dir: string): boolean {
-  const legacy = legacyUnitPath(dir);
-  if (!existsSync(legacy)) return false;
-  if (!unitOwned(legacy, dir)) {
-    throw new Error('Refusing to replace an unrecognized service file; inspect it first.');
-  }
-  // Older runtimes cannot parse `run hub|collector`. Keep the working
-  // supervisor intact until its existing CLI has upgraded the package.
-  assertComponentRuntime(join(dir, 'runtime'));
-  // Validate every destination before removing the working legacy unit.
-  for (const component of COMPONENTS) assertUnitReplaceable(unitPath(dir, component), dir);
-  const previous = inspectedUnit(unitName(dir), true);
-  if (previous.active) {
-    try { runSystemctl(unitName(dir), 'stop', true); }
-    catch { throw new Error(`Could not stop the legacy user service. Check systemctl --user status ${unitName(dir)}.`); }
-  }
-  if (previous.enabled) {
-    try { runSystemctl(unitName(dir), 'disable', true); }
-    catch { throw new Error(`Could not disable the legacy user service. Check systemctl --user status ${unitName(dir)}.`); }
-  }
-  rmSync(legacy);
-  runSystemctl(null, 'daemon-reload', true);
-  for (const component of COMPONENTS) writeComponentUnit(dir, component);
-  runSystemctl(null, 'daemon-reload', true);
-  const enabled = fallbackComponents(dir);
-  for (const component of enabled) {
-    runSystemctl(unitName(dir, component), previous.enabled ? 'enable' : 'disable', true);
-  }
-  if (previous.active) {
-    for (const component of enabled) runSystemctl(unitName(dir, component), 'start', true);
-  }
-  return true;
-}
-
-/**
  * Write component units. With no component, both units are written because one
  * package always contains the complete hub+collector runtime; enabled state is
  * what selects behavior. An explicit component writes only that unit.
@@ -300,7 +233,6 @@ export function migrateLegacyService(dir: string): boolean {
 export function writeService(dir: string, component?: Component): void {
   const config = readSetup(dir);
   if (!config) throw new Error('No installation found. Run rigscope install first.');
-  migrateLegacyService(dir);
   for (const target of component ? [component] : COMPONENTS) writeComponentUnit(dir, target);
   runSystemctl(null, 'daemon-reload');
 }
@@ -348,18 +280,12 @@ export function installAlias(dir: string, sourceRoot?: string): string {
 export type StartupStatus = {
   enabled: boolean;
   linger: boolean;
-  legacy?: boolean;
-  components?: Partial<Record<Component, {enabled: boolean; legacy?: boolean}>>;
+  components?: Partial<Record<Component, {enabled: boolean}>>;
 };
 
-function componentStartup(dir: string, component: Component): {enabled: boolean; legacy?: boolean} {
-  if (existsSync(unitPath(dir, component))) return {enabled: unitEnabled(unitName(dir, component))};
-  if (existsSync(legacyUnitPath(dir))) {
-    const config = readConfig(dir);
-    const covers = config ? componentEnabled(config, component) : true;
-    return {enabled: covers && unitEnabled(unitName(dir)), legacy: true};
-  }
-  return {enabled: false};
+function componentStartup(dir: string, component: Component): {enabled: boolean} {
+  if (!existsSync(unitPath(dir, component))) return {enabled: false};
+  return {enabled: unitEnabled(unitName(dir, component))};
 }
 
 export function startupStatus(dir: string, component?: Component): StartupStatus {
@@ -368,7 +294,7 @@ export function startupStatus(dir: string, component?: Component): StartupStatus
     linger = execFileSync('loginctl', ['show-user', String(process.getuid?.()), '--property=Linger', '--value'], {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 5_000}).trim() === 'yes';
   } catch { /* no login manager */ }
   if (component) return {...componentStartup(dir, component), linger};
-  const components: Partial<Record<Component, {enabled: boolean; legacy?: boolean}>> = {};
+  const components: Partial<Record<Component, {enabled: boolean}>> = {};
   for (const selected of COMPONENTS) components[selected] = componentStartup(dir, selected);
   const enabledComponentsList = fallbackComponents(dir);
   const selectedStatuses = enabledComponentsList.map(selected => components[selected]!);
@@ -389,13 +315,48 @@ export function enableBootStartup(): void {
 
 export function showLogs(dir: string, follow = false, component?: Component): void {
   const targets = component ? [component] : fallbackComponents(dir);
-  const componentUnits = targets.map(target => unitName(dir, target));
-  // Before an explicit migration the legacy combined unit is still the only
-  // source of logs; reading them must not rewrite anything.
-  const selected = !component && componentUnits.every(unit => !existsSync(join(unitDirectory(), unit))) && existsSync(legacyUnitPath(dir))
-    ? [unitName(dir)]
-    : componentUnits.length > 0 ? componentUnits : [unitName(dir)];
-  execFileSync('journalctl', ['--user', ...selected.flatMap(unit => ['--unit', unit]), '--lines=100', '--no-pager', ...(follow ? ['--follow'] : [])], {stdio: 'inherit'});
+  if (targets.length === 0) throw new Error('No enabled components. Run rigscope enable hub or rigscope enable collector.');
+  const units = targets.map(target => unitName(dir, target));
+  execFileSync('journalctl', ['--user', ...units.flatMap(unit => ['--unit', unit]), '--lines=100', '--no-pager', ...(follow ? ['--follow'] : [])], {stdio: 'inherit'});
+}
+
+type OwnedUnit = { unit: string; path: string; component?: Component };
+
+function ownedUnits(dir: string): OwnedUnit[] {
+  return [
+    ...COMPONENTS.map(component => ({
+      component,
+      unit: unitName(dir, component),
+      path: unitPath(dir, component),
+    })),
+    // The combined supervisor predates independent component units. It is
+    // never written again, but cleanup must stop and remove it.
+    {unit: combinedUnitName(dir), path: combinedUnitPath(dir)},
+  ];
+}
+
+/**
+ * Stop and remove every unit this installation owns, including the historical
+ * combined unit. Every present file is ownership-checked before any is stopped
+ * so an unrecognized unit cannot be destroyed by a reset or uninstall.
+ */
+export function stopAndRemoveOwnedUnits(dir: string): string[] {
+  const targets = ownedUnits(dir);
+  const present = targets.filter(target => existsSync(target.path));
+  for (const target of present) {
+    if (!unitOwned(target.path, dir)) throw new Error('Refusing to remove an unrecognized service file; inspect it first.');
+  }
+  const removed: string[] = [];
+  for (const target of present) {
+    try { runSystemctl(target.unit, 'stop', false); }
+    catch { throw new Error(`Could not stop the user service. Check systemctl --user status ${target.unit}.`); }
+    try { runSystemctl(target.unit, 'disable', false); }
+    catch { throw new Error(`Could not disable the user service. Check systemctl --user status ${target.unit}.`); }
+    rmSync(target.path);
+    removed.push(target.unit);
+  }
+  if (removed.length > 0) runSystemctl(null, 'daemon-reload', false);
+  return removed;
 }
 
 /**
@@ -403,20 +364,7 @@ export function showLogs(dir: string, follow = false, component?: Component): vo
  * trees. Configuration, history, backups and enrollment state are retained.
  */
 export function uninstallService(dir: string): void {
-  const units = [...COMPONENTS.map(component => unitPath(dir, component)), legacyUnitPath(dir)];
-  const present = [...new Set(units)].filter(path => existsSync(path));
-  for (const path of present) {
-    if (!unitOwned(path, dir)) throw new Error('Refusing to remove an unrecognized service file; inspect it first.');
-  }
-  const removed: string[] = [];
-  for (const path of present) {
-    const unit = path.slice(path.lastIndexOf('/') + 1);
-    try { runSystemctl(unit, 'stop', false); } catch { throw new Error(`Could not stop the user service. Check systemctl --user status ${unit}.`); }
-    try { runSystemctl(unit, 'disable', false); } catch { throw new Error(`Could not disable the user service. Check systemctl --user status ${unit}.`); }
-    rmSync(path);
-    removed.push(unit);
-  }
-  if (removed.length > 0) runSystemctl(null, 'daemon-reload', false);
+  stopAndRemoveOwnedUnits(dir);
   const alias = join(process.env.XDG_BIN_HOME || join(homedir(), '.local', 'bin'), 'rigscope');
   const target = runtimeTarget(dir);
   try {
@@ -426,7 +374,7 @@ export function uninstallService(dir: string): void {
       (stat.isFile() && readFileSync(alias, 'utf8').split('\n')[1] === aliasMarker(dir))
     )) rmSync(alias);
   } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-  for (const tree of ['runtime', 'runtime-previous', 'runtime-next', 'runtime-rollback-tmp']) {
+  for (const tree of ['runtime', 'runtime-previous', 'runtime-next', 'runtime-rollback-tmp', 'runtime-remove-tmp']) {
     rmSync(join(dir, tree), {recursive: true, force: true});
   }
 }
@@ -460,6 +408,32 @@ export function activatePackage(dir: string, stage: string): void {
   if (existsSync(runtime)) renameSync(runtime, previous);
   try { renameSync(stage, runtime); }
   catch (error) { if (existsSync(previous) && !existsSync(runtime)) renameSync(previous, runtime); throw error; }
+}
+
+/**
+ * Activate a validated replacement after an incompatible installation reset.
+ * The incompatible runtime is removed rather than kept as a rollback target
+ * the old configuration can never use. The staged tree is never deleted before
+ * the rename succeeds.
+ */
+export function activateReplacementRuntime(dir: string, stage: string): void {
+  const runtime = join(dir, 'runtime');
+  const previous = join(dir, 'runtime-previous');
+  const rollbackTemporary = join(dir, 'runtime-rollback-tmp');
+  const removalTemporary = join(dir, 'runtime-remove-tmp');
+  assertRuntimeArtifacts(stage, 'replacement runtime');
+  runtimeVersion(stage);
+  rmSync(previous, {recursive: true, force: true});
+  rmSync(rollbackTemporary, {recursive: true, force: true});
+  rmSync(removalTemporary, {recursive: true, force: true});
+  if (existsSync(runtime)) renameSync(runtime, removalTemporary);
+  try {
+    renameSync(stage, runtime);
+  } catch (error) {
+    if (!existsSync(runtime) && existsSync(removalTemporary)) renameSync(removalTemporary, runtime);
+    throw error;
+  }
+  rmSync(removalTemporary, {recursive: true, force: true});
 }
 /** Swap active and previous runtimes without deleting either tree. */
 export function swapRuntimes(dir: string): void {

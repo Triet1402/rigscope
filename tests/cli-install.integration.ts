@@ -117,7 +117,7 @@ test('release installs in the background, survives bootstrap removal, enrolls, a
         try { run('systemctl', ['--user', 'disable', unit(dir, component)], 15000); } catch { /* absent */ }
         rmSync(unitPath(dir, component), {force: true});
       }
-      rmSync(unitPath(dir), {force: true});
+      rmSync(unitPath(dir, 'hub'), {force: true});
     }
     run('systemctl', ['--user', 'daemon-reload']);
     rmSync(root, {recursive: true, force: true});

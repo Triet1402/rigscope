@@ -44,10 +44,20 @@ function fresh(name: string): string {
   return path;
 }
 
+test('runtime state refuses unfinished format fields without rewriting them', () => {
+  const dir = fresh('runtime-state-canonical');
+  for (const field of ['version', 'formatVersion']) {
+    const raw = JSON.stringify({...emptyRuntimeState(dir), [field]: 1});
+    writeFileSync(join(dir, 'release-state.json'), raw, {mode: 0o600});
+    assert.throws(() => readRuntimeState(dir), /canonical|unfinished/i);
+    assert.equal(readFileSync(join(dir, 'release-state.json'), 'utf8'), raw);
+  }
+});
+
 function writeRuntime(runtimeDir: string, version: string): void {
   const app = join(runtimeDir, 'node_modules', 'rigscope');
   for (const directory of ['dist', '.next']) mkdirSync(join(app, directory), { recursive: true, mode: 0o755 });
-  writeFileSync(join(app, 'package.json'), `${JSON.stringify({ name: 'rigscope', version, rigscopeConfigVersion: 2 })}\n`);
+  writeFileSync(join(app, 'package.json'), `${JSON.stringify({ name: 'rigscope', version })}\n`);
   for (const file of ['dist/cli.cjs', 'dist/hub.cjs', 'dist/collector.cjs', 'dist/ops.cjs', '.next/BUILD_ID']) {
     writeFileSync(join(app, file), 'fixture\n');
   }

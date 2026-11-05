@@ -20,7 +20,7 @@ test('packaged administration preserves scoped authorization and revokes existin
   t.after(() => socket.terminate()); await once(socket, 'open');
   const welcome = once(socket, 'message');
   socket.send(JSON.stringify({ type: 'hello', collectorId: creds.collectorId, runId: 'admin-test-run', bootId: 'boot',
-    hostname: 'synthetic-admin-test', capabilities: ['metrics'], expectedIntervalMs: 5000, collectorVersion: 'test' }));
+    hostname: 'synthetic-admin-test', capabilities: ['metrics'], expectedIntervalMs: 5000 }));
   await welcome;
   const revoked = once(socket, 'close');
   const revoke = await fetch(hub.baseUrl + '/api/admin/collectors', { method: 'POST', headers,

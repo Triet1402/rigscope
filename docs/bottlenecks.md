@@ -38,12 +38,10 @@ counter near its ceiling. Monitoring continues when an optional sensor fails.
 The new fields belong to the existing CPU, memory and disks sharing families.
 Withholding a family withholds its bottleneck fields for that destination too.
 
-Enhanced fields are negotiated independently for each hub. Upgraded collectors
-advertise wire revision `0.3.0`; upgraded hubs opt in with `bottleneck-v1` in their
-welcome. Older hubs receive the original metric shape, including replay. Older
-collectors receive the original welcome shape. Upgrade the hub and collector to
-see enhanced readings; an independent older destination continues receiving its
-existing metrics. Projection affects transmission, not the durable outbox record.
+Enhanced fields are part of the canonical metrics contract and follow the
+destination's sharing policy for live and replayed records. There is no
+old-peer negotiation or payload projection. Update the hub and collector
+together when replacing an unfinished installation.
 
 Kernel references: [PSI](https://docs.kernel.org/accounting/psi.html),
 [powercap](https://docs.kernel.org/power/powercap/powercap.html), and

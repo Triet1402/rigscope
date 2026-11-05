@@ -25,15 +25,15 @@ test('bare CLI shows status without creating state, starting a server, or waitin
   } finally { rmSync(root, {recursive: true, force: true}); }
 });
 
-test('status reports components from a version 1 config without rewriting it', () => {
-  const root = mkdtempSync(join(tmpdir(), 'rigscope-status-v1-'));
+test('status reports components from a canonical config without rewriting it', () => {
+  const root = mkdtempSync(join(tmpdir(), 'rigscope-status-canonical-'));
   const dir = join(root, 'state');
   try {
     mkdirSync(dir, {mode: 0o700});
-    const legacy = {version: 1, role: 'local', port: 9138,
+    const canonical = {role: 'local', port: 9138,
       users: [{username: 'owner', passwordHash: hashPassword('retained-password'), machineIds: '*', admin: true}],
-      collectors: []};
-    const raw = `${JSON.stringify(legacy, null, 2)}\n`;
+      collectors: [], components: {hub: {enabled: true}, collector: {enabled: true}}};
+    const raw = `${JSON.stringify(canonical, null, 2)}\n`;
     writeFileSync(join(dir, 'config.json'), raw, {mode: 0o600});
     const output = execFileSync(process.execPath, [cli, 'status', '--state-dir', dir], {
       encoding: 'utf8', timeout: 5000, env: {...process.env, XDG_CONFIG_HOME: join(root, 'config')},

@@ -9,9 +9,8 @@
  *   run supersedes only via authenticated hello),
  * - an authenticated hello advertises this destination's delivery cadence
  *   (bounded expectedIntervalMs),
- * - metric-payload extensions are opt-in per connection: an exact known
- *   extended collector version receives the optional `metricExtensions`
- *   welcome key, while legacy collectors keep the unchanged welcome shape,
+ * - the hello/welcome exchange is unversioned: the hub always sends the single
+ *   canonical welcome shape and accepts the canonical full metrics payload,
  * - frames, batch size, message rate, socket output queues and idle
  *   connections (ping/pong) are bounded,
  * - Sample/inventory acceptance, in-flight batch bounds, commit-to-live
@@ -27,8 +26,6 @@ import { WebSocket, WebSocketServer, type RawData } from "ws";
 import {
   MAX_MESSAGE_BYTES,
   MAX_DETAIL_BYTES,
-  METRIC_EXTENSION_NAMES,
-  collectorSupportsMetricExtensions,
   parseCollectorMessage,
   type AckMessage,
   type CollectorMessage,
@@ -347,12 +344,6 @@ export class CollectorGateway {
       delivery: "durable",
       maxInFlightBatches: MAX_IN_FLIGHT_SAMPLE_BATCHES,
     };
-    // Opt-in negotiation without new hello fields: only an exact known
-    // extended collector version receives the optional welcome key. Legacy
-    // strict collectors keep the unchanged welcome shape.
-    if (collectorSupportsMetricExtensions(hello.collectorVersion)) {
-      welcome.metricExtensions = [...METRIC_EXTENSION_NAMES];
-    }
     this.send(connection, JSON.stringify(welcome));
   }
 

@@ -24,7 +24,6 @@ import { componentEnabled, enabledComponents, readPrivate, readSetup, type Compo
 import { healthTarget, waitForHealth, type HealthTarget, type WaitForHealthResult } from './health';
 import {
   activatePackage,
-  migrateLegacyService,
   serviceStatus,
   stagePackage,
   startupStatus,
@@ -34,7 +33,6 @@ import {
 } from './services';
 import {
   assertRuntimeArtifacts,
-  assertComponentRuntime,
   databasePath,
   emptyRuntimeState,
   inspectDatabaseWithRuntime,
@@ -121,8 +119,8 @@ function dependencies(deps: UpgradeDependencies = {}) {
 function acquireInstallLocks(dir: string, acquireLease: typeof acquireProcessLease): () => void {
   const releases: Array<() => void> = [];
   try {
-    // Hold both new per-component leases and both legacy leases so no old or
-    // new runtime can start during the single shared runtime switch.
+    // Hold every supervisor lease so no process can start during the shared
+    // runtime and database switch.
     releases.push(acquireLease(join(dir, 'run', 'hub.lock')));
     releases.push(acquireLease(join(dir, 'run', 'collector.lock')));
     releases.push(acquireLease(join(dir, 'run', 'rigscope.lock')));
@@ -238,7 +236,6 @@ function collectorStateCheck(dir: string): void {
   if (
     record === null ||
     typeof record !== 'object' ||
-    record.version !== 1 ||
     typeof record.collectorId !== 'string' ||
     !Array.isArray(record.destinations) ||
     record.destinations.length > 8
@@ -487,7 +484,6 @@ export async function upgradeInstallation(
   }
   const currentVersion = runtimeVersion(runtime);
   assertRuntimeArtifacts(runtime, 'active runtime');
-  migrateLegacyService(options.dir);
   const state = readRuntimeState(options.dir) ?? emptyRuntimeState(options.dir);
 
   const stage = deps.stage(options.root, options.dir, options.from);
@@ -496,7 +492,6 @@ export async function upgradeInstallation(
   try {
     expectedVersion = runtimeVersion(stage);
     assertRuntimeArtifacts(stage, 'staged runtime');
-    assertComponentRuntime(stage);
     const path = databasePath(options.dir);
     if (existsSync(path)) {
       const staged = deps.inspectRuntime(stage, path);
@@ -692,8 +687,6 @@ export async function rollbackInstallation(
   const previousVersion = runtimeVersion(previousRuntime);
   assertRuntimeArtifacts(runtime, 'active runtime');
   assertRuntimeArtifacts(previousRuntime, 'previous runtime');
-  assertComponentRuntime(previousRuntime);
-  migrateLegacyService(options.dir);
   const state = readRuntimeState(options.dir) ?? emptyRuntimeState(options.dir);
   const snapshot = snapshotComponents(options.dir, deps);
   const running = snapshot.running;

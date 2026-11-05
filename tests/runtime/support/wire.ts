@@ -244,7 +244,6 @@ export function helloOf(c: RawCollector, expectedIntervalMs = 1_000): Record<str
     hostname: c.hostname,
     capabilities: ["metrics"],
     expectedIntervalMs,
-    collectorVersion: "runtime-test",
   };
 }
 

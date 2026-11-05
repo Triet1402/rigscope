@@ -121,8 +121,6 @@ type MemoryGap = {
 
 export type DestinationOutboxOptions = {
   dir: string;
-  /** Queue under the previous endpoint URL, recovered before sessions start. */
-  previousDir?: string;
   limits?: Partial<OutboxLimits>;
   budget?: OutboxBudget;
   /** Allocates sequence numbers for locally created gap records. */
@@ -163,11 +161,9 @@ function serializeRecord(record: TelemetryRecord): { json: string; bytes: number
   return { json, bytes: Buffer.byteLength(json, 'utf8') };
 }
 
-/** Disk compatibility belongs here; wire parsers continue to reject old envelopes. */
+/** Stored rows are already the canonical record shape; nothing is rewritten. */
 function parseStoredRecord(json: string): TelemetryRecord {
-  const record = JSON.parse(json) as TelemetryRecord & {protocolVersion?: unknown};
-  if (record.protocolVersion === 2) delete record.protocolVersion;
-  return record;
+  return JSON.parse(json) as TelemetryRecord;
 }
 
 function fileBytes(file: string): number {
@@ -238,12 +234,6 @@ export class DestinationOutbox {
   static open(opts: DestinationOutboxOptions): DestinationOutbox {
     const limits = { ...DEFAULT_OUTBOX_LIMITS, ...opts.limits };
     validateDiskLimit(limits.maxDiskBytes);
-    // Move the whole directory, including WAL, when there is no new queue yet.
-    if (opts.previousDir && opts.previousDir !== opts.dir && !fs.existsSync(opts.dir) &&
-        fs.existsSync(path.join(opts.previousDir, 'outbox.sqlite'))) {
-      fs.mkdirSync(path.dirname(opts.dir), {recursive: true, mode: 0o700});
-      fs.renameSync(opts.previousDir, opts.dir);
-    }
     fs.mkdirSync(opts.dir, { recursive: true, mode: 0o700 });
     try {
       fs.chmodSync(opts.dir, 0o700);
@@ -288,12 +278,11 @@ export class DestinationOutbox {
       PRAGMA foreign_keys = ON;
     `);
     db.exec(SCHEMA);
-    // Previously offered gap payloads are immutable: a lost ack may mean the
-    // hub already committed their dedup key. Migrate older outboxes safely.
+    // Unfinished outbox layouts belong to the installation reset. Never
+    // translate their retained records into a different persistent shape.
     const columns = db.prepare('PRAGMA table_info(outbox_records)').all() as { name: string }[];
     if (!columns.some(column => column.name === 'offered')) {
-      db.exec("ALTER TABLE outbox_records ADD COLUMN offered INTEGER NOT NULL DEFAULT 0");
-      db.exec("UPDATE outbox_records SET offered = 1 WHERE kind = 'gap'");
+      throw new Error('outbox must use the canonical schema; reset or reinstall the unfinished installation');
     }
     // Anything that was in flight when the previous process died was never
     // acknowledged (or its ack was lost), so it must be replayed.
@@ -301,38 +290,8 @@ export class DestinationOutbox {
     const outbox = new DestinationOutbox(opts, db, limits);
     outbox.configurePhysicalLimit();
     outbox.totalBytes = outbox.readTotalBytes();
-    if (opts.previousDir && opts.previousDir !== opts.dir) outbox.importPrevious(opts.previousDir);
     opts.budget?.register(outbox);
     return outbox;
-  }
-
-  /** A partially upgraded installation may already have both URL-based queues. */
-  private importPrevious(dir: string): void {
-    const file = path.join(dir, 'outbox.sqlite');
-    if (!fs.existsSync(file)) return;
-    const previous = new DatabaseSync(file, {readOnly: true, timeout: BUSY_TIMEOUT_MS});
-    try {
-      const columns = previous.prepare('PRAGMA table_info(outbox_records)').all() as {name: string}[];
-      const offered = columns.some(column => column.name === 'offered') ? 'offered' : "CASE WHEN kind = 'gap' THEN 1 ELSE 0 END AS offered";
-      const rows = previous.prepare(`SELECT json, ${offered} FROM outbox_records ORDER BY id`);
-      const existing = this.db.prepare('SELECT id FROM outbox_records WHERE run_id = ? AND sequence = ?');
-      const markOffered = this.db.prepare('UPDATE outbox_records SET offered = 1 WHERE run_id = ? AND sequence = ?');
-      this.db.exec('BEGIN IMMEDIATE');
-      try {
-        for (const row of rows.iterate() as Iterable<{json: string; offered: number}>) {
-          const record = parseStoredRecord(row.json);
-          if (!existing.get(record.runId, record.sequence)) this.insertRecord(record);
-          if (row.offered) markOffered.run(record.runId, record.sequence);
-        }
-        this.db.exec('COMMIT');
-      } catch (error) {
-        this.db.exec('ROLLBACK');
-        throw error;
-      }
-    } finally { previous.close(); }
-    // Cleanup follows commit. A crash before cleanup merely repeats the
-    // identity-deduplicated import; it cannot lose the source queue.
-    fs.rmSync(dir, {recursive: true});
   }
 
   // -------------------------------------------------------------------------

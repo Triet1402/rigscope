@@ -7,26 +7,40 @@ import { ConfigError, parseCollectorConfig, validateHubUrl, type DestinationEndp
 import { acquireProcessLease, ProcessLeaseError } from '../src/runtime/process-lease';
 
 export type PendingEnrollment = { url: string; requestId: string; recoverySecret: string };
-export type InstallationState = { version: 1; collectorId: string; destinations: DestinationEndpoint[]; pendingEnrollments?: PendingEnrollment[] };
+export type InstallationState = { collectorId: string; destinations: DestinationEndpoint[]; pendingEnrollments?: PendingEnrollment[] };
 export function defaultStatePath(): string {
   return join(process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'rigscope', 'collector.json');
 }
 function readState(path: string): InstallationState {
   const stat = lstatSync(path);
   if (!stat.isFile() || stat.size > 64 * 1024 || (stat.mode & 0o077) !== 0) throw new Error('collector state must be a private regular file');
-  const raw = JSON.parse(readFileSync(path, 'utf8')) as InstallationState;
-  if (raw.version !== 1 || typeof raw.collectorId !== 'string' || !/^[\x21-\x7e]{1,128}$/.test(raw.collectorId) || !Array.isArray(raw.destinations)) throw new Error('invalid collector state');
+  const parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown;
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('invalid collector state');
+  const raw = parsed as Record<string, unknown>;
+  // An older versioned file is never rewritten into the canonical shape in
+  // place: the explicit install/upgrade reset owns that destructive step.
+  if (Object.hasOwn(raw, 'version') || Object.hasOwn(raw, 'formatVersion')) {
+    throw new Error('collector state uses an older versioned shape; run rigscope install or upgrade to reset it');
+  }
+  if (typeof raw.collectorId !== 'string' || !/^[\x21-\x7e]{1,128}$/.test(raw.collectorId) || !Array.isArray(raw.destinations)) throw new Error('invalid collector state');
   const destinations = raw.destinations.length === 0 ? [] : [...parseCollectorConfig({ COLLECTOR_HUBS: JSON.stringify(raw.destinations) }).destinations];
-  if (raw.pendingEnrollments !== undefined && (!Array.isArray(raw.pendingEnrollments) || raw.pendingEnrollments.length > 8 ||
-    raw.pendingEnrollments.some(p => !p || typeof p.url !== 'string' || typeof p.requestId !== 'string' ||
-      !/^[\x21-\x7e]{1,128}$/.test(p.requestId) || typeof p.recoverySecret !== 'string' || !/^[A-Za-z0-9_-]{32,128}$/.test(p.recoverySecret)))) throw new Error('invalid pending enrollment recovery state');
-  const pendingEnrollments = raw.pendingEnrollments?.map(pending => {
+  const pending = raw.pendingEnrollments;
+  if (pending !== undefined && (!Array.isArray(pending) || pending.length > 8 ||
+    pending.some(p => !p || typeof p !== 'object' || typeof (p as Record<string, unknown>).url !== 'string' ||
+      typeof (p as Record<string, unknown>).requestId !== 'string' ||
+      !/^[\x21-\x7e]{1,128}$/.test((p as Record<string, unknown>).requestId as string) ||
+      typeof (p as Record<string, unknown>).recoverySecret !== 'string' ||
+      !/^[A-Za-z0-9_-]{32,128}$/.test((p as Record<string, unknown>).recoverySecret as string)))) {
+    throw new Error('invalid pending enrollment recovery state');
+  }
+  const pendingEnrollments = pending?.map(value => {
+    const pendingEnrollment = value as PendingEnrollment;
     const issues: string[] = [];
-    const url = validateHubUrl(pending.url, 'pending enrollment', issues);
+    const url = validateHubUrl(pendingEnrollment.url, 'pending enrollment', issues);
     if (!url || issues.length) throw new ConfigError(issues);
-    return {...pending, url: url.href};
+    return {...pendingEnrollment, url: url.href};
   });
-  return {version: 1, collectorId: raw.collectorId, destinations,
+  return {collectorId: raw.collectorId, destinations,
     ...(pendingEnrollments === undefined ? {} : { pendingEnrollments })};
 }
 /** Exclusive lock prevents simultaneous enrollments losing a destination. */
@@ -40,7 +54,7 @@ export function updateInstallation(path: string, change: (state: InstallationSta
   let releaseLock: () => void;
   try {
     // Shared runtime lease: a live owner refuses, a proven dead owner recovers,
-    // and an incomplete/unsafe legacy lock fails closed for manual inspection.
+    // and an incomplete/unsafe lock fails closed for manual inspection.
     releaseLock = acquireProcessLease(lock);
   } catch (error) {
     if (error instanceof ProcessLeaseError) {
@@ -57,9 +71,16 @@ export function updateInstallation(path: string, change: (state: InstallationSta
     try { lstatSync(path); state = readState(path); }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-      state = {version: 1, collectorId: randomUUID(), destinations: []};
+      state = {collectorId: randomUUID(), destinations: []};
     }
-    const next = change(state);
+    const changed = change(state);
+    // Every write emits exactly the one canonical shape, even if a caller
+    // accidentally carries extra fields forward.
+    const next: InstallationState = {
+      collectorId: changed.collectorId,
+      destinations: changed.destinations,
+      ...(changed.pendingEnrollments === undefined ? {} : {pendingEnrollments: changed.pendingEnrollments}),
+    };
     temporary = `${path}.${randomUUID()}.tmp`;
     const out = openSync(temporary, 'wx', 0o600);
     try { writeFileSync(out, JSON.stringify(next) + '\n'); fsyncSync(out); } finally { closeSync(out); }

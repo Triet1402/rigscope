@@ -46,7 +46,6 @@ import { parseArgs } from "node:util";
 import { WebSocket } from "ws";
 
 import {
-  COLLECTOR_PROTOCOL_VERSION,
   MAX_BATCH_RECORDS,
   parseHubMessage,
   type HubSnapshot,
@@ -704,7 +703,6 @@ class CollectorSim {
         hostname: `scale-host-${this.index}`,
         capabilities: ["metrics"],
         expectedIntervalMs: this.intervalMs,
-        collectorVersion: COLLECTOR_PROTOCOL_VERSION,
       });
     });
     ws.on("message", (data) => {

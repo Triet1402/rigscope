@@ -72,9 +72,30 @@ wire contracts are a real process boundary already.
 ### Installation and component lifecycle
 
 One release contains the hub, collector, UI and administration tools. The install
-role is an initial preset; version 2 configuration records independent hub and
-collector enablement. Version 1 roles are mapped in memory on read and migrated
-on an explicit mutation. Read-only status never rewrites configuration or units.
+role is an initial preset; the canonical configuration records independent hub and
+collector enablement in a required `components` object. Configuration and
+installation state have no schema version fields. Read-only status never rewrites
+configuration or units.
+
+Configuration uses one canonical on-disk shape. A pre-canonical installation is
+never migrated: `upgrade` stages and validates the replacement, stops the owned
+hub and collector completely, removes the old configuration and history, and
+installs the latest release fresh. `install` resets detected pre-canonical state
+the same way. There is no rollback to the old format; back up the state directory
+before upgrading if history must be kept. System adoption reads only a canonical
+`config.json`; `hub-config.json` and `collector.json` fallbacks are not read.
+
+The low-level manifest installer follows the same rule. Its release manifest and
+`install-state.json` have one canonical shape with no format-version field; an
+unfinished pre-canonical state is rejected with an explicit reset/reinstall
+instruction and is never rewritten. Canonical upgrades retain accounts, history,
+settings and collector identities, and rollback keeps the existing paired-backup
+behaviour.
+
+Database migration numbers are the one deliberate exception: `schema_migrations`
+rows order irreversible SQL changes and are not configuration or installation
+state versions. Export payloads, collector state and the hub enrollment state also
+carry no format version; they are validated by shape alone.
 
 User installations have separate hashed hub and collector systemd units, each
 running `rigscope run hub|collector` with its own supervisor lease. System scope
@@ -83,7 +104,7 @@ the other. Each retains its settings, credentials and data when disabled; a
 collector can continue sending to remote hubs while its local hub is disabled.
 An unconfigured collector reports Awaiting connection and stays dormant.
 
-The configuration module owns presets, migration and component setup. The service
+The configuration module owns presets, canonical state and component setup. The service
 module owns systemd control and component service registration. The lifecycle
 module starts and verifies selected components. Upgrade and rollback coordinate
 one shared runtime, hold both component leases, back up hub storage and restore
@@ -123,6 +144,11 @@ Each hub connection has an independent credential and local sharing policy. Veri
 hub's TLS certificate using ordinary certificate trust. Send credentials in an authorization
 header, not a URL. Remote connections require TLS; loopback-only development may explicitly
 use plaintext. Authenticate first and reject conflicting claimed collector identities.
+
+The collector and hub use one canonical wire contract and
+`/api/collector/connect` endpoint. There are no protocol-version markers,
+metric-extension negotiations or alternate endpoint migrations. Update the hub
+and its collectors together when replacing an unfinished installation.
 
 JSON message families:
 

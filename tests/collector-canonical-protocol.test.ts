@@ -1,11 +1,13 @@
 /**
- * Mixed-version collector protocol compatibility.
+ * Canonical collector protocol behavior.
  *
- * Exercises the real collector WebSocket gateway so the welcome wire shape is
- * verified end-to-end: legacy collectors must keep the exact pre-extension
- * welcome, while an exact known extended protocol version opts in to the
- * optional metric-extension list. The hub parser must then accept the extended
- * sample fields and acknowledge the original record refs.
+ * There is exactly one unversioned hello/welcome exchange: hello carries no
+ * protocol or collector version, welcome carries no metric-extension list,
+ * and every current metric field is canonical on the wire. These tests drive
+ * the real collector WebSocket gateway end-to-end and verify that the single
+ * canonical shapes are exchanged, that the full metric payload survives the
+ * hub parser unchanged, and that obsolete compatibility fields are rejected
+ * rather than negotiated, projected, or silently stripped.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,15 +19,13 @@ import { CollectorGateway } from '../src/hub/collector-ws';
 import { HubState } from '../src/hub/state';
 import type { SampleIngestion } from '../src/hub/sample-ingestion';
 import {
-  COLLECTOR_PROTOCOL_VERSION,
-  METRIC_EXTENSION_NAMES,
   parseHubMessage,
   type MetricsRecord,
   type TelemetryRecord,
   type WelcomeMessage,
 } from '../src/contracts';
 
-const OLD_WELCOME_KEYS = [
+const WELCOME_KEYS = [
   'delivery',
   'hubRunId',
   'machineId',
@@ -54,11 +54,10 @@ function fakeIngestion(captured: CapturedBatch[]): SampleIngestion {
 
 async function fixture(t: test.TestContext, maxConnections?: number) {
   const state = new HubState({
-    hubRunId: 'compat-hub-run',
+    hubRunId: 'canonical-hub-run',
     collectors: [
-      { collectorId: 'old-collector', machineId: 'old-machine', token: 'old-token' },
-      { collectorId: 'new-collector', machineId: 'new-machine', token: 'new-token' },
-      { collectorId: 'unknown-collector', machineId: 'unknown-machine', token: 'unknown-token' },
+      { collectorId: 'canonical-collector', machineId: 'canonical-machine', token: 'canonical-token' },
+      { collectorId: 'rejected-collector', machineId: 'rejected-machine', token: 'rejected-token' },
     ],
   });
   const captured: CapturedBatch[] = [];
@@ -82,7 +81,7 @@ async function fixture(t: test.TestContext, maxConnections?: number) {
 test('collector connection budget can exceed one hundred while still rejecting excess sockets', async t => {
   const {port} = await fixture(t, 101);
   const url = `ws://127.0.0.1:${port}/api/collector/connect`;
-  const headers = {Authorization: 'Bearer new-token'};
+  const headers = {Authorization: 'Bearer canonical-token'};
   const opened: WebSocket[] = [];
   t.after(() => opened.forEach(ws => ws.terminate()));
   await Promise.all(Array.from({length: 101}, async () => {
@@ -108,7 +107,6 @@ type Hello = {
   hostname: string;
   capabilities: string[];
   expectedIntervalMs: number;
-  collectorVersion: string;
 };
 
 async function handshake(port: number, token: string, hello: Hello) {
@@ -125,11 +123,11 @@ async function handshake(port: number, token: string, hello: Hello) {
   return { ws, raw, welcome: parsed as WelcomeMessage };
 }
 
-function extendedRecord(): MetricsRecord {
+function canonicalRecord(): MetricsRecord {
   return {
-    collectorId: 'new-collector',
-    runId: 'new-run',
-    bootId: 'new-boot',
+    collectorId: 'canonical-collector',
+    runId: 'canonical-run',
+    bootId: 'canonical-boot',
     sequence: 1,
     capturedAt: new Date().toISOString(),
     kind: 'metrics',
@@ -176,69 +174,71 @@ function extendedRecord(): MetricsRecord {
   };
 }
 
-test('an old collector hello receives the exact pre-extension welcome shape', async (t) => {
+test('a canonical hello receives exactly the unversioned welcome shape', async (t) => {
   const f = await fixture(t);
-  const { ws, raw } = await handshake(f.port, 'old-token', {
-    collectorId: 'old-collector',
-    runId: 'old-run',
-    bootId: 'old-boot',
-    hostname: 'old-host',
+  const { ws, raw, welcome } = await handshake(f.port, 'canonical-token', {
+    collectorId: 'canonical-collector',
+    runId: 'canonical-run',
+    bootId: 'canonical-boot',
+    hostname: 'canonical-host',
     capabilities: ['metrics'],
     expectedIntervalMs: 5_000,
-    collectorVersion: '0.2.0',
   });
-  assert.deepEqual(Object.keys(raw).sort(), OLD_WELCOME_KEYS);
+  assert.deepEqual(Object.keys(raw).sort(), WELCOME_KEYS);
   assert.equal(Object.hasOwn(raw, 'metricExtensions'), false);
+  assert.deepEqual(welcome, raw);
   ws.close();
+  await once(ws, 'close');
 });
 
-test('only the exact extended protocol version opts in to metric extensions', async (t) => {
+test('a hello that still carries collectorVersion is rejected', async (t) => {
   const f = await fixture(t);
-  const { ws, raw } = await handshake(f.port, 'new-token', {
-    collectorId: 'new-collector',
-    runId: 'new-run',
-    bootId: 'new-boot',
-    hostname: 'new-host',
+  const ws = new WebSocket(`ws://127.0.0.1:${f.port}/api/collector/connect`, {
+    headers: { Authorization: 'Bearer rejected-token' },
+  });
+  await once(ws, 'open');
+  const closed = once(ws, 'close');
+  ws.send(JSON.stringify({
+    type: 'hello',
+    collectorId: 'rejected-collector',
+    runId: 'rejected-run',
+    bootId: 'rejected-boot',
+    hostname: 'rejected-host',
     capabilities: ['metrics'],
     expectedIntervalMs: 5_000,
-    collectorVersion: COLLECTOR_PROTOCOL_VERSION,
-  });
-  assert.deepEqual(raw.metricExtensions, [...METRIC_EXTENSION_NAMES]);
-  assert.deepEqual(Object.keys(raw).sort(), [...OLD_WELCOME_KEYS, 'metricExtensions'].sort());
-  ws.close();
+    collectorVersion: '0.3.0',
+  }));
+  const [code, reason] = await closed;
+  assert.equal(code, 4003);
+  assert.match(String(reason), /collectorVersion/);
 });
 
-test('an unknown or near-match collector version keeps the old welcome shape', async (t) => {
-  const f = await fixture(t);
-  for (const collectorVersion of ['0.3.0-beta', '0.4.0', '9.9.9']) {
-    const { ws, raw } = await handshake(f.port, 'unknown-token', {
-      collectorId: 'unknown-collector',
-      runId: `unknown-run-${collectorVersion}`,
-      bootId: 'unknown-boot',
-      hostname: 'unknown-host',
-      capabilities: ['metrics'],
-      expectedIntervalMs: 5_000,
-      collectorVersion,
-    });
-    assert.deepEqual(Object.keys(raw).sort(), OLD_WELCOME_KEYS, `no guessing for ${collectorVersion}`);
-    ws.close();
-    await once(ws, 'close');
-  }
+test('a welcome that still carries metricExtensions is rejected by the strict parser', () => {
+  assert.throws(
+    () => parseHubMessage({
+      type: 'welcome',
+      hubRunId: 'canonical-hub-run',
+      machineId: 'canonical-machine',
+      delivery: 'durable',
+      maxInFlightBatches: 4,
+      metricExtensions: ['bottleneck-v1'],
+    }),
+    /unexpected field "metricExtensions"/,
+  );
 });
 
-test('an upgraded hub accepts extended samples and acknowledges original refs', async (t) => {
+test('the hub accepts the canonical full metric payload and acknowledges original refs', async (t) => {
   const f = await fixture(t);
-  const { ws } = await handshake(f.port, 'new-token', {
-    collectorId: 'new-collector',
-    runId: 'new-run',
-    bootId: 'new-boot',
-    hostname: 'new-host',
+  const { ws } = await handshake(f.port, 'canonical-token', {
+    collectorId: 'canonical-collector',
+    runId: 'canonical-run',
+    bootId: 'canonical-boot',
+    hostname: 'canonical-host',
     capabilities: ['metrics'],
     expectedIntervalMs: 5_000,
-    collectorVersion: COLLECTOR_PROTOCOL_VERSION,
   });
 
-  const record = extendedRecord();
+  const record = canonicalRecord();
   const ack = once(ws, 'message');
   ws.send(JSON.stringify({ type: 'samples', mode: 'live', records: [record] }));
   const parsed = parseHubMessage(JSON.parse(String((await ack)[0])));
@@ -249,6 +249,40 @@ test('an upgraded hub accepts extended samples and acknowledges original refs', 
 
   assert.equal(f.captured.length, 1);
   assert.equal(f.captured[0]!.mode, 'live');
-  assert.deepEqual(f.captured[0]!.records, [record], 'extended fields survive hub parsing');
+  assert.deepEqual(f.captured[0]!.records, [record], 'full canonical fields survive hub parsing unchanged');
   ws.close();
+  await once(ws, 'close');
+});
+
+test('optional metric attributes stay optional for hardware that cannot report them', async (t) => {
+  const f = await fixture(t);
+  const { ws } = await handshake(f.port, 'canonical-token', {
+    collectorId: 'canonical-collector',
+    runId: 'canonical-run',
+    bootId: 'canonical-boot',
+    hostname: 'canonical-host',
+    capabilities: ['metrics'],
+    expectedIntervalMs: 5_000,
+  });
+
+  const record: MetricsRecord = {
+    ...canonicalRecord(),
+    payload: {
+      cpu: { status: 'ok', usagePercent: 4, perCore: [4] },
+      memory: { status: 'ok', usedBytes: 1_000, totalBytes: 8_000 },
+      swap: { status: 'ok', usedBytes: 0, totalBytes: 0 },
+      gpus: { status: 'unavailable', reason: 'no GPUs detected' },
+      disks: { status: 'ok', filesystems: [], devices: [] },
+      network: { status: 'ok', interfaces: [] },
+    },
+  };
+  const ack = once(ws, 'message');
+  ws.send(JSON.stringify({ type: 'samples', mode: 'live', records: [record] }));
+  const parsed = parseHubMessage(JSON.parse(String((await ack)[0])));
+  assert.equal(parsed.type, 'ack');
+  if (parsed.type !== 'ack') return;
+  assert.deepEqual(parsed.accepted, [{ runId: record.runId, sequence: record.sequence }]);
+  assert.deepEqual(f.captured[0]!.records, [record], 'unavailable hardware is not upgraded or rejected');
+  ws.close();
+  await once(ws, 'close');
 });

@@ -6,17 +6,12 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import {
-  COLLECTOR_PROTOCOL_VERSION,
   MAX_BATCH_RECORDS,
   MAX_EXPECTED_INTERVAL_MS,
   MAX_MESSAGE_BYTES,
-  METRIC_EXTENSION_NAMES,
   MIN_EXPECTED_INTERVAL_MS,
-  collectorSupportsMetricExtensions,
-  projectTelemetryRecordForWire,
   type HelloMessage,
   type MetricsRecord,
-  type TelemetryRecord,
   parseCollectorMessage,
   parseHubMessage,
   parseHubSnapshot,
@@ -32,7 +27,6 @@ function validHello(): HelloMessage {
     hostname: "mock-machine",
     capabilities: ["metrics"],
     expectedIntervalMs: 5_000,
-    collectorVersion: "test-1",
   };
 }
 
@@ -92,6 +86,13 @@ describe("parseCollectorMessage: hello", () => {
     expects(() => parseCollectorMessage({ ...validHello(), protocolVersion: 999 }), 'unexpected field "protocolVersion"');
   });
 
+  it("rejects the removed collectorVersion compatibility field", () => {
+    expects(
+      () => parseCollectorMessage({ ...validHello(), collectorVersion: "0.3.0" }),
+      'unexpected field "collectorVersion"',
+    );
+  });
+
   it("rejects missing fields", () => {
     const { runId: _dropped, ...rest } = validHello();
     expects(() => parseCollectorMessage(rest), 'missing field "runId"');
@@ -100,7 +101,7 @@ describe("parseCollectorMessage: hello", () => {
   it("rejects invalid collector identity fields", () => {
     expects(() => parseCollectorMessage({ ...validHello(), collectorId: "" }), "collectorId");
     expects(() => parseCollectorMessage({ ...validHello(), runId: 7 }), "runId");
-    expects(() => parseCollectorMessage({ ...validHello(), collectorVersion: "" }), "collectorVersion");
+    expects(() => parseCollectorMessage({ ...validHello(), hostname: 7 }), "hostname");
   });
 
   it("rejects empty or duplicate capabilities and requires metrics", () => {
@@ -156,7 +157,7 @@ describe("parseCollectorMessage: hello expectedIntervalMs", () => {
 
   it("still rejects unexpected fields when the optional field is present", () => {
     expects(
-      () => parseCollectorMessage({ ...validHello(), collectorVersion: "test-1", extra: 1 }),
+      () => parseCollectorMessage({ ...validHello(), expectedIntervalMs: 5_000, extra: 1 }),
       'unexpected field "extra"',
     );
   });
@@ -283,7 +284,7 @@ describe("parseCollectorMessage: samples", () => {
   });
 });
 
-describe("parseTelemetryRecord: optional bottleneck fields", () => {
+describe("parseTelemetryRecord: canonical bottleneck metrics", () => {
   function bottleneckRecord(): MetricsRecord {
     const base = validMetricsRecord();
     return {
@@ -329,17 +330,36 @@ describe("parseTelemetryRecord: optional bottleneck fields", () => {
     };
   }
 
-  it("round-trips the new fields and keeps absent fields absent", () => {
+  it("round-trips the full canonical payload and keeps absent readings absent", () => {
     const record = bottleneckRecord();
     const parsed = parseTelemetryRecord(JSON.parse(JSON.stringify(record)));
     assert.deepEqual(parsed, record);
 
-    const old = parseTelemetryRecord(JSON.parse(JSON.stringify(validMetricsRecord()))) as MetricsRecord;
+    const minimal = parseTelemetryRecord(JSON.parse(JSON.stringify(validMetricsRecord()))) as MetricsRecord;
     for (const field of ["temperatureC", "powerWatts", "iowaitPercent", "pressureSomePercent"]) {
-      assert.equal(Object.hasOwn(old.payload.cpu, field), false, `old cpu record must not gain ${field}`);
+      assert.equal(Object.hasOwn(minimal.payload.cpu, field), false, `minimal cpu record must not gain ${field}`);
     }
-    assert.equal(Object.hasOwn(old.payload.memory, "pressureSomePercent"), false);
-    assert.equal(Object.hasOwn(old.payload.disks, "pressureSomePercent"), false);
+    assert.equal(Object.hasOwn(minimal.payload.memory, "pressureSomePercent"), false);
+    assert.equal(Object.hasOwn(minimal.payload.disks, "pressureSomePercent"), false);
+  });
+
+  it("serializes the full canonical payload unchanged without downgrade", () => {
+    const record = bottleneckRecord();
+    const serialized = JSON.parse(JSON.stringify(record)) as MetricsRecord;
+    const parsed = parseTelemetryRecord(serialized);
+    assert.deepEqual(JSON.parse(JSON.stringify(parsed)), serialized);
+    assert.equal(serialized.payload.cpu.status, "ok");
+    if (serialized.payload.cpu.status !== "ok") return;
+    assert.equal(serialized.payload.cpu.temperatureC, 61.4);
+    assert.equal(serialized.payload.memory.status, "ok");
+    if (serialized.payload.memory.status !== "ok") return;
+    assert.equal(serialized.payload.memory.pressureFullPercent, 0.5);
+    assert.equal(serialized.payload.disks.status, "ok");
+    if (serialized.payload.disks.status !== "ok") return;
+    const device = serialized.payload.disks.devices[0];
+    assert.ok(device && device.status === "ok");
+    if (!device || device.status !== "ok") return;
+    assert.equal(device.ioUtilizationPercent, 12.5);
   });
 
   it("accepts explicit null for every optional bottleneck field", () => {
@@ -405,7 +425,7 @@ describe("parseTelemetryRecord: optional bottleneck fields", () => {
 });
 
 describe("parseHubMessage", () => {
-  it("accepts a valid durable welcome", () => {
+  it("accepts the single canonical durable welcome shape", () => {
     const welcome = parseHubMessage({
       type: "welcome",
       hubRunId: "hub-run-1",
@@ -417,41 +437,31 @@ describe("parseHubMessage", () => {
     assert.equal(welcome.delivery, "durable");
     assert.equal(welcome.machineId, "machine-1");
     assert.equal(welcome.maxInFlightBatches, 8);
-    assert.equal(Object.hasOwn(welcome, "metricExtensions"), false, "old welcome shape stays unchanged");
+    assert.deepEqual(Object.keys(welcome).sort(), [
+      "delivery",
+      "hubRunId",
+      "machineId",
+      "maxInFlightBatches",
+      "type",
+    ]);
   });
 
-  it("accepts the optional negotiated metric extensions", () => {
-    const welcome = parseHubMessage({
-      type: "welcome",
-      hubRunId: "hub-run-1",
-      machineId: "machine-1",
-      delivery: "durable",
-      maxInFlightBatches: 8,
-      metricExtensions: [...METRIC_EXTENSION_NAMES],
-    });
-    assert.ok(welcome.type === "welcome");
-    assert.deepEqual(welcome.metricExtensions, [...METRIC_EXTENSION_NAMES]);
+  it("rejects the removed metricExtensions negotiation field", () => {
+    expects(
+      () =>
+        parseHubMessage({
+          type: "welcome",
+          hubRunId: "hub-run-1",
+          machineId: "machine-1",
+          delivery: "durable",
+          maxInFlightBatches: 8,
+          metricExtensions: ["bottleneck-v1"],
+        }),
+      'unexpected field "metricExtensions"',
+    );
   });
 
-  it("keeps metricExtensions strict and bounded", () => {
-    const welcome = (metricExtensions: unknown) =>
-      parseHubMessage({
-        type: "welcome",
-        hubRunId: "hub-run-1",
-        machineId: "machine-1",
-        delivery: "durable",
-        maxInFlightBatches: 8,
-        metricExtensions,
-      });
-    expects(() => welcome([]), "outside 1..1");
-    expects(() => welcome(["bottleneck-v1", "bottleneck-v1"]), "outside 1..1");
-    expects(() => welcome(["unknown-extension"]), "unexpected value");
-    expects(() => welcome(["bottleneck-v1", "unknown-extension"]), "outside 1..1");
-    expects(() => welcome("bottleneck-v1"), "expected array");
-    expects(() => welcome(null), "expected array");
-  });
-
-    it("rejects unexpected fields and unsupported types", () => {
+  it("rejects unexpected fields and unsupported types", () => {
     expects(
       () =>
         parseHubMessage({
@@ -500,129 +510,6 @@ describe("parseHubMessage", () => {
         }),
       'unexpected field "protocolVersion"',
     );
-  });
-});
-
-describe("mixed-version metric-extension negotiation", () => {
-  function extendedRecord(): MetricsRecord {
-    const base = validMetricsRecord();
-    return {
-      ...base,
-      payload: {
-        ...base.payload,
-        cpu: {
-          status: "ok",
-          usagePercent: 12.5,
-          perCore: [12.5],
-          temperatureC: 61.4,
-          powerWatts: 88.2,
-          iowaitPercent: 1.25,
-          pressureSomePercent: 3.5,
-        },
-        memory: {
-          status: "ok",
-          usedBytes: 4,
-          totalBytes: 8,
-          pressureSomePercent: 1.5,
-          pressureFullPercent: 0.5,
-        },
-        disks: {
-          status: "ok",
-          filesystems: [
-            { id: "fs:/", status: "ok", usedBytes: 5, totalBytes: 10, inodesUsed: 10, inodesTotal: 100 },
-          ],
-          devices: [
-            {
-              id: "disk:sda",
-              status: "ok",
-              readBytesPerSec: 1,
-              writeBytesPerSec: 2,
-              readLatencyMs: 1.5,
-              writeLatencyMs: 2.5,
-              ioUtilizationPercent: 12.5,
-            },
-          ],
-          pressureSomePercent: 2.5,
-          pressureFullPercent: 1.5,
-        },
-      },
-    };
-  }
-
-  it("matches only the exact known protocol version marker", () => {
-    assert.equal(COLLECTOR_PROTOCOL_VERSION, "0.3.0");
-    assert.equal(collectorSupportsMetricExtensions(COLLECTOR_PROTOCOL_VERSION), true);
-    for (const version of ["0.2.0", "0.3", "0.3.0.0", "0.3.0-beta", "test-1", "", " 0.3.0"]) {
-      assert.equal(collectorSupportsMetricExtensions(version), false, `must not guess ${JSON.stringify(version)}`);
-    }
-  });
-
-  it("projects an extended metrics record to the base wire shape without mutating it", () => {
-    const record = extendedRecord();
-    const original = structuredClone(record);
-    const projected = projectTelemetryRecordForWire(record, []) as MetricsRecord;
-    assert.deepEqual(projected, {
-      ...record,
-      payload: {
-        cpu: { status: "ok", usagePercent: 12.5, perCore: [12.5] },
-        memory: { status: "ok", usedBytes: 4, totalBytes: 8 },
-        swap: record.payload.swap,
-        gpus: record.payload.gpus,
-        disks: {
-          status: "ok",
-          filesystems: [{ id: "fs:/", status: "ok", usedBytes: 5, totalBytes: 10 }],
-          devices: [{ id: "disk:sda", status: "ok", readBytesPerSec: 1, writeBytesPerSec: 2 }],
-        },
-        network: record.payload.network,
-      },
-    });
-    assert.deepEqual(record, original, "durable record stays extended");
-
-    // A second projection is idempotent and still leaves the source alone.
-    assert.deepEqual(projectTelemetryRecordForWire(projected, []), projected);
-    assert.deepEqual(record, original);
-  });
-
-  it("removes explicitly null optional fields as well as present values", () => {
-    const record = extendedRecord();
-    if (record.payload.cpu.status !== "ok" || record.payload.memory.status !== "ok" || record.payload.disks.status !== "ok") {
-      throw new Error("fixture must be available");
-    }
-    record.payload.cpu.temperatureC = null;
-    record.payload.memory.pressureFullPercent = null;
-    const filesystem = record.payload.disks.filesystems[0]!;
-    if (filesystem.status !== "ok") throw new Error("fixture must be available");
-    filesystem.inodesUsed = null;
-    const projected = projectTelemetryRecordForWire(record, []) as MetricsRecord;
-    if (projected.payload.cpu.status !== "ok" || projected.payload.memory.status !== "ok" || projected.payload.disks.status !== "ok") {
-      throw new Error("projection must keep the family available");
-    }
-    assert.equal(Object.hasOwn(projected.payload.cpu, "temperatureC"), false);
-    assert.equal(Object.hasOwn(projected.payload.memory, "pressureFullPercent"), false);
-    assert.equal(Object.hasOwn(projected.payload.disks.filesystems[0]!, "inodesUsed"), false);
-  });
-
-  it("preserves the extended fields for a bottleneck-v1 peer", () => {
-    const record = extendedRecord();
-    assert.equal(projectTelemetryRecordForWire(record, ["bottleneck-v1"]), record);
-  });
-
-  it("passes gap records through unchanged for base peers", () => {
-    const gap: TelemetryRecord = {
-      collectorId: "collector-a",
-      runId: "run-1",
-      bootId: "boot-123",
-      sequence: 2,
-      capturedAt: new Date().toISOString(),
-      kind: "gap",
-      payload: {
-        fromCapturedAt: new Date().toISOString(),
-        toCapturedAt: new Date().toISOString(),
-        droppedRecords: 3,
-        reason: "outbox-bytes",
-      },
-    };
-    assert.equal(projectTelemetryRecordForWire(gap, []), gap);
   });
 });
 

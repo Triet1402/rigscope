@@ -162,7 +162,6 @@ function makeSession(
     outbox: stubOutbox(),
     expectedIntervalMs: 1_000,
     capabilities: ['metrics'],
-    collectorVersion: 'test-1',
     socketFactory: () => {
       const socket = new FakeSocket();
       sockets.push(socket);
@@ -266,17 +265,20 @@ test('config: rejects destination entries without exact {url, token} shape', () 
   );
 });
 
-test('config: rejects bad schemes and wrong paths', () => {
+test('config: rejects bad schemes and every non-canonical path', () => {
   assert.ok(
     parseIssues(envWithHubs([{url: `http://127.0.0.1:8081${CONNECT_PATH}`, token: 't'}])).some(
       (issue) => issue.includes('scheme must be ws:// or wss://'),
     ),
   );
-  assert.ok(
-    parseIssues(envWithHubs([{url: 'ws://127.0.0.1:8081/connect', token: 't'}])).some((issue) =>
-      issue.includes(`path must be exactly ${CONNECT_PATH}`),
-    ),
-  );
+  for (const path of ['/connect', '/api/collector/v1/connect']) {
+    assert.ok(
+      parseIssues(envWithHubs([{url: `ws://127.0.0.1:8081${path}`, token: 't'}])).some((issue) =>
+        issue.includes(`path must be exactly ${CONNECT_PATH}`),
+      ),
+      `obsolete path ${path} must be rejected, never normalized`,
+    );
+  }
 });
 
 test('config: rejects credentials embedded in the URL and never echoes the URL', () => {
@@ -460,7 +462,6 @@ test('session: sends a bounded hello with token only in the Authorization header
     outbox: stubOutbox(),
     expectedIntervalMs: 600,
     capabilities: ['metrics'],
-    collectorVersion: 'test-1',
     socketFactory: (url, factoryOptions) => {
       seenUrls.push(url);
       seenOptions.push(factoryOptions);
@@ -488,7 +489,6 @@ test('session: sends a bounded hello with token only in the Authorization header
     hostname: 'mock-machine',
     capabilities: ['metrics'],
     expectedIntervalMs: 600,
-    collectorVersion: 'test-1',
   });
 });
 
@@ -549,7 +549,6 @@ test('session: hello advertises the per-destination cadence supplied as an optio
     outbox: stubOutbox(),
     expectedIntervalMs: 600,
     capabilities: ['metrics'],
-    collectorVersion: 'test-adv',
     socketFactory: () => {
       const socket = new FakeSocket();
       sockets.push(socket);
@@ -570,7 +569,6 @@ test('session: hello advertises the per-destination cadence supplied as an optio
       hostname: HELLO_IDENTITY.hostname,
       capabilities: ['metrics'],
       expectedIntervalMs: 600,
-      collectorVersion: 'test-adv',
     });
     // What leaves the wire must parse under the strict contract.
     const parsed = parseCollectorMessage(hello);
@@ -593,7 +591,6 @@ test('session: rejects an unbounded advertised cadence at construction time', ()
           outbox: stubOutbox(),
           expectedIntervalMs: bad,
           capabilities: ['metrics'],
-          collectorVersion: 'test-1',
           socketFactory: () => new FakeSocket(),
         }),
       Error,
@@ -613,7 +610,6 @@ test('session: rejects empty or duplicate capabilities at construction time', ()
           outbox: stubOutbox(),
           expectedIntervalMs: 500,
           capabilities: capabilities as never,
-          collectorVersion: 'test-1',
           socketFactory: () => new FakeSocket(),
         }),
       Error,

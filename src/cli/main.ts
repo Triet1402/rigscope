@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { createInterface } from 'node:readline';
@@ -7,10 +7,12 @@ import { enrollCollector } from '../../collector/enroll';
 import { parseCollectorConfig } from '../../collector/config';
 import {
   COMPONENTS, DEFAULT_SHARING, componentEnabled, configureComponent, connectUrl, enabledComponents,
-  initialize, pairColocatedCollector, readPrivate, readSetup, stateDirectory, type Component,
+  initialize, installationNeedsReset, installationRole, pairColocatedCollector, readPrivate, readSetup, validateSetupOptions,
+  stateDirectory, type Component,
 } from './config';
+import { resetInstallation } from './reset';
 import { combinedLeasePath, componentLeasePath, runInstallation } from './runtime';
-import { activatePackage, enableBootStartup, installAlias, migrateLegacyService, serviceActive, serviceStatus, showLogs, stagePackage, startupStatus, systemctl, unitName, unitPath, uninstallService, writeService } from './services';
+import { activatePackage, enableBootStartup, installAlias, serviceActive, serviceStatus, showLogs, stagePackage, startupStatus, systemctl, unitName, unitPath, uninstallService, writeService } from './services';
 import { diagnoseInstallation, formatDoctorReport } from './doctor';
 import { upgradeInstallation, rollbackInstallation } from './upgrade';
 import { emptyRuntimeState, readRuntimeState, runtimeVersion, writeRuntimeState } from './release-state';
@@ -33,14 +35,14 @@ Usage: rigscope <command> [options]
   enable      Complete setup, enable startup and start hub|collector
   disable     Stop and disable hub|collector; keep settings and data
   connect URL Join a hub; prompts privately, then starts an installed collector
-  configure   Change local/HTTPS access while the hub is stopped
+  configure   Change local/HTTPS access or the local hub port (hub stopped)
   start       Start enabled components, or the named component
   stop        Stop enabled components, or the named component
   restart     Restart enabled components, or the named component
   status      Show component state, hub, destinations and readiness
   logs        Show service logs for enabled components (--follow for live output)
   doctor      Diagnose runtime, service, database, ports, destinations and sensors
-  upgrade     Stage an update, back up the hub, verify health, then restart
+  upgrade     Update in place, or reset an older install and install latest
   rollback    Restore the previous runtime with its paired database backup
   recover-password
               Reset a managed user password offline (hub must be stopped)
@@ -52,7 +54,7 @@ Options:
   --state-dir PATH           Independent installation directory
   --scope user|system        Select an installation when both scopes exist
   --role local|hub|collector Initial preset; defaults to local
-  --port PORT               Local hub port; defaults to 8081
+  --port PORT               Local hub port; defaults to 8081 (install/configure)
   --origin https://HOST     HTTPS access (install/configure/enable hub)
   --local                   Restore localhost access (configure only)
   --socket PATH             Private proxy socket (install/configure/enable hub)
@@ -60,7 +62,7 @@ Options:
   --enable                  Enable login startup (default for install)
   --boot                    Enable startup at boot and operation after logout
   --no-enable               Do not enable login startup (install only)
-  --no-start                Install/connect/enable without starting
+  --no-start                Install/connect/enable/reset upgrade without starting
   --follow                  Follow service logs
   --token-file PATH         Read the grant from a private file
   --replace                 Replace this collector's enrollment at the hub
@@ -79,9 +81,10 @@ Examples:
   rigscope install --role collector
   rigscope connect https://hub.example.com
   rigscope configure --origin https://hub.example.com
+  rigscope configure --port 8086
   rigscope start collector
   rigscope doctor
-  rigscope upgrade --from ./rigscope-0.1.0.tgz
+  rigscope upgrade --from ./rigscope-VERSION.tgz
   rigscope rollback
   rigscope recover-password --user owner
   rigscope install --role hub --origin https://hub.example.com
@@ -185,7 +188,7 @@ async function main(): Promise<number> {
   if (values.help || positionals[0] === 'help') { console.log(HELP); return 0; }
   if (values.version) { console.log((JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as {version: string}).version); return 0; }
   if (process.platform !== 'linux') throw new Error('Rigscope currently supports Linux.');
-  const command = positionals[0] ?? 'status';
+  let command = positionals[0] ?? 'status';
   const known = ['try','install','enable','disable','connect','configure','start','stop','restart','status','logs','config','doctor','upgrade','rollback','recover-password','uninstall','run'];
   if (!known.includes(command)) throw new Error('Unknown command. Run rigscope --help.');
   const componentCommands = ['enable','disable','start','stop','restart','logs','run'];
@@ -197,8 +200,8 @@ async function main(): Promise<number> {
     connect: ['token-file','replace','no-start'], start: ['foreground'],
     enable: ['origin','socket','port','boot','no-start'],
     logs: ['follow'],
-    configure: ['origin','socket','local'],
-    doctor: ['json'], upgrade: ['from','timeout'], rollback: ['backup','timeout'],
+    configure: ['origin','socket','local','port'],
+    doctor: ['json'], upgrade: ['from','timeout','no-start'], rollback: ['backup','timeout'],
     'recover-password': ['user','password-file','enable'],
   };
   for (const [key, value] of Object.entries(values)) {
@@ -217,21 +220,28 @@ async function main(): Promise<number> {
     throw new Error(`System installation selected. Use rigscope system ${command} (mutations require sudo and --apply), or --scope user for a user installation.`);
   }
   if (command === 'config') { console.log(join(dir, 'config.json')); return 0; }
+  // An incompatible installation is replaced, not upgraded. The install path
+  // stages and validates the replacement before any destructive work.
+  if (command === 'upgrade' && installationNeedsReset(dir)) {
+    values.role = installationRole(dir);
+    values.from = values.from ?? 'rigscope@latest';
+    command = 'install';
+  }
   if (command === 'configure') {
     if (!readSetup(dir)) throw new Error('No saved installation. Run rigscope install first.');
-    const plan = planAccessChange(dir, {origin: values.origin, socket: values.socket, local: values.local});
+    const plan = planAccessChange(dir, {origin: values.origin, socket: values.socket, local: values.local, port: values.port});
     if (serviceActive(dir, 'hub')) throw new Error('Run rigscope stop hub before changing access, then rigscope start hub.');
     if (plan.collectorChanged && serviceActive(dir, 'collector')) {
       throw new Error('Run rigscope stop collector before changing its colocated destination, then rigscope start collector.');
     }
     const releases: Array<() => void> = [];
     try {
-      // The legacy lease detects a combined supervisor that still owns both roles.
+      // The installation-wide lease detects a foreground command that owns both roles.
       releases.push(acquireProcessLease(combinedLeasePath(dir)));
       releases.push(acquireProcessLease(componentLeasePath(dir, 'hub')));
       if (plan.collectorChanged) releases.push(acquireProcessLease(componentLeasePath(dir, 'collector')));
-      const result = configureAccess(dir, {origin: values.origin, socket: values.socket, local: values.local});
-      console.log(`${result.changed ? 'Access configured' : 'Access unchanged'}: ${result.url}`);
+      const result = configureAccess(dir, {origin: values.origin, socket: values.socket, local: values.local, port: values.port});
+      console.log(`${result.changed ? 'Configuration updated' : 'Configuration unchanged'}: ${result.url}`);
       if (result.backup) console.log(`Previous settings: ${result.backup}`);
       if (values.origin) console.log(`Forward ${result.url} to Unix socket ${readSetup(dir)!.socket}.`);
       console.log('Run rigscope start to resume enabled components.');
@@ -256,7 +266,6 @@ async function main(): Promise<number> {
     // Validate the running service and complete enrollment before enabling the
     // component, so a rejected grant or busy collector leaves settings intact.
     if (existing && serviceActive(dir, 'collector')) throw new Error('Run rigscope stop collector before changing enrolled destinations, then rigscope start collector.');
-    if (existsSync(join(dir, 'runtime'))) migrateLegacyService(dir);
     if (!existing) configureComponent(dir, 'collector', {enabled: false, pairColocated: false});
     const releases: Array<() => void> = [];
     try {
@@ -281,7 +290,6 @@ async function main(): Promise<number> {
     const target = requiredComponent(positionals[1]);
     const existing = readSetup(dir);
     if (!existing) throw new Error('No saved installation. Run rigscope install first.');
-    migrateLegacyService(dir);
     if (command === 'enable') {
       if (!existsSync(join(dir, 'runtime'))) throw new Error('Install the runtime first: rigscope install --no-start.');
       if (target === 'hub' && (existing.users.length > 0 || existing.origin) &&
@@ -325,25 +333,54 @@ async function main(): Promise<number> {
   if (command === 'install') {
     if (values.enable && values['no-enable']) throw new Error('Choose --enable or --no-enable.');
     if (values.boot && values['no-enable']) throw new Error('--boot requires startup to be enabled.');
-    if (existsSync(join(dir, 'runtime'))) migrateLegacyService(dir);
+    const resetting = installationNeedsReset(dir);
+    if (resetting) values.role = values.role ?? installationRole(dir);
     // Registering a trial is allowed only after its foreground processes stop.
-    const release = serviceActive(dir) && existsSync(join(dir, 'runtime'))
+    // A reset coordinates its own shutdown and leases.
+    const release = resetting || (serviceActive(dir) && existsSync(join(dir, 'runtime')))
       ? () => {} : acquireProcessLease(combinedLeasePath(dir));
     let alias: string;
     let installedVersion: string;
     try {
-      const setup = initialize(dir, {role: values.role, port: values.port, origin: values.origin, socket: values.socket});
-      announce(setup, dir);
-      if (existsSync(join(dir, 'runtime'))) {
-        if (values.from) throw new Error('Runtime already installed. Use rigscope upgrade --from <package>.');
-      } else {
-        console.log('Installing runtime…');
+      if (resetting) {
+        console.log('Old installation state detected. Resetting configuration and history, then installing the replacement…');
+        // Stage and validate the replacement before the coordinated reset
+        // stops anything or deletes state. The incompatible runtime is never
+        // reused.
+        validateSetupOptions({role: values.role, port: values.port, origin: values.origin, socket: values.socket});
         const source = values.from ? (/^[./]/.test(values.from) ? resolve(values.from) : values.from) : undefined;
         const stage = stagePackage(ROOT, dir, source);
-        activatePackage(dir, stage);
+        let setup: ReturnType<typeof initialize>;
+        try {
+          setup = resetInstallation({
+            dir,
+            stage,
+            setup: {role: values.role, port: values.port, origin: values.origin, socket: values.socket},
+          });
+        } catch (error) {
+          // The replacement was not activated. Remove only the staged tree so
+          // a retry is not blocked; the original installation was validated
+          // before any delete and remains intact on a rejected package.
+          rmSync(stage, {recursive: true, force: true});
+          throw error;
+        }
+        announce(setup, dir);
+        installedVersion = runtimeVersion(join(dir, 'runtime'));
+        writeRuntimeState(dir, {...(readRuntimeState(dir) ?? emptyRuntimeState(dir)), currentVersion: installedVersion});
+      } else {
+        const setup = initialize(dir, {role: values.role, port: values.port, origin: values.origin, socket: values.socket});
+        announce(setup, dir);
+        if (existsSync(join(dir, 'runtime'))) {
+          if (values.from) throw new Error('Runtime already installed. Use rigscope upgrade --from <package>.');
+        } else {
+          console.log('Installing runtime…');
+          const source = values.from ? (/^[./]/.test(values.from) ? resolve(values.from) : values.from) : undefined;
+          const stage = stagePackage(ROOT, dir, source);
+          activatePackage(dir, stage);
+        }
+        installedVersion = runtimeVersion(join(dir, 'runtime'));
+        writeRuntimeState(dir, {...(readRuntimeState(dir) ?? emptyRuntimeState(dir)), currentVersion: installedVersion});
       }
-      installedVersion = runtimeVersion(join(dir, 'runtime'));
-      writeRuntimeState(dir, {...(readRuntimeState(dir) ?? emptyRuntimeState(dir)), currentVersion: installedVersion});
       writeService(dir);
       alias = installAlias(dir, ROOT);
       const installedConfig = readSetup(dir)!;
@@ -466,6 +503,7 @@ async function main(): Promise<number> {
     return 0;
   }
   if (command === 'upgrade') {
+    if (values['no-start']) throw new Error('--no-start is only available when resetting an older installation.');
     if (!existsSync(join(dir, 'runtime'))) throw new Error('Install a managed runtime before upgrading.');
     console.log('Staging upgrade…');
     const source = values.from ? (/^[./]/.test(values.from) ? resolve(values.from) : values.from) : 'rigscope@latest';

@@ -2,8 +2,10 @@
  * Durable hub database migrations.
  *
  * Every later wave of work (alerts, users, credentials, ...) APPENDS a
- * migration here. Versions are contiguous starting at 1 and are recorded in
- * `schema_migrations` by `openHubDatabase` after the migration itself has
+ * migration here. These numbers order irreversible SQL changes; they are not
+ * configuration or installation state versions, which are unnumbered and
+ * canonical elsewhere. Versions are contiguous starting at 1 and are recorded
+ * in `schema_migrations` by `openHubDatabase` after the migration itself has
  * committed. A migration must only use synchronous SQLite APIs: each one runs
  * inside a single `BEGIN IMMEDIATE ... COMMIT` so a crash leaves either none or
  * all of its changes.

@@ -308,7 +308,7 @@ describe("secure persistence constraints", () => {
     const issued = store.enroll({ collectorId: "collector-a", token: grant(1).token });
     const raw = readFileSync(store.storePath, "utf8");
     const state = JSON.parse(raw);
-    assert.equal(state.version, 1);
+    assert.equal(Object.prototype.hasOwnProperty.call(state, "version"), false);
     assert.equal(state.consumed.length, 1);
     assert.equal(state.consumed[0].tokenHash, sha256(grant(1).token));
     assert.match(state.consumed[0].tokenHash, /^[0-9a-f]{64}$/);
@@ -380,24 +380,33 @@ describe("fail closed on corrupt persisted state", () => {
     assert.equal(corruptStore("null").code, "invalid-state");
   });
 
-  it("rejects wrong versions and missing arrays", () => {
-    assert.equal(corruptStore(JSON.stringify({ version: 2, enrollments: [], consumed: [] })).code, "invalid-state");
-    assert.equal(corruptStore(JSON.stringify({ version: 1 })).code, "invalid-state");
-    assert.equal(corruptStore(JSON.stringify({ version: 1, enrollments: [] })).code, "invalid-state");
+  it("rejects missing arrays", () => {
+    assert.equal(corruptStore(JSON.stringify({})).code, "invalid-state");
+    assert.equal(corruptStore(JSON.stringify({ enrollments: [] })).code, "invalid-state");
+    assert.equal(corruptStore(JSON.stringify({ consumed: [] })).code, "invalid-state");
+  });
+
+  it("rejects unfinished versioned state without rewriting it", () => {
+    for (const field of ['version', 'formatVersion']) {
+      const path = freshPath();
+      const raw = JSON.stringify({[field]: 1, enrollments: [], consumed: []});
+      assert.equal(corruptStore(raw, path).code, 'invalid-state');
+      assert.equal(readFileSync(path, 'utf8'), raw);
+    }
   });
 
   it("rejects malformed entries, duplicates, and oversized state", () => {
     const good = { collectorId: "c", machineId: "m", token: "t".repeat(43), createdAt: FIXED_NOW.toISOString() };
     assert.equal(
-      corruptStore(JSON.stringify({ version: 1, enrollments: [{ collectorId: "c" }], consumed: [] })).code,
+      corruptStore(JSON.stringify({ enrollments: [{ collectorId: "c" }], consumed: [] })).code,
       "invalid-state",
     );
     assert.equal(
-      corruptStore(JSON.stringify({ version: 1, enrollments: [good, good], consumed: [] })).code,
+      corruptStore(JSON.stringify({ enrollments: [good, good], consumed: [] })).code,
       "invalid-state",
     );
     assert.equal(
-      corruptStore(JSON.stringify({ version: 1, enrollments: [], consumed: [{ tokenHash: "deadbeef", collectorId: "c", claimedAt: FIXED_NOW.toISOString() }] })).code,
+      corruptStore(JSON.stringify({ enrollments: [], consumed: [{ tokenHash: "deadbeef", collectorId: "c", claimedAt: FIXED_NOW.toISOString() }] })).code,
       "invalid-state",
     );
     // Over-budget state fails closed rather than being trimmed. The bound is
@@ -408,7 +417,7 @@ describe("fail closed on corrupt persisted state", () => {
       token: `t-${i}-${"z".repeat(40)}`,
       createdAt: FIXED_NOW.toISOString(),
     }));
-    const oversized = JSON.stringify({ version: 1, enrollments, consumed: [] });
+    const oversized = JSON.stringify({ enrollments, consumed: [] });
     assert.ok(Buffer.byteLength(oversized, "utf8") > 128 * 1024);
     assert.equal(corruptStore(oversized).code, "invalid-state");
   });
@@ -418,7 +427,6 @@ describe("fail closed on corrupt persisted state", () => {
     writeFileSync(
       path,
       JSON.stringify({
-        version: 1,
         enrollments: [{ collectorId: "static-collector-1", machineId: "m", token: "t".repeat(43), createdAt: FIXED_NOW.toISOString() }],
         consumed: [],
       }),

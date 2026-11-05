@@ -21,7 +21,6 @@ import {
   type DestinationSessionOptions,
 } from '../collector/destinations/session';
 import type { CollectorSocket, SessionSocketOptions } from '../collector/destinations/session';
-import { METRIC_EXTENSION_NAMES } from '../src/contracts';
 import type {
   CapabilityName,
   DetailCancel,
@@ -111,8 +110,8 @@ function metrics(sequence = nextSequence++): MetricsRecord {
   };
 }
 
-/** A durable record carrying every optional bottleneck-v1 field. */
-function bottleneckMetrics(sequence = nextSequence++): MetricsRecord {
+/** A durable record carrying every optional current metric field. */
+function canonicalMetrics(sequence = nextSequence++): MetricsRecord {
   const base = metrics(sequence);
   return {
     ...base,
@@ -155,28 +154,6 @@ function bottleneckMetrics(sequence = nextSequence++): MetricsRecord {
       },
     },
   };
-}
-
-const BASE_BOTTLENECK_PAYLOAD: MetricsPayload = {
-  ...METRICS_PAYLOAD,
-  cpu: { status: 'ok', usagePercent: 12.5, perCore: [10] },
-  memory: { status: 'ok', usedBytes: 1_000, totalBytes: 8_000 },
-  disks: {
-    status: 'ok',
-    filesystems: [{ id: 'fs:/', status: 'ok', usedBytes: 100, totalBytes: 200 }],
-    devices: [{ id: 'disk:sda', status: 'ok', readBytesPerSec: 1, writeBytesPerSec: 2 }],
-  },
-};
-
-/**
- * Fixture for the pre-extension strict wire contract: the old hub accepted
- * exactly these fields, so any newly optional key would fail its parser.
- */
-function assertBaseWireRecord(record: MetricsRecord): void {
-  assert.deepEqual(record.payload, BASE_BOTTLENECK_PAYLOAD);
-  assert.deepEqual(Object.keys(record).sort(), [
-    'bootId', 'capturedAt', 'collectorId', 'kind', 'payload', 'runId', 'sequence',
-  ]);
 }
 
 type Listener = (...args: unknown[]) => void;
@@ -284,7 +261,6 @@ function makeHarness(t: TestContext, options: HarnessOptions = {}): Harness {
     outbox,
     expectedIntervalMs: INTERVAL_MS,
     capabilities: CAPABILITIES,
-    collectorVersion: 'test-1',
     socketFactory: (_url, socketOptions) => {
       factoryOptions.push(socketOptions);
       const socket = new FakeSocket();
@@ -375,7 +351,7 @@ test('opens with a hello and the bearer token only in the header', (t) => {
   assert.equal(hello.hostname, IDENTITY.hostname);
   assert.deepEqual(hello.capabilities, CAPABILITIES);
   assert.equal(hello.expectedIntervalMs, INTERVAL_MS);
-  assert.equal(hello.collectorVersion, 'test-1');
+  assert.equal(Object.hasOwn(hello, 'collectorVersion'), false, 'hello carries no compatibility version');
   assert.equal(socket.sent[0]!.includes(TOKEN), false, 'token must never be in a message');
 
   const factory = h.factoryOptions[0]!;
@@ -430,18 +406,17 @@ test('a protocol-error close before welcome logs the incompatible-hub hint', (t)
 });
 
 // ---------------------------------------------------------------------------
-// Mixed-version negotiation
+// Canonical serialization
 // ---------------------------------------------------------------------------
 
-test('an old hub welcome sends base-only live and replay while the outbox keeps extended records', async (t) => {
+test('live and replay serialize every current metric field exactly as stored', async (t) => {
   const h = makeHarness(t, { replayBatchesPerSecond: 1_000 });
-  const first = bottleneckMetrics(1);
-  const second = bottleneckMetrics(2);
+  const first = canonicalMetrics(1);
+  const second = canonicalMetrics(2);
   h.outbox.append(first);
   h.outbox.append(second);
 
   const socket = h.socket();
-  // The old welcome shape has no metricExtensions key.
   h.welcome(socket);
   await sleep(30);
 
@@ -449,14 +424,11 @@ test('an old hub welcome sends base-only live and replay while the outbox keeps 
   assert.ok(samples.some((message) => message.mode === 'live'), 'live path was exercised');
   assert.ok(samples.some((message) => message.mode === 'replay'), 'replay path was exercised');
   const sent = samples.flatMap((message) => message.records as MetricsRecord[]);
-  assert.deepEqual(sent.map((record) => record.sequence).sort((a, b) => a - b), [1, 2]);
-  for (const record of sent) {
-    assertBaseWireRecord(record);
-    assert.equal(record.runId, IDENTITY.runId, 'identity is unchanged by projection');
-  }
+  const bySequence = new Map(sent.map((record) => [record.sequence, record]));
+  assert.deepEqual(bySequence.get(1), first);
+  assert.deepEqual(bySequence.get(2), second);
 
-  // Projection happens only at serialization: the durable enhanced record is
-  // still what a later/newer hub would receive.
+  // There is no projection even at rest: the outbox keeps the exact record.
   const db = new DatabaseSync(join(h.dir, 'outbox.sqlite'), { readOnly: true });
   try {
     const rows = db.prepare('SELECT sequence, json FROM outbox_records ORDER BY sequence').all() as Array<{
@@ -465,77 +437,44 @@ test('an old hub welcome sends base-only live and replay while the outbox keeps 
     }>;
     assert.deepEqual(rows.map((row) => row.sequence), [1, 2]);
     const stored = rows.map((row) => JSON.parse(row.json) as MetricsRecord);
-    assert.deepEqual(stored[0]!.payload, first.payload);
-    assert.deepEqual(stored[1]!.payload, second.payload);
+    assert.deepEqual(stored[0], first);
+    assert.deepEqual(stored[1], second);
   } finally {
     db.close();
   }
 
-  // Acks still use the original durable refs, so projected batches drain the
-  // same outbox rows without changing identity semantics.
   h.ack(socket, sent.map(({ runId, sequence }) => ({ runId, sequence })));
   assert.equal(h.outbox.status().pendingRecords, 0);
   assert.equal(h.outbox.status().inFlightRecords, 0);
 });
 
-test('a bottleneck-v1 welcome preserves extended live and replay fields', async (t) => {
-  const h = makeHarness(t, { replayBatchesPerSecond: 1_000 });
-  const first = bottleneckMetrics(1);
-  const second = bottleneckMetrics(2);
-  h.outbox.append(first);
-  h.outbox.append(second);
-
-  const socket = h.socket();
-  h.welcome(socket, { metricExtensions: [...METRIC_EXTENSION_NAMES] });
-  await sleep(30);
-
-  const samples = socket.samples();
-  assert.ok(samples.some((message) => message.mode === 'live'));
-  assert.ok(samples.some((message) => message.mode === 'replay'));
-  const sent = samples.flatMap((message) => message.records as MetricsRecord[]);
-  const bySequence = new Map(sent.map((record) => [record.sequence, record]));
-  assert.deepEqual(bySequence.get(1), first);
-  assert.deepEqual(bySequence.get(2), second);
-});
-
-test('negotiation is per connection: the same durable record is base-only then extended', async (t) => {
+test('reconnect resends the same canonical record without renegotiation', async (t) => {
   const h = makeHarness(t, {
     backoff: { baseMs: 1, maxMs: 1 },
     replayBatchesPerSecond: 1_000,
   });
-  const record = bottleneckMetrics(1);
+  const record = canonicalMetrics(1);
   h.outbox.append(record);
 
   const first = h.socket();
   h.welcome(first);
   await sleep(20);
   const firstSent = first.samples().flatMap((message) => message.records as MetricsRecord[]);
-  const firstRecord = firstSent.find((candidate) => candidate.sequence === record.sequence);
-  assert.ok(firstRecord !== undefined);
-  assertBaseWireRecord(firstRecord);
+  assert.deepEqual(firstSent.find((candidate) => candidate.sequence === record.sequence), record);
 
   first.emit('close');
   await sleep(40);
-  assert.ok(h.sockets.length >= 2, 'reconnected to the upgraded hub');
+  assert.ok(h.sockets.length >= 2, 'reconnected');
 
   const second = h.socket();
-  h.welcome(second, { metricExtensions: [...METRIC_EXTENSION_NAMES] });
+  h.welcome(second);
   await sleep(20);
   const secondSent = second.samples().flatMap((message) => message.records as MetricsRecord[]);
-  const secondRecord = secondSent.find((candidate) => candidate.sequence === record.sequence);
-  assert.deepEqual(secondRecord, record, 'the same durable record is now sent with extensions');
-
-  // The original durable record was never mutated by either connection.
-  const db = new DatabaseSync(join(h.dir, 'outbox.sqlite'), { readOnly: true });
-  try {
-    const row = db
-      .prepare('SELECT json FROM outbox_records WHERE run_id = ? AND sequence = ?')
-      .get(record.runId, record.sequence) as { json: string } | undefined;
-    assert.ok(row !== undefined);
-    assert.deepEqual(JSON.parse(row.json) as MetricsRecord, record);
-  } finally {
-    db.close();
-  }
+  assert.deepEqual(
+    secondSent.find((candidate) => candidate.sequence === record.sequence),
+    record,
+    'the same canonical durable record is resent',
+  );
 });
 
 // ---------------------------------------------------------------------------

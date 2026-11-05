@@ -215,7 +215,6 @@ function makeHarness(t: TestContext, options: HarnessOptions = {}): Harness {
     budget: options.budget ?? new OutboxBudget(),
     allocateSequence: () => ++gapSequence,
     sampler,
-    collectorVersion: 'test-1',
     socketFactory: () => {
       const socket = new FakeSocket();
       sockets.push(socket);
@@ -354,17 +353,42 @@ test('recovered pending samples are sanitized by policy and never cadence-filter
   assert.equal(h.connection.describeState().pendingRecords, 0, 'everything replays once welcomed');
 });
 
-test('a connection upgrades a previous-endpoint outbox and delivers its records', (t) => {
-  const stateDir = mkdtempSync(join(ROOT, 'upgrade-'));
-  const previousUrl = new URL(HUB_URL);
-  previousUrl.pathname = '/api/collector/v1/connect';
-  seedOutbox(stateDir, previousUrl.href, [metrics(7)]);
+test('a current-endpoint outbox replays retained canonical records with privacy applied', (t) => {
+  const stateDir = mkdtempSync(join(ROOT, 'retained-'));
+  const retained: MetricsRecord = {
+    ...metrics(7),
+    payload: {
+      ...METRICS_PAYLOAD,
+      cpu: {
+        status: 'ok',
+        usagePercent: 12.5,
+        perCore: [10],
+        temperatureC: 61.4,
+        powerWatts: 88.2,
+        iowaitPercent: 1.25,
+        pressureSomePercent: 3.5,
+      },
+      memory: {
+        status: 'ok',
+        usedBytes: 1_000,
+        totalBytes: 8_000,
+        pressureSomePercent: 1.5,
+        pressureFullPercent: 0.5,
+      },
+    },
+  };
+  seedOutbox(stateDir, HUB_URL, [retained]);
   const h = makeHarness(t, { stateDir, sharing: { memory: false } });
 
   h.welcome(h.socket());
   const replayed = metricRecords(h.samplesOf(h.socket()));
   assert.deepEqual(replayed.map((record) => record.sequence), [7]);
-  assert.deepEqual(replayed[0]!.payload.memory, WITHHELD, 'privacy applies to upgraded records too');
+  assert.deepEqual(
+    replayed[0]!.payload.cpu,
+    retained.payload.cpu,
+    'every canonical metric field is serialized exactly as stored',
+  );
+  assert.deepEqual(replayed[0]!.payload.memory, WITHHELD, 'privacy applies to retained records');
 });
 
 test('stop preserves pending authorized delivery for the next run', (t) => {

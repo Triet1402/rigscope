@@ -24,26 +24,24 @@ async function waitMetrics(live: SseClient, minimumSequence = -1): Promise<Machi
   throw new Error('metrics did not arrive');
 }
 
-test('packaged collector upgrades saved endpoints and replays pre-consolidation metrics and gaps', async t => {
-  const dir = mkdtempSync(join(tmpdir(), 'rigscope-upgrade-runtime-'));
+test('packaged collector replays a retained canonical queue and reapplies local privacy', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'rigscope-retained-runtime-'));
   t.after(() => rmSync(dir, {recursive: true, force: true}));
-  const collectorId = 'upgrade-runtime-collector';
-  const creds = credential(collectorId, 'upgrade-machine', 'public-upgrade-token');
+  const collectorId = 'retained-runtime-collector';
+  const creds = credential(collectorId, 'retained-machine', 'public-retained-token');
   const databasePath = join(dir, 'hub', 'telemetry.sqlite');
   const hub = await startHub(t, {collectors: [creds], databasePath});
-  const previousUrl = new URL(hub.collectorWsUrl);
-  previousUrl.pathname = '/api/collector/v1/connect';
   const statePath = join(dir, 'collector.json');
-  writeFileSync(statePath, JSON.stringify({version: 1, collectorId,
-    destinations: [{url: previousUrl.href, token: creds.token}]}), {mode: 0o600});
-  const identity = {collectorId, runId: 'pre-upgrade-run', bootId: 'pre-upgrade-boot'};
+  writeFileSync(statePath, JSON.stringify({collectorId,
+    destinations: [{url: hub.collectorWsUrl, token: creds.token, sharing: {cpu: true, memory: false}}]}), {mode: 0o600});
+  const identity = {collectorId, runId: 'retained-run', bootId: 'retained-boot'};
   const record = createSyntheticMetricsSampler(identity, {sequence: createSequenceAllocator(), now: () => Date.now() - 2000}).next();
-  const previousDir = outboxDirFor(dir, previousUrl.href);
-  const outbox = DestinationOutbox.open({dir: previousDir, identity, allocateSequence: () => 100});
-  outbox.append({...record, protocolVersion: 2} as typeof record);
+  const queueDir = outboxDirFor(dir, hub.collectorWsUrl);
+  const outbox = DestinationOutbox.open({dir: queueDir, identity, allocateSequence: () => 100});
+  outbox.append(record);
   outbox.close();
-  const spool = new DatabaseSync(join(previousDir, 'outbox.sqlite'));
-  const gap = {...identity, protocolVersion: 2, sequence: 2, kind: 'gap', capturedAt: record.capturedAt,
+  const spool = new DatabaseSync(join(queueDir, 'outbox.sqlite'));
+  const gap = {...identity, sequence: 2, kind: 'gap', capturedAt: record.capturedAt,
     payload: {fromCapturedAt: record.capturedAt, toCapturedAt: record.capturedAt, droppedRecords: 1, reason: 'outbox-age'}};
   const json = JSON.stringify(gap);
   spool.prepare("INSERT INTO outbox_records (run_id,sequence,captured_at,kind,state,gap_reason,offered,bytes,json) VALUES (?,?,?,'gap','inflight','outbox-age',1,?,?)")
@@ -52,7 +50,7 @@ test('packaged collector upgrades saved endpoints and replays pre-consolidation 
 
   const live = new SseClient(hub.liveUrl, hub.browserHeaders);
   t.after(() => live.close());
-  const collector = startChild('upgrade-real-collector', ['dist/collector.cjs'], baseEnv('collector', {
+  const collector = startChild('retained-real-collector', ['dist/collector.cjs'], baseEnv('collector', {
     COLLECTOR_MODE: 'real', COLLECTOR_STATE_FILE: statePath, COLLECTOR_INTERVAL_MS: '500',
   }));
   t.after(() => collector.stop());
@@ -67,11 +65,27 @@ test('packaged collector upgrades saved endpoints and replays pre-consolidation 
     }
     assert.deepEqual(receipts.all(collectorId, identity.runId).map(r => ({...r})), [{seq: 1, kind: 'metrics'}, {seq: 2, kind: 'gap'}]);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM gaps WHERE run_id = ? AND seq = 2').get(identity.runId)!.count, 1);
+
+    // Retained canonical fields replay unchanged, while the state sharing
+    // policy is applied again to memory before the record leaves the collector.
+    assert.equal(record.payload.cpu.status, 'ok');
+    assert.equal(record.payload.memory.status, 'ok');
+    const capturedMs = Date.parse(record.capturedAt);
+    const point = (metric: string) => {
+      const series = db.prepare("SELECT series_id FROM series WHERE machine_id = ? AND metric = ? AND resource_id = ''")
+        .get(creds.machineId, metric) as {series_id: number} | undefined;
+      assert.ok(series !== undefined, `expected a ${metric} series`);
+      return db.prepare('SELECT value FROM points_raw WHERE series_id = ? AND ts_ms = ?')
+        .get(series.series_id, capturedMs) as {value: number | null} | undefined;
+    };
+    assert.equal(point('memory.used')?.value, null, 'withheld memory never reaches the hub');
+    assert.equal(point('cpu.temperature')?.value, record.payload.cpu.temperatureC, 'canonical cpu field replays as stored');
   } finally { db.close(); }
   const state = JSON.parse(readFileSync(statePath, 'utf8'));
   assert.equal(state.collectorId, collectorId);
   assert.equal(state.destinations[0].url, hub.collectorWsUrl);
   assert.equal(state.destinations[0].token, creds.token);
+  assert.deepEqual(state.destinations[0].sharing, {cpu: true, memory: false});
   assert.equal((await collector.stop()).code, 0);
 });
 
@@ -85,7 +99,7 @@ test('packaged real collector: multi-hub live/history, process interests and dur
   const hubA = await startHub(t, { collectors: [credsA], databasePath });
   const hubB = await startHub(t, { collectors: [credsB], databasePath: join(dir, 'hub-b', 'telemetry.sqlite') });
   const statePath = join(dir, 'collector.json');
-  writeFileSync(statePath, JSON.stringify({ version: 1, collectorId, destinations: [
+  writeFileSync(statePath, JSON.stringify({ collectorId, destinations: [
     { url: hubA.collectorWsUrl, token: credsA.token }, { url: hubB.collectorWsUrl, token: credsB.token },
   ] }), { mode: 0o600 });
   const liveA = new SseClient(hubA.liveUrl, hubA.browserHeaders);

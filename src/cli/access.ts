@@ -6,9 +6,9 @@ import type { DestinationEndpoint } from '../../collector/config';
 import { outboxDirFor } from '../../collector/destinations/outbox';
 import { parseHubConfig } from '../hub/config';
 import { writePrivateFile } from '../operations/fs';
-import { connectUrl, hubEnvironment, privateDirectory, readPrivate, readSetup, writeSetup, type Setup } from './config';
+import { connectUrl, hubEnvironment, privateDirectory, readPrivate, readSetup, validatePort, writeSetup, type Setup } from './config';
 
-export type AccessOptions = {origin?: string; local?: boolean; socket?: string};
+export type AccessOptions = {origin?: string; local?: boolean; socket?: string; port?: string};
 
 export type AccessPlan = {
   next: Setup;
@@ -38,15 +38,22 @@ function readCollectorState(dir: string): InstallationState | null {
  * components whose running state actually conflicts with the mutation.
  */
 export function planAccessChange(dir: string, options: AccessOptions): AccessPlan {
-  if (Boolean(options.origin) === Boolean(options.local)) throw new Error('Choose --origin https://your-hub or --local.');
+  if (options.origin && options.port !== undefined) {
+    throw new Error('--port is unused with --origin; the hub serves HTTPS on its public origin.');
+  }
+  if (options.origin && options.local) throw new Error('Choose --origin https://your-hub or --local.');
+  if (!options.origin && !options.local && options.port === undefined) {
+    throw new Error('Choose --origin https://your-hub, --local, or --port PORT.');
+  }
   if (options.socket && !options.origin) throw new Error('--socket requires --origin.');
+  const port = options.port === undefined ? undefined : validatePort(options.port);
   const previous = readSetup(dir);
   if (!previous) throw new Error('No saved installation. Run rigscope install first.');
   if (previous.users.length === 0) throw new Error('This installation has no hub configuration. Use rigscope connect to select a collector hub.');
-  const next = {...previous};
+  const next = {...previous, port: port ?? previous.port};
   if (options.local) { delete next.origin; delete next.socket; }
-  else { next.origin = options.origin; next.socket = options.socket ?? join(dir, 'run', 'hub.sock'); }
-  // Validate the exact HTTPS identity and private socket before writing anything.
+  else if (options.origin) { next.origin = options.origin; next.socket = options.socket ?? join(dir, 'run', 'hub.sock'); }
+  // Validate the exact HTTPS identity, port and private socket before writing anything.
   parseHubConfig(hubEnvironment(dir, next));
 
   const oldEndpoint = endpointFor(previous);
@@ -58,7 +65,7 @@ export function planAccessChange(dir: string, options: AccessOptions): AccessPla
     ? state.destinations.find(item => item.url === oldEndpoint) ?? null
     : null;
   const collectorChanged = self !== null && oldEndpoint !== newEndpoint;
-  const configChanged = previous.origin !== next.origin || previous.socket !== next.socket;
+  const configChanged = previous.origin !== next.origin || previous.socket !== next.socket || previous.port !== next.port;
   return {
     next,
     url: next.origin ?? `http://127.0.0.1:${next.port}`,

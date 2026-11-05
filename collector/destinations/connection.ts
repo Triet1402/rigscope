@@ -3,9 +3,9 @@
  *
  * A HubConnection owns everything that varies per Hub connection: its local
  * sharing policy, its effective delivery cadence, its durable outbox
- * directory (including the previous-endpoint upgrade location), recovered
- * queue sanitation, inventory selection and version refresh, and the durable
- * append-before-send submission path. The one runtime caller only fans a
+ * directory, recovered queue sanitation, inventory selection and version
+ * refresh, and the durable append-before-send submission path. The one
+ * runtime caller only fans a
  * shared sample out to every connection and hands over nothing else; filter,
  * append, notify-delivery and inventory choreography are internal
  * obligations now.
@@ -21,7 +21,7 @@
  * outbox absorbs storage failures, the session owns its own socket, timers
  * and reconnect schedule, and `acceptSample` never throws outward.
  */
-import { PREVIOUS_CONNECT_PATH, type DestinationEndpoint } from '../config';
+import type { DestinationEndpoint } from '../config';
 import type { CollectorIdentity } from '../identity';
 import type {
   CollectionFailure,
@@ -75,7 +75,6 @@ export type HubConnectionOptions = {
   allocateSequence: () => number;
   /** The shared sampler's read-only surface. */
   sampler: SharedSampler;
-  collectorVersion: string;
   socketFactory: SocketFactory;
   onEvent?: (line: string) => void;
   /** Socket schedule tuning; production uses the session defaults. */
@@ -115,7 +114,6 @@ export class HubConnection {
       outbox,
       expectedIntervalMs: effectiveIntervalMs(options.baseIntervalMs, options.endpoint.intervalMs),
       capabilities,
-      collectorVersion: options.collectorVersion,
       socketFactory: options.socketFactory,
       backoff: options.backoff,
       rand: options.rand,
@@ -129,19 +127,14 @@ export class HubConnection {
   }
 
   /**
-   * Opens this connection's durable outbox under its current endpoint URL,
-   * upgrades outboxes that predate the endpoint consolidation, and re-applies
-   * the privacy policy to recovered pending records so none of them can
-   * leave with forbidden fields. Sanitation never cadence-filters: retained
-   * samples were already cadence-selected when they were captured.
+   * Opens this connection's durable outbox under its canonical endpoint URL
+   * and re-applies the privacy policy to recovered pending records so none of
+   * them can leave with forbidden fields. Sanitation never cadence-filters:
+   * retained samples were already cadence-selected when they were captured.
    */
   static open(options: HubConnectionOptions): HubConnection {
-    const dir = outboxDirFor(options.stateDir, options.endpoint.url);
-    const previousUrl = new URL(options.endpoint.url);
-    previousUrl.pathname = PREVIOUS_CONNECT_PATH;
     const outbox = DestinationOutbox.open({
-      dir,
-      previousDir: outboxDirFor(options.stateDir, previousUrl.href),
+      dir: outboxDirFor(options.stateDir, options.endpoint.url),
       budget: options.budget,
       allocateSequence: options.allocateSequence,
       identity: {

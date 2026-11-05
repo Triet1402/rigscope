@@ -28,9 +28,8 @@ export class ConfigError extends Error {
 
 export const DEFAULT_COLLECTOR_ID = 'mock-collector';
 export const MOCK_HOSTNAME = 'mock-machine';
+/** The only collector wire endpoint; older persisted paths are not accepted. */
 export const CONNECT_PATH = '/api/collector/connect';
-/** Persisted installations from before the protocol consolidation use this path. */
-export const PREVIOUS_CONNECT_PATH = '/api/collector/v1/connect';
 /** Hard destination budget for the spike; a larger fleet needs a redesign. */
 export const MAX_DESTINATIONS = 8;
 
@@ -152,8 +151,8 @@ export function validateHubUrl(raw: unknown, label: string, issues: string[]): U
     issues.push(`${label}: URL must include a host`);
     return null;
   }
-  // Normalize local configuration only; the hub still exposes one wire endpoint.
-  if (parsed.pathname === PREVIOUS_CONNECT_PATH) parsed.pathname = CONNECT_PATH;
+  // There is exactly one canonical endpoint. An older persisted URL is
+  // incompatible and must be reset, never silently rewritten on read.
   if (parsed.pathname !== CONNECT_PATH) {
     issues.push(`${label}: path must be exactly ${CONNECT_PATH}`);
     return null;
