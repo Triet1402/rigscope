@@ -6,7 +6,7 @@
 .product-demo-caption a { display: inline-flex; align-items: center; gap: 7px; color: var(--muted-foreground); text-decoration: none; }
 .product-demo-caption a:hover { color: var(--foreground); }
 .product-demo-caption a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
-.product-demo iframe { display: block; width: 100%; flex: 1; min-height: 0; height: 0; border: 1px solid var(--border); border-radius: 12px; background: #1a1b1e; }
+.product-demo iframe { display: block; width: 100%; flex: none; min-height: 0; height: clamp(680px, 82dvh, 1100px); border: 1px solid var(--border); border-radius: 12px; background: #1a1b1e; }
 @media (max-width: 760px) { .product-demo iframe { height: 740px; } .product-demo-caption { font-size: 12px; } }
 
 @media (max-width: 920px) { .product-demo iframe { flex: none; height: 740px; } }

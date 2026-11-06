@@ -5,7 +5,7 @@ import { BrandMark } from '../../src/components/brand-mark';
 import './landing.css';
 
 const INSTALL_COMMAND = 'npx --yes rigscope@latest install --boot';
-const DOCUMENTATION_URL = 'https://github.com/Triet1402/rigscope#documentation';
+const DOCUMENTATION_URL = '/docs/';
 const SOURCE_URL = 'https://github.com/Triet1402/rigscope';
 const LICENSE_URL = 'https://github.com/Triet1402/rigscope/blob/main/LICENSE';
 const CONTACT_URL = 'https://github.com/Triet1402';
@@ -130,7 +130,7 @@ export function Landing({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="landing" id="top">
+    <div className="landing landing-home" id="top">
       <a className="skip-link" href="#main-content">
         Skip to main content
       </a>
@@ -144,15 +144,16 @@ export function Landing({ children }: { children: ReactNode }) {
           <nav className="site-nav" aria-label="Primary">
             <a href="#demo">Demo</a>
             <a href={DOCUMENTATION_URL}>Documentation</a>
+            <a href="/guides/">Guides</a>
             <a href={SOURCE_URL}>GitHub</a>
           </nav>
         </header>
 
         <main id="main-content" tabIndex={-1}>
           <section className="hero" aria-labelledby="hero-heading">
-            <h1 id="hero-heading">Your machines, in view.</h1>
+            <h1 id="hero-heading">Rigscope — Self-hosted Linux System &amp; Process Monitor</h1>
             <p className="hero-subtitle">
-              A self-hosted Linux system and process monitor.
+              Your machines, in view. Monitor a workstation, server, or small fleet.
             </p>
 
             <div className="install">
@@ -207,6 +208,8 @@ export function Landing({ children }: { children: ReactNode }) {
             </p>
           </section>
 
+          <div className="demo-section">{children}</div>
+
           <ul className="benefits" aria-label="Why Rigscope">
             <li className="benefit">
               <h2>Self-hosted &amp; private</h2>
@@ -222,13 +225,24 @@ export function Landing({ children }: { children: ReactNode }) {
             </li>
           </ul>
 
-          <div className="demo-section">{children}</div>
+          <section className="home-details" aria-labelledby="monitor-heading">
+            <h2 id="monitor-heading">Linux monitoring, on your own infrastructure</h2>
+            <p>Rigscope brings CPU, memory, GPU, disk, network, and process readings into a browser dashboard. Run a hub for the dashboard and a collector on each Linux machine. The default installation runs both on one computer; collectors on other machines connect outbound to your hub.</p>
+            <div className="feature-details">
+              <section><h3>Inspect resources and running processes</h3><p>Start with machine usage, then inspect individual processes to understand what is using CPU and memory. Process details are fetched while you view them and are never saved to History. Monitoring is read-only: Rigscope does not kill processes or change their priorities.</p><a href="/guides/linux-cpu-memory-processes/">Understand CPU, memory, and process readings</a></section>
+              <section><h3>Review history and configure alerts</h3><p>History is stored in SQLite, with raw readings and longer-lived summaries. Create threshold, unavailable-reading, and missing-receipt rules, then send notifications to an HTTPS webhook. Collection continues when your browser is closed.</p><a href="/docs/monitoring/">Read about history, retention, and alerts</a></section>
+              <section><h3>See the GPU readings your hardware provides</h3><p>Monitor NVIDIA GPUs through nvidia-smi and available AMD counters through Linux driver interfaces. Intel support is partial. Driver support and permissions determine which readings appear; missing readings stay unavailable.</p><a href="/guides/linux-gpu-monitoring/">Check NVIDIA, AMD, and Intel GPU support</a></section>
+              <section><h3>Bring multiple machines into one dashboard</h3><p>Enroll collectors with one-use connection grants and control sharing for each hub. Each hub owns its users, permissions, history, and alerts. Network addresses and full process arguments start disabled.</p><a href="/guides/monitor-multiple-linux-machines/">Set up monitoring for multiple Linux machines</a></section>
+            </div>
+            <p>Ready to install? Follow the <a href="/docs/installation/">Linux installation guide</a>, or browse the <a href="/docs/">documentation</a> for configuration, backups, and exports.</p>
+          </section>
         </main>
 
         <footer className="site-footer">
           <p>Rigscope — a self-hosted Linux resource and process monitor.</p>
           <nav className="footer-links" aria-label="Footer">
             <a href={DOCUMENTATION_URL}>Documentation</a>
+            <a href="/guides/">Guides</a>
             <a href={LICENSE_URL}>MIT license</a>
             <a href={CONTACT_URL} className="footer-contact">
               Contact on GitHub

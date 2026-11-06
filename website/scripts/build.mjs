@@ -1,4 +1,5 @@
 import {build} from 'esbuild';
+import {buildContent, documentHtml} from './content.mjs';
 import {createHash} from 'node:crypto';
 import {mkdir, readFile, writeFile, cp, rm} from 'node:fs/promises';
 import postcss from 'postcss';
@@ -20,7 +21,7 @@ const shared = {
 };
 await build({...shared, entryPoints:['src/client.tsx'], outfile:'dist/app.js', platform:'browser', target:['es2022'], format:'esm', alias:{react:resolve(root,'node_modules/react'), 'react-dom':resolve(root,'node_modules/react-dom')}});
 await build({...shared, entryPoints:['src/render.tsx'], outfile:'.build/render.mjs', platform:'node', format:'esm', packages:'external', loader:{'.css':'empty'}});
-const {render} = await import(pathToFileURL(resolve(root, '.build/render.mjs')).href + '?t=' + Date.now());
+const {render, renderContent} = await import(pathToFileURL(resolve(root, '.build/render.mjs')).href + '?t=' + Date.now());
 const body = render();
 await cp(resolve(root, 'public'), dist, {recursive:true});
 const notices = ['Rigscope website third-party notices\n\nGeist font (SIL Open Font License 1.1)\n' + await readFile(resolve(root, 'public/fonts/Geist-LICENSE.txt'), 'utf8')];
@@ -30,15 +31,12 @@ for (const [name, license] of [['react','LICENSE'], ['react-dom','LICENSE'], ['s
 }
 await writeFile(resolve(dist, 'NOTICES.txt'), notices.join('\n\n---\n\n'));
 
-await writeFile(resolve(dist, 'index.html'), `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="preload" href="/fonts/geist-latin-variable.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="canonical" href="https://rigscope.dev/"><meta property="og:url" content="https://rigscope.dev/">
-<meta name="theme-color" content="#181a1e"><title>Rigscope — Your machines, in view.</title>
-<meta name="description" content="A self-hosted Linux system and process monitor. Explore CPU, memory, GPU, and process visibility in an interactive demo, then install Rigscope in one command.">
-<meta property="og:title" content="Rigscope — Your machines, in view."><meta property="og:description" content="A self-hosted Linux system and process monitor. Try the interactive demo and install in one command."><meta property="og:type" content="website">
-<link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="${await asset('app.css')}">
-</head><body><div id="root">${body}</div><script type="module" src="${await asset('app.js')}"></script></body></html>`);
+await writeFile(resolve(dist, 'index.html'), documentHtml({
+  title:'Rigscope — Self-hosted Linux System & Process Monitor',
+  description:'Monitor Linux CPU, memory, GPUs, disks, networks, and processes with Rigscope. Self-host your dashboard, review history, and set alerts for your machines.',
+  path:'/', body:`<div id="root">${body}</div>`, css:await asset('app.css'), script:await asset('app.js'),
+}));
+await buildContent({root, dist, renderContent, css:await asset('app.css')});
 await rm(resolve(root, '.build/render.mjs'));
 
 // Bundle the actual product screens. Only routing and data hooks are replaced;
@@ -66,6 +64,6 @@ await writeFile(resolve(dist,'demo.html'), `<!doctype html><html lang="en" class
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>Rigscope interactive demo — synthetic data</title><link rel="icon" href="/icon.svg"><link rel="stylesheet" href="${await asset('product-demo.css')}">
 </head><body><div style="height:32px;display:flex;align-items:center;justify-content:center;gap:8px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted-foreground)" role="note">Synthetic demo · All machines and readings are simulated.</div>
-<style>#root > .h-dvh { height:calc(100dvh - 32px) }</style>
+<style>@media (min-width: 960px) { html { font-size: 18px; } } #root > .h-dvh { height:calc(100dvh - 32px) }</style>
 <div id="root"><p style="padding:24px">Loading Rigscope demo…</p></div><script type="module" src="${await asset('product-demo.js')}"></script></body></html>`);
 console.log('Built static Rigscope website in website/dist');

@@ -10,6 +10,7 @@ npm ci
 npm run typecheck
 npm run verify:demo
 npm run build
+npm run verify:seo
 PORT=8087 npm start
 ```
 
@@ -42,8 +43,32 @@ Alerts, Connections, and Administration keep their navigation positions but lead
 to a public-demo explanation rather than editable hub settings.
 
 Update the install command and prerequisites alongside the root README when
-installation changes. Documentation, source, and contact links point to the
-Rigscope GitHub repository and maintainer profile.
+installation changes. Documentation lives at `/docs/`; source and contact links point to GitHub.
+
+## Public content and SEO
+
+The build renders seven references directly from the root `docs/` Markdown files,
+so installation, monitoring, configuration, operations, system installation,
+sensors, and export instructions have one source of truth. Relative links to
+published references become local URLs; links to other repository files keep
+pointing to GitHub. New practical guides live in `content/guides/`.
+
+`scripts/content.mjs` defines the public page list, descriptions, canonical URLs,
+Markdown rendering, and documentation indexes. Add a page there to include it in
+navigation and the generated sitemap. Each page gets a unique title, description,
+and canonical URL. Content pages are static HTML and need no client JavaScript.
+Only trusted repository Markdown is supported; do not compile untrusted HTML.
+
+The build emits `sitemap.xml` and `robots.txt`. The demo keeps `noindex` and stays
+out of the sitemap. Directory URLs end in `/`; the included server redirects
+missing slashes and `index.html` aliases to the canonical path. When deploying
+to another static host, configure equivalent directory-index and redirect rules
+and serve XML with the correct content type.
+
+Run `npm run verify:seo` after building. It checks public metadata, sitemap
+coverage, local links and heading anchors, demo exclusion, and actual HTTP
+responses from a temporary local server. The manual CI workflow runs it too.
+Search Console verification and sitemap submission are separate account actions.
 
 The root TypeScript project excludes this app. Its own TypeScript configuration
 resolves React types from its own dependencies, including for the shared mark,
