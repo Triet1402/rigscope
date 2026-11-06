@@ -35,6 +35,15 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Install website dependencies
+        run: npm ci --prefix website --no-audit --no-fund
+
+      - name: Check shared product demo
+        run: |
+          npm run typecheck --prefix website
+          npm run verify:demo --prefix website
+          npm run build --prefix website
+
       # `prepack` performs the single production build, then verifies the
       # artifacts before the archive is written. Several tests start the
       # packaged hub, so this must run before the test suite.

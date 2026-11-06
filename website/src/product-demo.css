@@ -1,0 +1,10 @@
+.product-demo { min-width: 0; scroll-margin-top: 16px; }
+.product-demo-caption { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 0 2px 12px; font-size: 13px; }
+.product-demo-caption p { display: flex; align-items: center; gap: 8px; margin: 0; }
+.product-demo-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+.product-demo-note { color: var(--muted-foreground); padding-left: 6px; }
+.product-demo-caption a { display: inline-flex; align-items: center; gap: 7px; color: var(--muted-foreground); text-decoration: none; }
+.product-demo-caption a:hover { color: var(--foreground); }
+.product-demo-caption a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.product-demo iframe { display: block; width: 100%; height: 800px; border: 1px solid var(--border); border-radius: 12px; background: #1a1b1e; }
+@media (max-width: 760px) { .product-demo iframe { height: 740px; } .product-demo-caption { font-size: 12px; } }

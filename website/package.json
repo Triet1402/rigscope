@@ -1,0 +1,27 @@
+{
+  "name": "rigscope-website",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "node scripts/serve.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "verify:demo": "node scripts/verify-demo.mjs"
+  },
+  "dependencies": {
+    "lucide-react": "^0.475.0",
+    "next-themes": "^0.4.6",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.0",
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "esbuild": "^0.28.2",
+    "postcss": "^8.5.23",
+    "typescript": "^5.9.3"
+  }
+}

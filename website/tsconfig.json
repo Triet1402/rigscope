@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "paths": {
+      "react": ["./node_modules/@types/react"],
+      "react/*": ["./node_modules/@types/react/*"],
+      "@/live/live-provider": ["./src/product-demo/live.tsx"],
+      "@/*": ["../src/*"],
+      "next/link": ["./src/product-demo/navigation.tsx"],
+      "next/navigation": ["./src/product-demo/navigation.tsx"],
+      "next-themes": ["./node_modules/next-themes"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}

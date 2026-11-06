@@ -2,25 +2,25 @@
 name: Rigscope
 description: A calm remote monitoring console with clear hierarchy, useful density, and coherent dark/light themes.
 colors:
-  background: "#1a1b1e"
-  card: "#26272b"
-  card-strong: "#2d2e33"
-  border: "#3a3b3f"
-  foreground: "#e4e5e8"
-  muted-foreground: "#a2a4a9"
+  background: "#181a1e"
+  card: "#22252a"
+  card-strong: "#2d3036"
+  border: "#3a3e45"
+  foreground: "#f1f2f4"
+  muted-foreground: "#afb4bd"
   accent: "#3584e4"
   accent-foreground: "#ffffff"
   selected: "#1e3a5c"
-  ok: "#3db84a"
-  ok-soft: "rgba(61, 184, 74, 0.15)"
-  warn: "#e5a83b"
-  warn-soft: "rgba(229, 168, 59, 0.15)"
+  ok: "#58cc8b"
+  ok-soft: "rgba(88, 204, 139, 0.15)"
+  warn: "#e5b45e"
+  warn-soft: "rgba(229, 180, 94, 0.15)"
   crit: "#e05e5e"
   crit-soft: "rgba(224, 94, 94, 0.15)"
-  cpu: "#3584e4"
-  mem: "#4ec289"
-  swap: "#d8a23a"
-  scrollbar: "#3a3b3f"
+  cpu: "#4c9bf5"
+  mem: "#58cc8b"
+  swap: "#e5b45e"
+  scrollbar: "#3a3e45"
 typography:
   page-title:
     fontFamily: "system-ui, ui-sans-serif, 'Noto Sans', 'Inter', sans-serif"
@@ -231,8 +231,17 @@ the toolbar stays visible and table headers remain pinned while rows scroll. Dra
 divider, or double-click to reset. View mode, per-table sorting and widths persist in the
 browser; search, expanded applications, pause and machine selection last for the tab session.
 Machine selection is shared across Fleet, Overview, History and Processes for the tab.
-The sidebar keeps Fleet as the parent of a single machine selector and indented
-Overview/History/Processes links. Global hub pages follow in a separate group. Header
+The 224px desktop sidebar keeps Fleet above a visible list of authorized machines,
+with names and available tags. Selected machines use a blue surface, outlined row,
+stronger name and check mark. Choosing a machine preserves the active machine view
+and uses the shared tab-scoped selection. The list scrolls within a bounded height
+so Overview/History/Processes and the separated Alerts, Connections and admin-only
+Administration links remain reachable. On the 56px mobile rail, machine initials and
+view icons retain native titles and accessible names; selection remains outlined.
+The logo and live connection footer retain their existing roles. Dark surfaces use
+the charcoal website palette, brighter text, blue CPU, green memory and amber swap;
+light tokens retain their established palette. Warning and critical meanings remain
+separate, and dark keyboard focus uses a solid blue outline. Header
 breadcrumbs show Fleet / machine / view; page-level tabs and pickers are omitted. Fleet
 rows show compact CPU/memory trends received since sign-in. Overview combines CPU/GPU
 and RAM/VRAM into two charts in one fixed ten-minute panel. History owns range and metric
@@ -297,3 +306,5 @@ Rigscope is a self-hosted Linux resource/process monitor for a machine owner or 
 App surfaces use Operate mode: precise data, quiet surfaces, stable live updates and familiar controls. Freshness changes update existing status indicators without inserting banners above data. Interface copy consists of labels, values and actionable errors; omit redundant explanatory paragraphs.
 
 The identity is an open rack frame around a rising trace and two sample points. `BrandMark` is the shared, decorative 24-unit SVG in the sidebar and sign-in row; the neighboring Rigscope text/link provides its accessible name. The app icon uses the same geometry with a dark backing and bright blue stroke for light/dark browser chrome. It is legible at 16–32px, with no animation, raster assets or layout changes. Keep this small brand gesture separate from metric semantics.
+
+Machine rows use a fixed 16px status column and the same 12px gap and horizontal inset as navigation links, so every desktop label aligns. The status dot is green for fresh live samples, amber for stale or unavailable feeds, red for disconnected collectors, and muted before the first sample; the accessible name includes the status. CPU model appears below the machine name when available, with tags as the fallback. Mobile initials retain a small status dot.

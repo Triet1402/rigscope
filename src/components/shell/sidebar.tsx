@@ -8,6 +8,8 @@ import { machineViewHref, useMachineNavigation, type MachineViewKind } from "@/l
 import { BrandMark } from "@/components/brand-mark";
 import { SidebarLiveStatus } from "@/components/live/live-status";
 import { useLive } from "@/live/live-provider";
+import { stateFreshness } from "@/live/presentation";
+import { useNow } from "@/live/use-now";
 
 const GLOBAL_LINKS = [
   { href: "/alerts", label: "Alerts", icon: Bell },
@@ -20,47 +22,76 @@ const MACHINE_LINKS = [
 ] as const;
 
 const linkStyle = (active: boolean) => [
-  "flex min-h-9 min-w-0 items-center gap-3 rounded-md px-2 text-sm transition-colors md:px-3",
-  active ? "bg-selected font-medium text-foreground" : "text-muted-foreground hover:bg-card-strong hover:text-foreground",
+  "flex min-h-9 min-w-0 items-center gap-3 rounded-md border px-2 text-sm transition-colors md:px-3",
+  active ? "border-accent/60 bg-selected font-medium text-foreground" : "border-transparent text-muted-foreground hover:bg-card-strong hover:text-foreground",
 ].join(" ");
 
 export function Sidebar({ machineId, machineView }: { machineId?: string; machineView?: MachineViewKind }) {
   const pathname = usePathname();
-  const { session, machines } = useLive();
+  const { session, machines, phase } = useLive();
+  const now = useNow();
   const { machine: selected, view: activeView, selectMachine } = useMachineNavigation(machineId, machineView);
   const admin = session.kind === "signed-in" && session.user.admin === true;
   const globalLinks = admin ? [...GLOBAL_LINKS, { href: "/administration", label: "Administration", icon: Settings }] : GLOBAL_LINKS;
 
   return (
-    <aside className="flex w-14 shrink-0 flex-col border-r border-border bg-card md:w-56">
+    <aside className="flex w-14 shrink-0 flex-col border-r border-border bg-background md:w-56">
       <Link href="/" aria-label="Rigscope" className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-3 md:px-5">
         <BrandMark className="h-5 w-5 shrink-0 text-accent" aria-hidden />
         <span className="hidden text-sm font-semibold tracking-tight text-foreground md:inline">Rigscope</span>
       </Link>
       <nav aria-label="Primary" className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2 md:p-3">
-        <Link href="/" aria-current={pathname === "/" ? "page" : undefined} title="Fleet" className={linkStyle(pathname === "/")}>
+        <Link href="/" aria-current={pathname === "/" ? "page" : undefined} title="Fleet" aria-label="Fleet" className={linkStyle(pathname === "/")}>
           <Server className="h-4 w-4 shrink-0" aria-hidden /><span className="hidden md:inline">Fleet</span>
         </Link>
-        {selected ? (
-          <div className="mb-4 mt-2 md:ms-3 md:border-s md:border-border md:ps-3">
-            <label htmlFor="sidebar-machine" className="sr-only">Machine</label>
-            <select id="sidebar-machine" value={selected.machineId} onChange={(event) => selectMachine(event.target.value)}
-              className="mb-1 hidden h-9 w-full min-w-0 rounded-md border border-border bg-background px-2 text-sm font-medium md:block">
-              {machines.map((machine) => <option key={machine.machineId} value={machine.machineId}>{machine.displayName || machine.hostname || machine.machineId}</option>)}
-            </select>
-            <nav aria-label="Selected machine" className="flex flex-col gap-1">
-              {MACHINE_LINKS.map(({ view, label, icon: Icon }) => (
-                <Link key={view} href={machineViewHref(selected.machineId, view)} aria-current={activeView === view ? "page" : undefined}
-                  title={`${selected.displayName || selected.hostname}: ${label}`} className={linkStyle(activeView === view)}>
-                  <Icon className="h-4 w-4 shrink-0" aria-hidden /><span className="hidden md:inline">{label}</span>
-                </Link>
-              ))}
-            </nav>
+        {machines.length > 0 ? (
+          <div role="group" aria-label="Select a machine" className="my-3 flex max-h-[min(30dvh,20rem)] shrink-0 flex-col gap-1 overflow-y-auto">
+            {machines.map((machine) => {
+              const name = machine.displayName || machine.hostname || machine.machineId;
+              const tags = machine.tags?.join(", ");
+              const isSelected = selected?.machineId === machine.machineId;
+              const fresh = stateFreshness(machine, now);
+              const status = !machine.connected ? "Disconnected"
+                : phase !== "live" ? "Feed unavailable"
+                : fresh === "stale" ? "Stale"
+                : fresh === "unknown" ? "No sample yet" : "Live";
+              const dotStyle = status === "Live" ? "bg-ok"
+                : status === "Disconnected" ? "bg-crit"
+                : status === "No sample yet" ? "bg-muted-foreground" : "bg-warn";
+              const description = machine.inventory?.cpu.model || tags;
+              return (
+                <button key={machine.machineId} type="button" aria-pressed={isSelected}
+                  aria-label={`${name}: ${status}${description ? `, ${description}` : ""}`}
+                  title={[name, status, description, tags].filter(Boolean).join(" · ")}
+                  onClick={() => selectMachine(machine.machineId)}
+                  className={`${linkStyle(isSelected)} w-full shrink-0 py-2 text-left focus-visible:outline-offset-[-2px] max-md:justify-center max-md:px-0`}>
+                  <span aria-hidden className="relative flex h-5 w-6 shrink-0 items-center justify-center md:w-4">
+                    <span className="text-xs font-medium md:hidden">{name.slice(0, 2).toUpperCase()}</span>
+                    <span className={`h-2 w-2 shrink-0 rounded-full max-md:absolute max-md:-right-1 max-md:-bottom-0.5 ${dotStyle}`} />
+                  </span>
+                  <span className="hidden min-w-0 flex-1 md:block">
+                    <span className="block break-words font-medium leading-5">{name}</span>
+                    {description ? <span className={`mt-0.5 block break-words text-xs leading-4 ${isSelected ? "text-foreground/80" : "text-muted-foreground"}`}>{description}</span> : null}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         ) : null}
-        <div className="flex flex-col gap-1 border-t border-border pt-3">
+        {selected ? (
+          <div role="group" aria-label="Selected machine views" className="mb-3 flex shrink-0 flex-col gap-1 border-t border-border pt-3">
+            {MACHINE_LINKS.map(({ view, label, icon: Icon }) => (
+              <Link key={view} href={machineViewHref(selected.machineId, view)} aria-current={activeView === view ? "page" : undefined}
+                aria-label={`${selected.displayName || selected.hostname || selected.machineId}: ${label}`}
+                title={`${selected.displayName || selected.hostname || selected.machineId}: ${label}`} className={linkStyle(activeView === view)}>
+                <Icon className="h-4 w-4 shrink-0" aria-hidden /><span className="hidden md:inline">{label}</span>
+              </Link>
+            ))}
+          </div>
+        ) : null}
+        <div className="flex shrink-0 flex-col gap-1 border-t border-border pt-3">
           {globalLinks.map(({ href, label, icon: Icon }) => (
-            <Link key={href} href={href} aria-current={pathname === href ? "page" : undefined} title={label} className={linkStyle(pathname === href)}>
+            <Link key={href} href={href} aria-current={pathname === href ? "page" : undefined} title={label} aria-label={label} className={linkStyle(pathname === href)}>
               <Icon className="h-4 w-4 shrink-0" aria-hidden /><span className="hidden md:inline">{label}</span>
             </Link>
           ))}

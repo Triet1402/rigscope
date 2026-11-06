@@ -39,27 +39,27 @@
 
 .dark {
   color-scheme: dark;
-  --background: #1a1b1e;
-  --card: #26272b;
-  --card-strong: #2d2e33;
-  --border: #3a3b3f;
-  --foreground: #e4e5e8;
-  --muted-foreground: #a2a4a9;
+  --background: #181a1e;
+  --card: #22252a;
+  --card-strong: #2d3036;
+  --border: #3a3e45;
+  --foreground: #f1f2f4;
+  --muted-foreground: #afb4bd;
   --accent: #3584e4;
   --accent-foreground: #ffffff;
   --selected: #1e3a5c;
   --component-selected: #3584e4;
-  --ok: #3db84a;
-  --ok-soft: rgba(61, 184, 74, 0.15);
-  --warn: #e5a83b;
-  --warn-soft: rgba(229, 168, 59, 0.15);
+  --ok: #58cc8b;
+  --ok-soft: rgba(88, 204, 139, 0.15);
+  --warn: #e5b45e;
+  --warn-soft: rgba(229, 180, 94, 0.15);
   --crit: #e05e5e;
   --crit-soft: rgba(224, 94, 94, 0.15);
-  --cpu: #3584e4;
-  --mem: #4ec289;
-  --swap: #d8a23a;
-  --scrollbar: #3a3b3f;
-  --focus: color-mix(in oklab, #3584e4 65%, transparent);
+  --cpu: #4c9bf5;
+  --mem: #58cc8b;
+  --swap: #e5b45e;
+  --scrollbar: #3a3e45;
+  --focus: #4c9bf5;
 }
 
 @theme inline {
