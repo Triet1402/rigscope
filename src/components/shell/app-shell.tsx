@@ -1,5 +1,6 @@
 import { MachineBreadcrumb } from "@/components/live/machine-navigation";
 import type { MachineViewKind } from "@/live/machine-selection";
+import { MobileNavigation } from "./mobile-navigation";
 import { Sidebar } from "./sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -37,10 +38,13 @@ export function AppShell({
       <a href="#main-content" className="sr-only z-50 rounded-md bg-card px-4 py-2 text-foreground focus:not-sr-only focus:absolute focus:start-2 focus:top-2 focus:outline-2 focus:outline-accent">
         Skip to content
       </a>
-      <Sidebar machineId={machineId} machineView={machineView} />
+      <div className="hidden md:flex"><Sidebar machineId={machineId} machineView={machineView} /></div>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2 md:px-6">
+          <div className="flex min-w-0 items-center gap-2">
+          <MobileNavigation machineId={machineId} machineView={machineView} />
           {machineId && machineView ? <MachineBreadcrumb machineId={machineId} title={title} view={machineView} /> : <h1 className="truncate text-lg font-semibold tracking-tight">{title}</h1>}
+          </div>
           <div className="flex items-center gap-3">
             {headerRight ? <div className="flex min-w-0 items-center gap-3">{headerRight}</div> : null}
             <ThemeToggle />

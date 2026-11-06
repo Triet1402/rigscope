@@ -27,7 +27,7 @@ install or source checkout is needed. The launcher and services use the installe
 runtime, so removing the npx cache does not break them.
 
 Releases are on [npm](https://www.npmjs.com/package/rigscope). `@latest` selects
-the current stable release; replace it with `@0.1.5` to select that exact version.
+the current stable release; replace it with `@0.1.6` to select that exact version.
 
 ### Installation options
 
@@ -53,7 +53,7 @@ For a downloaded package or one built from source, run from the directory
 containing the archive, or give its absolute path:
 
 ```sh
-npx --yes --package ./rigscope-0.1.5.tgz rigscope install --boot
+npx --yes --package ./rigscope-0.1.6.tgz rigscope install --boot
 ```
 
 The same installation options apply. npm still needs registry access or cached
@@ -295,7 +295,7 @@ settings and collector identities.
 
 | Alternative | Command |
 | --- | --- |
-| Select an exact published version | `rigscope upgrade --from rigscope@0.1.5` |
+| Select an exact published version | `rigscope upgrade --from rigscope@0.1.6` |
 | Install a local archive | `rigscope upgrade --from ./rigscope-VERSION.tgz` |
 | Return to the retained previous runtime | `rigscope rollback` |
 

@@ -1,5 +1,17 @@
 # Release notes
 
+## 0.1.6
+
+- Hide navigation completely on narrow screens and open the shared sidebar in
+  an overlay drawer. Include full machine and navigation labels, larger touch
+  targets, and native dialog focus and Escape handling. Desktop navigation stays
+  visible; the drawer closes after a selection or when resizing to desktop.
+- Start History chart inspection on touch press and capture horizontal drags,
+  while allowing vertical page scrolling. Preserve the cursor after touch release
+  and place mobile tooltips above the graph. Apply touch inspection to per-core
+  history rows as well as time-series charts.
+- Refresh the rigscope.dev synthetic demo with the same shared mobile UI.
+
 ## 0.1.5
 
 - Refresh the dark console palette and replace the sidebar machine selector with

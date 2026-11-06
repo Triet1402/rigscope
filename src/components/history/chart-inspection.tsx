@@ -89,7 +89,7 @@ export function ChartInspectionTooltip({ id, timeMs, fraction, unit, readings }:
   const [placement] = useState(() => fraction > 0.5 ? "left" : "right");
   return (
     <div id={id} role="tooltip"
-      className={`absolute top-2 z-10 max-h-56 w-56 max-w-[calc(100%-1rem)] overflow-y-auto rounded-md border border-border bg-card p-3 text-xs text-foreground ${placement === "left" ? "left-2" : "right-2"}`}>
+      className={`pointer-events-none absolute bottom-full mb-2 md:pointer-events-auto md:bottom-auto md:top-2 md:mb-0 z-10 max-h-56 w-56 max-w-[calc(100%-1rem)] overflow-y-auto rounded-md border border-border bg-card p-3 text-xs text-foreground ${placement === "left" ? "left-2" : "right-2"}`}>
       <p className="tnum font-medium">{formatDateTime(timeMs)}</p>
       <p className="mb-2 text-muted-foreground">Recorded bucket average</p>
       <dl className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1.5">

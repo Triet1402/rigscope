@@ -264,11 +264,16 @@ export function HistoryChart(props: Props) {
               ))}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="relative" onPointerLeave={inspection.clear} onPointerMove={(event) => {
+              <div className="relative touch-pan-y select-none" onPointerLeave={(event) => { if (event.pointerType === "mouse") inspection.clear(); }} onPointerDown={(event) => {
+                if (event.pointerType === "mouse") return;
+                event.currentTarget.setPointerCapture(event.pointerId);
+                const bounds = plot.current?.getBoundingClientRect();
+                if (bounds) inspection.inspect(inspectionTimeAtPointer(event.clientX, bounds.left, bounds.width, fromMs, toMs, PAD / W));
+              }} onPointerCancel={inspection.clear} onContextMenu={(event) => event.preventDefault()} onPointerMove={(event) => {
                 const bounds = plot.current?.getBoundingClientRect();
                 if (bounds) inspection.inspect(inspectionTimeAtPointer(event.clientX, bounds.left, bounds.width, fromMs, toMs, PAD / W));
               }}>
-                <p id={instructionsId} className="sr-only">Use Left and Right arrows to inspect recorded readings, Home or End to jump, and Escape to dismiss.</p>
+                <p id={instructionsId} className="sr-only">Touch and drag horizontally to inspect readings. Use Left and Right arrows to inspect recorded readings, Home or End to jump, and Escape to dismiss.</p>
                 <svg
                   ref={plot}
                   viewBox={`0 0 ${W} ${H}`}

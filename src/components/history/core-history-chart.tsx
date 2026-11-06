@@ -45,7 +45,7 @@ export function CoreHistoryChart({ title, series, fromMs, toMs, stepMs, gaps, hi
   const bands = gapBands(gaps, fromMs, toMs);
 
   return (
-    <figure className="min-w-0 lg:col-span-full" onPointerLeave={inspection.clear}>
+    <figure className="min-w-0 lg:col-span-full" onPointerLeave={(event) => { if (event.pointerType === "mouse") inspection.clear(); }}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-xs font-medium text-foreground">{title}</h3>
         <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -82,12 +82,20 @@ export function CoreHistoryChart({ title, series, fromMs, toMs, stepMs, gaps, hi
                 aria-label={`${row.label}: ${cursorTime !== null ? `${formatMetricValue(inspectedValue, "percent")} at ${cursorTime}` : `latest ${formatMetricValue(row.stats.latest, "percent")}`}, peak ${formatMetricValue(row.stats.max, "percent")}${shown ? "" : ", hidden"}`}
                 aria-describedby={`${inspection.id}-instructions`}
                 tabIndex={shown ? 0 : undefined}
+                onPointerDown={shown ? (event) => {
+                  if (event.pointerType === "mouse") return;
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                  const bounds = event.currentTarget.getBoundingClientRect();
+                  inspection.inspect(inspectionTimeAtPointer(event.clientX, bounds.left, bounds.width, fromMs, toMs));
+                } : undefined}
+                onPointerCancel={inspection.clear}
+                onContextMenu={(event) => event.preventDefault()}
                 onPointerMove={shown ? (event) => {
                   const bounds = event.currentTarget.getBoundingClientRect();
                   inspection.inspect(inspectionTimeAtPointer(event.clientX, bounds.left, bounds.width, fromMs, toMs));
                 } : undefined}
                 onFocus={inspection.onFocus} onBlur={inspection.clear} onKeyDown={inspection.onKeyDown}
-                className={`h-5 w-full cursor-crosshair rounded-sm focus-visible:outline-2 focus-visible:outline-accent ${shown ? "" : "opacity-20"}`}>
+                className={`h-7 w-full touch-pan-y select-none cursor-crosshair rounded-sm focus-visible:outline-2 focus-visible:outline-accent ${shown ? "" : "opacity-20"}`}>
                 <title>{`${row.label} · Last ${formatMetricValue(row.stats.latest, "percent")} · Peak ${formatMetricValue(row.stats.max, "percent")}`}</title>
                 {shown ? row.paths.map((path, level) => path ? <path key={level} d={path} fill={color(level)} opacity={level < 5 ? 0.15 + level * 0.17 : 0.65 + (level % 5) * 0.07} /> : null) : null}
                 {bands.map((band) => <rect key={`${band.fromMs}-${band.toMs}`} x={(band.fromMs - fromMs) / span * COLUMNS}

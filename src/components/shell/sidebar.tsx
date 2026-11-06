@@ -22,11 +22,11 @@ const MACHINE_LINKS = [
 ] as const;
 
 const linkStyle = (active: boolean) => [
-  "flex min-h-9 min-w-0 items-center gap-3 rounded-md border px-2 text-sm transition-colors md:px-3",
+  "flex min-h-11 min-w-0 md:min-h-9 items-center gap-3 rounded-md border px-2 text-sm transition-colors md:px-3",
   active ? "border-accent/60 bg-selected font-medium text-foreground" : "border-transparent text-muted-foreground hover:bg-card-strong hover:text-foreground",
 ].join(" ");
 
-export function Sidebar({ machineId, machineView }: { machineId?: string; machineView?: MachineViewKind }) {
+export function Sidebar({ machineId, machineView, expanded = false }: { machineId?: string; machineView?: MachineViewKind; expanded?: boolean }) {
   const pathname = usePathname();
   const { session, machines, phase } = useLive();
   const now = useNow();
@@ -35,14 +35,14 @@ export function Sidebar({ machineId, machineView }: { machineId?: string; machin
   const globalLinks = admin ? [...GLOBAL_LINKS, { href: "/administration", label: "Administration", icon: Settings }] : GLOBAL_LINKS;
 
   return (
-    <aside className="flex w-14 shrink-0 flex-col border-r border-border bg-background md:w-56">
+    <aside className={`flex shrink-0 flex-col border-r border-border bg-background ${expanded ? "w-full" : "w-56"}`}>
       <Link href="/" aria-label="Rigscope" className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-3 md:px-5">
         <BrandMark className="h-5 w-5 shrink-0 text-accent" aria-hidden />
         <span className="hidden text-sm font-semibold tracking-tight text-foreground md:inline">Rigscope</span>
       </Link>
       <nav aria-label="Primary" className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2 md:p-3">
         <Link href="/" aria-current={pathname === "/" ? "page" : undefined} title="Fleet" aria-label="Fleet" className={linkStyle(pathname === "/")}>
-          <Server className="h-4 w-4 shrink-0" aria-hidden /><span className="hidden md:inline">Fleet</span>
+          <Server className="h-4 w-4 shrink-0" aria-hidden /><span className="inline">Fleet</span>
         </Link>
         {machines.length > 0 ? (
           <div role="group" aria-label="Select a machine" className="my-3 flex max-h-[min(30dvh,20rem)] shrink-0 flex-col gap-1 overflow-y-auto">
@@ -64,12 +64,12 @@ export function Sidebar({ machineId, machineView }: { machineId?: string; machin
                   aria-label={`${name}: ${status}${description ? `, ${description}` : ""}`}
                   title={[name, status, description, tags].filter(Boolean).join(" · ")}
                   onClick={() => selectMachine(machine.machineId)}
-                  className={`${linkStyle(isSelected)} w-full shrink-0 py-2 text-left focus-visible:outline-offset-[-2px] max-md:justify-center max-md:px-0`}>
-                  <span aria-hidden className="relative flex h-5 w-6 shrink-0 items-center justify-center md:w-4">
-                    <span className="text-xs font-medium md:hidden">{name.slice(0, 2).toUpperCase()}</span>
-                    <span className={`h-2 w-2 shrink-0 rounded-full max-md:absolute max-md:-right-1 max-md:-bottom-0.5 ${dotStyle}`} />
+                  className={`${linkStyle(isSelected)} w-full shrink-0 py-2 text-left focus-visible:outline-offset-[-2px] `}>
+                  <span aria-hidden className="relative flex h-5 w-4 shrink-0 items-center justify-center">
+                    <span className="hidden">{name.slice(0, 2).toUpperCase()}</span>
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${dotStyle}`} />
                   </span>
-                  <span className="hidden min-w-0 flex-1 md:block">
+                  <span className="min-w-0 flex-1 block">
                     <span className="block break-words font-medium leading-5">{name}</span>
                     {description ? <span className={`mt-0.5 block break-words text-xs leading-4 ${isSelected ? "text-foreground/80" : "text-muted-foreground"}`}>{description}</span> : null}
                   </span>
@@ -84,7 +84,7 @@ export function Sidebar({ machineId, machineView }: { machineId?: string; machin
               <Link key={view} href={machineViewHref(selected.machineId, view)} aria-current={activeView === view ? "page" : undefined}
                 aria-label={`${selected.displayName || selected.hostname || selected.machineId}: ${label}`}
                 title={`${selected.displayName || selected.hostname || selected.machineId}: ${label}`} className={linkStyle(activeView === view)}>
-                <Icon className="h-4 w-4 shrink-0" aria-hidden /><span className="hidden md:inline">{label}</span>
+                <Icon className="h-4 w-4 shrink-0" aria-hidden /><span className="inline">{label}</span>
               </Link>
             ))}
           </div>
@@ -92,12 +92,12 @@ export function Sidebar({ machineId, machineView }: { machineId?: string; machin
         <div className="flex shrink-0 flex-col gap-1 border-t border-border pt-3">
           {globalLinks.map(({ href, label, icon: Icon }) => (
             <Link key={href} href={href} aria-current={pathname === href ? "page" : undefined} title={label} aria-label={label} className={linkStyle(pathname === href)}>
-              <Icon className="h-4 w-4 shrink-0" aria-hidden /><span className="hidden md:inline">{label}</span>
+              <Icon className="h-4 w-4 shrink-0" aria-hidden /><span className="inline">{label}</span>
             </Link>
           ))}
         </div>
       </nav>
-      <footer className="hidden shrink-0 border-t border-border p-3 md:block"><SidebarLiveStatus /></footer>
+      <footer className="shrink-0 border-t border-border p-3"><SidebarLiveStatus /></footer>
     </aside>
   );
 }
