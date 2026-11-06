@@ -14,6 +14,11 @@ const server = createServer(async (request, response) => {
     return;
   }
   try {
+    if (request.headers.host?.split(':')[0].toLowerCase() === 'www.rigscope.dev') {
+      const url = new URL(request.url, 'https://rigscope.dev');
+      response.writeHead(308, {Location: 'https://rigscope.dev' + url.pathname + url.search}).end();
+      return;
+    }
     const pathname = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
     const path = resolve(root, '.' + (pathname === '/' ? '/index.html' : pathname));
     if (!path.startsWith(root.endsWith(sep) ? root : root + sep)) {

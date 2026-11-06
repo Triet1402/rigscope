@@ -23,6 +23,7 @@ const body = render();
 await cp(resolve(root, 'public'), dist, {recursive:true});
 await writeFile(resolve(dist, 'index.html'), `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="canonical" href="https://rigscope.dev/"><meta property="og:url" content="https://rigscope.dev/">
 <meta name="theme-color" content="#181a1e"><title>Rigscope — Your machines, in view.</title>
 <meta name="description" content="A self-hosted Linux system and process monitor. Explore CPU, memory, GPU, and process visibility in an interactive demo, then install Rigscope in one command.">
 <meta property="og:title" content="Rigscope — Your machines, in view."><meta property="og:description" content="A self-hosted Linux system and process monitor. Try the interactive demo and install in one command."><meta property="og:type" content="website">

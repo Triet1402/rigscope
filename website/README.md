@@ -49,10 +49,27 @@ The root TypeScript project excludes this app. Its own TypeScript configuration
 resolves React types from its own dependencies, including for the shared mark,
 so the two installations do not conflict.
 
-For the current local preview, `rigscope-website-preview.service` runs as a
-transient user service on port 8087. It survives the editor command session,
-but is not configured to start at boot. Stop it with:
+## Hosting on the development machine
+
+`rigscope-website.service` serves this build on port 8087.
+`rigscope-website-tunnel.service` connects it to Cloudflare for `rigscope.dev`
+and `www.rigscope.dev`; www redirects to the apex domain. Both are persistent
+systemd user services, enabled at boot through user lingering.
+
+Service definitions live in `~/.config/systemd/user/`. Cloudflare configuration
+and credentials live in `~/.cloudflared/` and must never be committed.
+
+After changing the website or shared product UI:
 
 ```sh
-systemctl --user stop rigscope-website-preview.service
+npm run build --prefix website
+systemctl --user restart rigscope-website.service
+```
+
+Check or stop hosting:
+
+```sh
+systemctl --user status rigscope-website.service rigscope-website-tunnel.service
+journalctl --user -u rigscope-website-tunnel.service -n 30
+systemctl --user stop rigscope-website-tunnel.service rigscope-website.service
 ```
