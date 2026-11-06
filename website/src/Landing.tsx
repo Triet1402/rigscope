@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Check, Copy } from 'lucide-react';
 import { BrandMark } from '../../src/components/brand-mark';
@@ -163,7 +163,9 @@ export function Landing({ children }: { children: ReactNode }) {
                 aria-label="Install command"
                 tabIndex={0}
               >
-                <code>{INSTALL_COMMAND}</code>
+                <code>{INSTALL_COMMAND.split(' ').map((token, index) => (
+                  <Fragment key={index}>{index > 0 ? ' ' : ''}<span className="install-token">{token}</span></Fragment>
+                ))}</code>
               </div>
               <button
                 ref={copyButtonRef}
@@ -171,13 +173,14 @@ export function Landing({ children }: { children: ReactNode }) {
                 type="button"
                 onClick={copyInstallCommand}
                 aria-label="Copy install command"
+                title={copyStatus === 'success' ? 'Copied!' : 'Copy install command'}
+                data-state={copyStatus}
               >
                 {copyStatus === 'success' ? (
                   <Check size={17} strokeWidth={2.5} aria-hidden="true" />
                 ) : (
                   <Copy size={17} strokeWidth={2} aria-hidden="true" />
                 )}
-                <span>Copy</span>
               </button>
             </div>
 

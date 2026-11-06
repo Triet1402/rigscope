@@ -73,3 +73,18 @@ systemctl --user status rigscope-website.service rigscope-website-tunnel.service
 journalctl --user -u rigscope-website-tunnel.service -n 30
 systemctl --user stop rigscope-website-tunnel.service rigscope-website.service
 ```
+
+## Fonts and third-party assets
+
+The marketing page self-hosts the unchanged Geist Latin variable WOFF2 supplied
+by `@fontsource-variable/geist` 5.3.0 (npm registry archive). Its copyright notice
+and SIL Open Font License 1.1 are retained in `public/fonts/Geist-LICENSE.txt`
+and deployed alongside the font. The font permits commercial website embedding;
+it remains under OFL rather than the repository's MIT license. Upstream:
+https://github.com/vercel/geist-font and https://openfontlicense.org/.
+
+Lucide icons use their ISC/Feather MIT notices. The build publishes `NOTICES.txt`
+with full font, React, React DOM, scheduler, next-themes, Lucide and Tailwind
+license texts from the bundled distributions. JavaScript license comments remain
+preserved by esbuild. The Rigscope mark is the shared repository SVG, and no
+stock photos, third-party screenshots, or generated concept images ship.

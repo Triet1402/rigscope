@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Geist";
+  src: url("/fonts/geist-latin-variable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 :root {
   color-scheme: dark;
   --background: #181a1e;
@@ -7,17 +15,13 @@
   --foreground: #f1f2f4;
   --muted-foreground: #afb4bd;
   --accent: #3584e4;
-  --accent-action: #2a6cc4;
-  --accent-action-hover: #2c74ca;
-  --accent-action-active: #2468bb;
-  --accent-action-border: #4f97ee;
   --selected: #1e3a5c;
   --ok: #58cc8b;
   --cpu: #4c9bf5;
   --mem: #58cc8b;
   --swap: #e5b45e;
   --danger: #ffa8a8;
-  --font-sans: system-ui, ui-sans-serif, "Noto Sans", "Inter", sans-serif;
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Code", "Roboto Mono",
     Menlo, Consolas, monospace;
 }
@@ -74,7 +78,11 @@ body {
 .landing-shell {
   width: 100%;
   max-width: 1500px;
+  height: 100dvh;
+  min-height: 720px;
   margin-inline: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .skip-link,
@@ -129,8 +137,9 @@ body {
   justify-content: space-between;
   gap: 10px 24px;
   width: 100%;
-  max-width: 1440px;
-  min-height: 48px;
+  max-width: 1500px;
+  flex-shrink: 0;
+  min-height: 64px;
   margin-inline: auto;
   padding-block: 11px;
 }
@@ -177,6 +186,13 @@ body {
   color: var(--foreground);
 }
 
+#main-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
 #main-content:focus,
 #main-content:focus-visible {
   outline: none;
@@ -186,7 +202,8 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding-top: 4px;
+  padding-block: 12px 8px;
+  flex-shrink: 0;
   text-align: center;
 }
 
@@ -194,45 +211,40 @@ body {
   margin: 0;
   max-width: 100%;
   color: var(--foreground);
-  font-size: clamp(2.5rem, 3.65vw, 3.8125rem);
+  font-size: clamp(2.5rem, 3.8vw, 4rem);
   font-weight: 700;
-  line-height: 1.05;
+  line-height: 1.08;
   letter-spacing: -0.032em;
   text-wrap: balance;
 }
 
 .hero-subtitle {
   max-width: 50rem;
-  margin: 1px 0 0;
+  margin: 12px 0 0;
   color: var(--muted-foreground);
-  font-size: clamp(1.125rem, 1.62vw, 1.6875rem);
+  font-size: clamp(1.125rem, 1.45vw, 1.5rem);
   line-height: 1.32;
   letter-spacing: -0.012em;
   text-wrap: balance;
 }
 
 .install {
-  display: flex;
-  gap: 8px;
+  position: relative;
   width: min(100%, 652px);
-  margin-top: 18px;
+  margin-top: 22px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
 }
 
 .install-command {
   display: flex;
-  flex: 1 1 auto;
+  justify-content: center;
   align-items: center;
   min-width: 0;
-  height: 46px;
-  padding-inline: 19px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--card);
+  min-height: 52px;
+  padding: 12px 52px;
   color: var(--foreground);
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-color: var(--border) transparent;
-  scrollbar-width: thin;
   cursor: text;
 }
 
@@ -248,59 +260,32 @@ body {
   white-space: nowrap;
 }
 
-.install-command::-webkit-scrollbar {
-  height: 6px;
-}
-
-.install-command::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.install-command::-webkit-scrollbar-thumb {
-  border: 0;
-  border-radius: 999px;
-  background: var(--border);
-}
+.install-token { white-space: nowrap; }
 
 .install-copy {
-  display: inline-flex;
-  flex: 0 0 102px;
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  width: 102px;
-  height: 46px;
+  width: 44px;
+  height: 44px;
   padding: 0;
-  border: 1px solid var(--accent-action-border);
-  border-radius: 8px;
-  background: var(--accent-action);
-  color: #ffffff;
-  font-family: inherit;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0.005em;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-foreground);
   cursor: pointer;
-  transition: background-color 140ms ease-out, border-color 140ms ease-out;
+  transition: background-color 140ms ease-out, color 140ms ease-out;
 }
 
-.install-copy:hover {
-  background: var(--accent-action-hover);
-  border-color: #73acf1;
-}
-
-.install-copy:active {
-  background: var(--accent-action-active);
-}
-
-.install-copy:focus-visible {
-  outline: 2px solid var(--foreground);
-  outline-offset: 2px;
-}
-
-.install-copy svg {
-  flex: none;
-}
+.install-copy:hover { background: var(--card-strong); color: var(--foreground); }
+.install-copy:active { background: var(--selected); }
+.install-copy[data-state="success"] { color: var(--ok); }
+.install-copy:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.install-copy svg { flex: none; }
 
 .requirements {
   display: flex;
@@ -343,14 +328,16 @@ body {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   width: 100%;
   max-width: 1200px;
+  flex-shrink: 0;
+  text-align: center;
   margin: 0 auto;
-  padding: 0;
+  padding: 8px 0 16px;
   list-style: none;
 }
 
 .benefit {
   min-width: 0;
-  padding-inline: clamp(18px, 2.9vw, 48px);
+  padding-inline: clamp(18px, 2vw, 32px);
 }
 
 .benefit + .benefit {
@@ -368,7 +355,8 @@ body {
 }
 
 .benefit p {
-  margin: 3px 0 0;
+  margin: 6px auto 0;
+  max-width: 34ch;
   color: var(--muted-foreground);
   font-size: 0.9375rem;
   line-height: 1.4;
@@ -376,8 +364,11 @@ body {
 }
 
 .demo-section {
+  display: flex;
+  flex: 1;
+  min-height: 0;
   width: 100%;
-  margin-top: 18px;
+  margin-top: 8px;
 }
 
 .site-footer {
@@ -387,9 +378,10 @@ body {
   justify-content: space-between;
   gap: 10px 28px;
   width: 100%;
-  max-width: 1440px;
+  max-width: 1500px;
+  flex-shrink: 0;
   margin-inline: auto;
-  padding-block: 15px 22px;
+  padding-block: 18px 20px;
   color: var(--muted-foreground);
   font-size: 0.875rem;
   line-height: 1.45;
@@ -459,6 +451,21 @@ body {
 }
 
 @media (max-width: 920px) {
+  .landing-shell {
+    height: auto;
+    min-height: 100dvh;
+  }
+
+  .site-header { min-height: 60px; }
+
+  .hero { padding-top: 20px; }
+
+  .demo-section { flex: none; }
+
+  .benefits { text-align: left; }
+
+  .benefit p { max-width: none; margin-inline: 0; }
+
   #main-content {
     display: flex;
     flex-direction: column;
@@ -512,29 +519,12 @@ body {
   }
 }
 
-@media (max-width: 480px) {
-  .install {
-    gap: 6px;
-  }
-
-  .install-command {
-    padding-inline: 14px;
-    height: auto;
-    min-height: 46px;
-    padding-block: 8px;
-  }
-
+@media (max-width: 600px) {
   .install-command code {
-    font-size: 0.9375rem;
-    line-height: 1.4;
+    font-size: 0.875rem;
+    line-height: 1.5;
     white-space: normal;
     overflow-wrap: anywhere;
-  }
-
-  .install-copy {
-    flex-basis: 96px;
-    width: 96px;
-    font-size: 0.9375rem;
   }
 }
 
