@@ -1,5 +1,19 @@
 # Release notes
 
+## 0.1.5
+
+- Refresh the dark console palette and replace the sidebar machine selector with
+  visible machine rows. Show collector status dots and CPU models, align machine
+  names with navigation labels, and preserve the selected view when switching
+  machines. Alerts, Connections and administrator-only Administration remain
+  below the machine views; narrow screens retain initials and status indicators.
+- Add a responsive showcase website with an installation command and copy button,
+  documentation and contact links, and an interactive synthetic demo. The demo
+  renders the actual Fleet, Overview, History and Processes components and product
+  stylesheet through isolated routing and data adapters, without accessing a hub.
+- Validate synthetic fixtures against product contracts and check the website
+  build and types in the manual CI workflow to catch drift from the product UI.
+
 ## 0.1.4
 
 - Coordinate stopping running user services and owned foreground processes for
