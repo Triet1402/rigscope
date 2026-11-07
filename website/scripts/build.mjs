@@ -62,7 +62,7 @@ const css = await postcss([tailwind()]).process(productStyles, {from:resolve(roo
 await writeFile(resolve(dist,'product-demo.css'), css.css);
 await writeFile(resolve(dist,'demo.html'), `<!doctype html><html lang="en" class="dark"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
-<title>Rigscope interactive demo — synthetic data</title><link rel="icon" href="/icon.svg"><link rel="stylesheet" href="${await asset('product-demo.css')}">
+<title>Rigscope interactive demo — synthetic data</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="stylesheet" href="${await asset('product-demo.css')}">
 </head><body><div style="height:32px;display:flex;align-items:center;justify-content:center;gap:8px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted-foreground)" role="note">Synthetic demo · All machines and readings are simulated.</div>
 <style>@media (min-width: 960px) { html { font-size: 18px; } } #root > .h-dvh { height:calc(100dvh - 32px) }</style>
 <div id="root"><p style="padding:24px">Loading Rigscope demo…</p></div><script type="module" src="${await asset('product-demo.js')}"></script></body></html>`);

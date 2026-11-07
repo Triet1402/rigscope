@@ -11,7 +11,7 @@ export function documentHtml({title, description, path, body, css, script = ''})
 <title>${escapeHtml(title)}</title><meta name="description" content="${escapeHtml(description)}">
 <link rel="canonical" href="https://rigscope.dev${escapeHtml(path)}">
 <meta property="og:url" content="https://rigscope.dev${escapeHtml(path)}"><meta property="og:title" content="${escapeHtml(title)}"><meta property="og:description" content="${escapeHtml(description)}"><meta property="og:type" content="website">
-<meta name="theme-color" content="#181a1e"><link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="${escapeHtml(css)}">
+<meta name="theme-color" content="#181a1e"><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" href="/favicon.png" sizes="512x512"><link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="stylesheet" href="${escapeHtml(css)}">
 </head><body>${body}${script ? `<script type="module" src="${escapeHtml(script)}"></script>` : ''}</body></html>`;
 }
 
