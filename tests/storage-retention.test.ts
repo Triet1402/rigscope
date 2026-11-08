@@ -65,6 +65,26 @@ function count(db: HubDatabase, table: string): number {
 }
 
 describe("retention", () => {
+  it("rolls back the whole bounded tier chunk if a later series delete fails", () => {
+    const ctx = setup({ policy: { rawMs: 1000 }, chunkSize: 10 });
+    try {
+      const first = makeSeries(ctx.db, "first");
+      const second = makeSeries(ctx.db, "second");
+      insertRaw(ctx.db, first, NOW - 2000);
+      insertRaw(ctx.db, second, NOW - 2000);
+      ctx.db.db.exec(`CREATE TRIGGER fail_second BEFORE DELETE ON points_raw
+        WHEN OLD.series_id = ${second}
+        BEGIN SELECT RAISE(ABORT, 'injected delete failure'); END`);
+      assert.throws(() => ctx.manager.runChunk(), /injected delete failure/);
+      assert.equal(count(ctx.db, "points_raw"), 2, "earlier series must share the transaction");
+      ctx.db.db.exec("DROP TRIGGER fail_second");
+      assert.equal(ctx.manager.runChunk(), 2, "rollback must release the transaction");
+    } finally {
+      ctx.db.close();
+      rmSync(ctx.dir, { recursive: true, force: true });
+    }
+  });
+
   it("merges a partial policy, including receipts/gaps defaults", () => {
     const merged = resolveRetentionPolicy({ rawMs: 1000 });
     assert.equal(merged.rawMs, 1000);

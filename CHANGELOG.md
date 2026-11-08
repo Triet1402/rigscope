@@ -1,5 +1,13 @@
 # Release notes
 
+## 0.1.8
+
+- Fix remaining hub stalls during retention by grouping per-series deletes into
+  one durable transaction per bounded tier chunk. This avoids a separate disk
+  sync for every series while preserving primary-key seeks and the row budget.
+- Roll back the whole tier chunk if a delete fails, with regression coverage
+  proving earlier series remain intact and the transaction is released.
+
 ## 0.1.7
 
 - Fix hub stalls caused by age retention scanning entire point tables. Retention

@@ -311,8 +311,8 @@ export class RetentionManager {
 
   /**
    * Deletes up to `chunkSize` rows older than `cutoffMs`, one series at a
-   * time. Each statement is a primary-key range seek bounded by the remaining
-   * row budget, so a series with no expired rows costs one seek rather than a
+   * time. The statements share one transaction per chunk. Each is a primary-key
+   * range seek bounded by the remaining row budget, so a series with no expired rows costs one seek rather than a
    * table scan. The series catalog is append-only and ingestion is its only
    * writer, so every stored point has a catalog row.
    */
@@ -321,13 +321,23 @@ export class RetentionManager {
     seriesIds: readonly number[],
     cutoffMs: number,
   ): number {
-    let deleted = 0;
-    for (const seriesId of seriesIds) {
-      const remaining = this.chunkSize - deleted;
-      if (remaining <= 0) break;
-      deleted += Number(statement.run(seriesId, cutoffMs, remaining).changes);
+    // A chunk may touch hundreds of series. Autocommit would fsync once per
+    // series, holding the synchronous event loop through every journal wait.
+    // Keep the row budget, but pay for one durable commit per tier chunk.
+    this.db.db.exec("BEGIN IMMEDIATE");
+    try {
+      let deleted = 0;
+      for (const seriesId of seriesIds) {
+        const remaining = this.chunkSize - deleted;
+        if (remaining <= 0) break;
+        deleted += Number(statement.run(seriesId, cutoffMs, remaining).changes);
+      }
+      this.db.db.exec("COMMIT");
+      return deleted;
+    } catch (error) {
+      try { this.db.db.exec("ROLLBACK"); } catch { /* Preserve the original failure. */ }
+      throw error;
     }
-    return deleted;
   }
 
   private seriesIds(): number[] {
