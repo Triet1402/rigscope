@@ -7,6 +7,12 @@
  * a large cleanup from starving ingestion: each chunk is its own short
  * transaction and ingestion runs between chunks.
  *
+ * The point tables are clustered on `(series_id, time)`, so age retention is
+ * scoped to one series at a time. A global `time < ?` predicate cannot use
+ * that primary key and turns every probe into a full-table scan (seconds once
+ * the raw table is hundreds of megabytes); a per-series cutoff is a bounded
+ * primary-key range seek instead.
+ *
  * Under soft `maxDatabaseBytes` or hard `maxPhysicalBytes` pressure we delete
  * the oldest raw points first, but never the most recent hour, then the oldest
  * one-minute rollups (also keeping the most recent hour). One-hour rollups are
@@ -94,6 +100,28 @@ export type RetentionManagerOptions = {
   maxChunksPerPass?: number;
 };
 
+/**
+ * Bounded retention statements for the clustered point tables.
+ *
+ * Each statement deletes at most `chunkSize` rows for one series. The inner
+ * `series_id = ?` predicate keeps the subquery on the `(series_id, time)`
+ * primary key; without it SQLite would scan the whole table to find
+ * `time < ?`, which takes seconds on a multi-hundred-megabyte raw table even
+ * when nothing is expired. Receipts and gaps keep their dedicated time indexes
+ * and therefore stay global.
+ */
+export const RETENTION_DELETE_SQL = {
+  raw:
+    "DELETE FROM points_raw WHERE (series_id, ts_ms) IN " +
+    "(SELECT series_id, ts_ms FROM points_raw WHERE series_id = ? AND ts_ms < ? LIMIT ?)",
+  oneMinute:
+    "DELETE FROM points_1m WHERE (series_id, bucket_ms) IN " +
+    "(SELECT series_id, bucket_ms FROM points_1m WHERE series_id = ? AND bucket_ms < ? LIMIT ?)",
+  oneHour:
+    "DELETE FROM points_1h WHERE (series_id, bucket_ms) IN " +
+    "(SELECT series_id, bucket_ms FROM points_1h WHERE series_id = ? AND bucket_ms < ? LIMIT ?)",
+} as const;
+
 export class RetentionManager {
   readonly policy: RetentionPolicy;
   private readonly db: HubDatabase;
@@ -123,6 +151,7 @@ export class RetentionManager {
   private readonly delete1h;
   private readonly deleteReceipts;
   private readonly deleteGaps;
+  private readonly selectSeriesIds;
 
   constructor(database: HubDatabase, options: RetentionManagerOptions = {}) {
     this.db = database;
@@ -147,21 +176,12 @@ export class RetentionManager {
     this.chunkSize = positiveInt(options.chunkSize, 5000, "chunkSize");
     this.maxChunksPerPass = positiveInt(options.maxChunksPerPass, 10_000, "maxChunksPerPass");
 
-    // All statements are bounded by the same LIMIT. The IN-subquery reads the
-    // clustered primary key (series, ts) or the captured_at index, so it stops
-    // after finding `chunkSize` expired rows instead of scanning the table.
-    this.deleteRaw = database.db.prepare(
-      "DELETE FROM points_raw WHERE (series_id, ts_ms) IN " +
-        "(SELECT series_id, ts_ms FROM points_raw WHERE ts_ms < ? LIMIT ?)",
-    );
-    this.delete1m = database.db.prepare(
-      "DELETE FROM points_1m WHERE (series_id, bucket_ms) IN " +
-        "(SELECT series_id, bucket_ms FROM points_1m WHERE bucket_ms < ? LIMIT ?)",
-    );
-    this.delete1h = database.db.prepare(
-      "DELETE FROM points_1h WHERE (series_id, bucket_ms) IN " +
-        "(SELECT series_id, bucket_ms FROM points_1h WHERE bucket_ms < ? LIMIT ?)",
-    );
+    // Point statements are bounded by the same LIMIT and scoped to one series
+    // so they read the clustered primary key. Receipts and gaps use their
+    // captured_at/to_ms indexes, so one global bounded statement is enough.
+    this.deleteRaw = database.db.prepare(RETENTION_DELETE_SQL.raw);
+    this.delete1m = database.db.prepare(RETENTION_DELETE_SQL.oneMinute);
+    this.delete1h = database.db.prepare(RETENTION_DELETE_SQL.oneHour);
     this.deleteReceipts = database.db.prepare(
       "DELETE FROM sample_receipts WHERE (collector_id, run_id, seq) IN " +
         "(SELECT collector_id, run_id, seq FROM sample_receipts WHERE captured_at_ms < ? LIMIT ?)",
@@ -170,6 +190,7 @@ export class RetentionManager {
       "DELETE FROM gaps WHERE (collector_id, run_id, seq) IN " +
         "(SELECT collector_id, run_id, seq FROM gaps WHERE to_ms < ? LIMIT ?)",
     );
+    this.selectSeriesIds = database.db.prepare("SELECT series_id FROM series");
     this.refreshPhysicalState();
   }
 
@@ -227,20 +248,24 @@ export class RetentionManager {
   }
 
   /**
-   * One bounded DELETE statement (or a cheap probe when nothing is expired).
-   * Returns the number of rows deleted, at most `chunkSize`.
+   * One bounded DELETE statement per tier (or a cheap probe when nothing is
+   * expired). Returns the number of rows deleted, at most `chunkSize`.
    */
   runChunk(): number {
     const started = performance.now();
     const nowMs = this.now();
     const rawCutoff = nowMs - this.policy.rawMs;
+    const seriesIds = this.seriesIds();
 
-    let deleted =
-      this.deleteUpTo(this.deleteRaw, rawCutoff) ||
-      this.deleteUpTo(this.delete1m, nowMs - this.policy.oneMinuteMs) ||
-      this.deleteUpTo(this.delete1h, nowMs - this.policy.oneHourMs) ||
-      this.deleteUpTo(this.deleteReceipts, nowMs - this.policy.receiptsMs) ||
-      this.deleteUpTo(this.deleteGaps, nowMs - this.policy.gapsMs);
+    let deleted = this.deleteTierChunk(this.deleteRaw, seriesIds, rawCutoff);
+    if (deleted === 0) {
+      deleted = this.deleteTierChunk(this.delete1m, seriesIds, nowMs - this.policy.oneMinuteMs);
+    }
+    if (deleted === 0) {
+      deleted = this.deleteTierChunk(this.delete1h, seriesIds, nowMs - this.policy.oneHourMs);
+    }
+    if (deleted === 0) deleted = this.deleteUpTo(this.deleteReceipts, nowMs - this.policy.receiptsMs);
+    if (deleted === 0) deleted = this.deleteUpTo(this.deleteGaps, nowMs - this.policy.gapsMs);
 
     // Disk pressure is handled only when age retention has no work left, so a
     // backlog is drained oldest-first. The one-hour floor means a tight budget
@@ -250,8 +275,8 @@ export class RetentionManager {
     if (deleted === 0 && this.overBudget()) {
       const floorCutoff = nowMs - HOUR_MS;
       effectiveRawCutoff = Math.max(rawCutoff, floorCutoff);
-      deleted = this.deleteUpTo(this.deleteRaw, effectiveRawCutoff);
-      if (deleted === 0) deleted = this.deleteUpTo(this.delete1m, floorCutoff);
+      deleted = this.deleteTierChunk(this.deleteRaw, seriesIds, effectiveRawCutoff);
+      if (deleted === 0) deleted = this.deleteTierChunk(this.delete1m, seriesIds, floorCutoff);
       if (deleted > 0) {
         this.db.reclaimPages(64);
         try {
@@ -282,6 +307,32 @@ export class RetentionManager {
       if (deleted === 0) return;
       await yieldToEventLoop();
     }
+  }
+
+  /**
+   * Deletes up to `chunkSize` rows older than `cutoffMs`, one series at a
+   * time. Each statement is a primary-key range seek bounded by the remaining
+   * row budget, so a series with no expired rows costs one seek rather than a
+   * table scan. The series catalog is append-only and ingestion is its only
+   * writer, so every stored point has a catalog row.
+   */
+  private deleteTierChunk(
+    statement: ReturnType<HubDatabase["db"]["prepare"]>,
+    seriesIds: readonly number[],
+    cutoffMs: number,
+  ): number {
+    let deleted = 0;
+    for (const seriesId of seriesIds) {
+      const remaining = this.chunkSize - deleted;
+      if (remaining <= 0) break;
+      deleted += Number(statement.run(seriesId, cutoffMs, remaining).changes);
+    }
+    return deleted;
+  }
+
+  private seriesIds(): number[] {
+    const rows = this.selectSeriesIds.all() as Array<{ series_id: number | bigint }>;
+    return rows.map((row) => Number(row.series_id));
   }
 
   private deleteUpTo(statement: ReturnType<HubDatabase["db"]["prepare"]>, cutoffMs: number): number {

@@ -1,5 +1,14 @@
 # Release notes
 
+## 0.1.7
+
+- Fix hub stalls caused by age retention scanning entire point tables. Retention
+  now deletes one series at a time through the clustered `(series, time)`
+  primary key, so finding expired raw rows is milliseconds instead of seconds on
+  a large history and no longer blocks ingestion or health requests.
+- Add regression coverage that every retention tier uses its primary key instead
+  of a full table scan.
+
 ## 0.1.6
 
 - Hide navigation completely on narrow screens and open the shared sidebar in

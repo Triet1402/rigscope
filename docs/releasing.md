@@ -5,7 +5,7 @@ The first public version, `0.1.0`, is published on
 [GitHub](https://github.com/Triet1402/rigscope). The package includes MIT licensing,
 dependency notices, the security policy and [release notes](../CHANGELOG.md).
 
-The commands below use `0.1.6` as an example. For a new release, substitute its
+The commands below use `0.1.7` as an example. For a new release, substitute its
 new version everywhere; do not attempt to republish an already published version.
 Documentation edits can be committed and pushed to GitHub independently. The published archive and
 its bundled documentation stay unchanged; ship updated package documentation
@@ -21,7 +21,7 @@ with the next version. Keep each release tag on the revision used to build it.
 4. Run the publish dry run, check the npm account, and publish the verified archive.
 5. Verify the registry version and install it into a disposable test installation.
    Check sign-in, fresh telemetry and the installed command.
-6. Tag the exact source revision as `v0.1.6`, push the tag, and create a GitHub
+6. Tag the exact source revision as `v0.1.7`, push the tag, and create a GitHub
    Release with the release notes, verified archive and checksum. Announce it
    after the registry installation works.
 
@@ -45,14 +45,14 @@ npm pack --pack-destination out/release
 `npm pack` runs `prepack`, which regenerates dependency notices, builds fresh
 runtime/UI artifacts and verifies them. If notice generation changes a tracked
 file, include that change in the release commit before producing the final
-archive. Reuse the archive for every check below. Replace `0.1.6` in these
+archive. Reuse the archive for every check below. Replace `0.1.7` in these
 commands when releasing another version.
 
 ## Verify the exact archive
 
 ```sh
-node scripts/verify-package.cjs ./out/release/rigscope-0.1.6.tgz
-npm run verify:installed -- --archive ./out/release/rigscope-0.1.6.tgz
+node scripts/verify-package.cjs ./out/release/rigscope-0.1.7.tgz
+npm run verify:installed -- --archive ./out/release/rigscope-0.1.7.tgz
 npm test
 node scripts/test-runtime.cjs
 node scripts/test.cjs --suite development
@@ -69,9 +69,9 @@ create disposable installations with separate state, launchers, ports and unit
 names, then remove their services. They do not select an existing installation.
 
 ```sh
-RIGSCOPE_TEST_ARCHIVE="$PWD/out/release/rigscope-0.1.6.tgz" \
+RIGSCOPE_TEST_ARCHIVE="$PWD/out/release/rigscope-0.1.7.tgz" \
   node --import tsx --test tests/cli-install.integration.ts tests/cli-reset.integration.ts
-node scripts/verify-operations.cjs ./out/release/rigscope-0.1.6.tgz
+node scripts/verify-operations.cjs ./out/release/rigscope-0.1.7.tgz
 ```
 
 These cover installation, pairing, independent component controls, bootstrap
@@ -93,7 +93,7 @@ Record the final checksum after verification:
 
 ```sh
 cd out/release
-sha256sum rigscope-0.1.6.tgz > SHA256SUMS
+sha256sum rigscope-0.1.7.tgz > SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
 
@@ -110,7 +110,7 @@ then verify the account and preview the exact archive:
 ```sh
 npm login --registry=https://registry.npmjs.org
 npm whoami --registry=https://registry.npmjs.org
-npm publish ./out/release/rigscope-0.1.6.tgz --access public --tag latest \
+npm publish ./out/release/rigscope-0.1.7.tgz --access public --tag latest \
   --registry=https://registry.npmjs.org --dry-run
 ```
 
@@ -120,12 +120,12 @@ to publish or complete two-factor authentication.
 When releasing, this command actually publishes the verified archive publicly:
 
 ```sh
-npm publish ./out/release/rigscope-0.1.6.tgz --access public --tag latest \
+npm publish ./out/release/rigscope-0.1.7.tgz --access public --tag latest \
   --registry=https://registry.npmjs.org
-npm view rigscope@0.1.6 version dist.integrity --registry=https://registry.npmjs.org
+npm view rigscope@0.1.7 version dist.integrity --registry=https://registry.npmjs.org
 ```
 
-Then use `npx --yes rigscope@0.1.6 install` with a disposable `--state-dir`, an
+Then use `npx --yes rigscope@0.1.7 install` with a disposable `--state-dir`, an
 unused `--port` and an isolated `XDG_BIN_HOME` for the registry installation
 check. Uninstall that test installation afterward. Use the same isolation
 settings for all test commands so the check does not select a real installation.

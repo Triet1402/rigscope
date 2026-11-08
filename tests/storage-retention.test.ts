@@ -6,6 +6,7 @@ import { describe, it } from "node:test";
 import { openHubDatabase, type HubDatabase } from "../src/hub/storage/db";
 import {
   DEFAULT_RETENTION_POLICY,
+  RETENTION_DELETE_SQL,
   RetentionManager,
   resolveRetentionPolicy,
 } from "../src/hub/storage/retention";
@@ -211,6 +212,71 @@ describe("retention", () => {
       assert.equal(status.pressure, true, "a tight budget keeps reporting pressure after safe deletions");
       assert.equal(status.effectiveRawCutoffMs, NOW - HOUR);
       assert.equal(status.deletedRows, 2);
+    } finally {
+      ctx.manager.stop();
+      ctx.db.close();
+      rmSync(ctx.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("deletes each tier through the clustered primary key, not a table scan", () => {
+    const ctx = setup({ policy: { rawMs: 1000 } });
+    try {
+      for (const [table, column, sql] of [
+        ["points_raw", "ts_ms", RETENTION_DELETE_SQL.raw],
+        ["points_1m", "bucket_ms", RETENTION_DELETE_SQL.oneMinute],
+        ["points_1h", "bucket_ms", RETENTION_DELETE_SQL.oneHour],
+      ] as const) {
+        const plan = ctx.db.db
+          .prepare(`EXPLAIN QUERY PLAN ${sql}`)
+          .all(1, NOW, 1000) as Array<{ detail: string }>;
+        const text = plan.map((row) => row.detail).join("\n");
+        assert.match(text, /USING PRIMARY KEY/, `${table} retention must use its primary key`);
+        assert.doesNotMatch(
+          text,
+          new RegExp(`SCAN ${table}`),
+          `${table} retention must not full-scan for an age cutoff (column ${column})`,
+        );
+      }
+    } finally {
+      ctx.manager.stop();
+      ctx.db.close();
+      rmSync(ctx.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("drains expired rows across several series within the chunk bound", async () => {
+    const ctx = setup({
+      policy: { rawMs: 1000, oneMinuteMs: 1000, oneHourMs: 1000, receiptsMs: 1000, gapsMs: 1000 },
+      chunkSize: 100,
+    });
+    try {
+      const insertSeries = ctx.db.db.prepare(
+        "INSERT INTO series (machine_id, metric, resource_id) VALUES ('machine-1', 'cpu.core', ?)",
+      );
+      const seriesIds: number[] = [];
+      for (let index = 0; index < 3; index += 1) {
+        seriesIds.push(Number(insertSeries.run(`core:${index}`).lastInsertRowid));
+      }
+      for (const seriesId of seriesIds) {
+        for (let index = 0; index < 200; index += 1) insertRaw(ctx.db, seriesId, NOW - 10_000 - index);
+        insertRaw(ctx.db, seriesId, NOW); // fresh, must survive
+      }
+
+      let total = 0;
+      let largestStatement = 0;
+      for (let calls = 0; ; calls += 1) {
+        const deleted = ctx.manager.runChunk();
+        largestStatement = Math.max(largestStatement, deleted);
+        if (deleted === 0) break;
+        total += deleted;
+        assert.ok(deleted <= 100, "one chunk must not exceed chunkSize");
+        assert.ok(calls < 50, "retention should converge");
+      }
+
+      assert.equal(total, 600);
+      assert.equal(largestStatement, 100);
+      assert.equal(count(ctx.db, "points_raw"), 3, "one fresh row per series survives");
     } finally {
       ctx.manager.stop();
       ctx.db.close();
