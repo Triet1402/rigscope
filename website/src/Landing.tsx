@@ -244,6 +244,7 @@ export function Landing({ children }: { children: ReactNode }) {
             <a href={DOCUMENTATION_URL}>Documentation</a>
             <a href="/guides/">Guides</a>
             <a href={LICENSE_URL}>MIT license</a>
+            <a href="/NOTICES.txt">Third-Party Notices</a>
             <a href={CONTACT_URL} className="footer-contact">
               Contact on GitHub
             </a>
