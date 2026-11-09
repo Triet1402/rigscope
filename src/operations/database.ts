@@ -54,7 +54,9 @@ const COUNTED_TABLES = new Set([
   "machine_meta",
   "machine_latest",
   "inventory",
+  "points_10s",
   "gaps",
+  "recordings",
   "alert_rules",
   "alert_incidents",
   "alert_jobs",
@@ -133,6 +135,19 @@ export type MigrateOptions = {
   backupDir?: string;
   confirmStopped?: boolean;
   now?: () => number;
+};
+
+export type ResetTelemetryOptions = {
+  database: string;
+  confirmStopped?: boolean;
+};
+
+export type ResetTelemetryReport = {
+  database: string;
+  deleted: Record<string, number>;
+  integrity: string;
+  /** Non-history state deliberately left untouched. */
+  preserved: string[];
 };
 
 function openReadOnly(path: string): DatabaseSync {
@@ -652,6 +667,78 @@ export async function migrateDatabase(
     migrated: true,
     backupPath: backup.output,
     integrity: after.integrity,
+  };
+}
+
+/**
+ * Discard telemetry history only. This is the explicit implementation path for
+ * switching an existing installation to memory mode or reclaiming a large
+ * historical database; it never drops the whole file.
+ *
+ * Preserved: users, sessions/audit control tables, collector registry/grants,
+ * alert rules/incidents/jobs/webhook state, machine metadata and inventory,
+ * recordings (explicit user output) and configuration.
+ */
+export function resetTelemetryHistory(options: ResetTelemetryOptions): ResetTelemetryReport {
+  const database = resolvePath(options.database, "database");
+  assertPrivateRegularFile(database, "database");
+  if (!options.confirmStopped) {
+    throw new OperationsError(
+      "confirmation-required",
+      "resetting telemetry history requires --confirm-stopped after the hub is stopped",
+    );
+  }
+  assertNoActiveHubLock(database);
+
+  // Opening with the hub migrator also creates the summary tier on an older
+  // schema. The reset itself is one transaction, so a failure leaves history
+  // unchanged.
+  const db = openHubDatabase(database);
+  const tables = [
+    "points_raw",
+    "points_10s",
+    "points_1m",
+    "points_1h",
+    "sample_receipts",
+    "gaps",
+    "machine_latest",
+    "series",
+  ] as const;
+  const deleted: Record<string, number> = {};
+  try {
+    db.db.exec("BEGIN IMMEDIATE");
+    try {
+      for (const table of tables) {
+        const result = db.db.prepare(`DELETE FROM ${table}`).run();
+        deleted[table] = Number(result.changes);
+      }
+      db.db.exec("COMMIT");
+    } catch (error) {
+      try {
+        db.db.exec("ROLLBACK");
+      } catch {
+        // Preserve the original failure.
+      }
+      throw error;
+    }
+    db.reclaimPages(1024);
+    db.checkpoint();
+  } finally {
+    db.close();
+  }
+  const info = inspectDatabase(database);
+  return {
+    database,
+    deleted,
+    integrity: info.integrity,
+    preserved: [
+      "users",
+      "collector registry/grants/audit",
+      "alert rules/incidents/jobs/webhook",
+      "machine metadata",
+      "inventory",
+      "recordings",
+    ],
   };
 }
 

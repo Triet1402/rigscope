@@ -10,6 +10,7 @@ building and deploying from source.
 | Reset a lost password | [Password recovery](#password-recovery) |
 | Change localhost/HTTPS access | [Access changes](#access-changes) |
 | Back up or restore a database | [Database commands](#database-commands) |
+| Discard old telemetry history only | [Database commands](#database-commands) |
 | Plan what to back up | [Consistent backup set](#consistent-backup-set) |
 | Handle a full database or queue | [Storage pressure recovery](#storage-budgets-and-pressure-recovery) |
 
@@ -369,6 +370,11 @@ node dist/ops.cjs restore \
   --database /path/telemetry.sqlite \
   --replace --confirm-stopped
 
+# Discard only telemetry history, preserving users/enrollment/settings/alerts.
+node dist/ops.cjs reset-telemetry \
+  --database /path/telemetry.sqlite \
+  --backup-dir /path/private-backups --confirm-stopped
+
 # Offline managed-user recovery; password comes from a private 0600 file.
 node dist/ops.cjs recover-admin \
   --database /path/telemetry.sqlite \
@@ -408,8 +414,9 @@ release must never be pointed at a newer schema. `inspect` reports this state.
 
 The database backup is not the whole installation. A restorable set is:
 
-1. Hub SQLite database: `telemetry.sqlite` (includes registry/admin/alerts).
-   Use `ops backup`; do not copy the main file alone while the hub is running.
+1. Hub SQLite database: `telemetry.sqlite` (includes registry/admin/alerts and
+   any opt-in persistent history). Use `ops backup`; do not copy the main file
+   alone while the hub is running.
 2. Enrollment/config state when configured: `HUB_STATE_FILE` (for
    example `hub/enrollment.json`, the import source for previously enrolled
    collectors) and the private hub environment file. These
@@ -420,6 +427,9 @@ The database backup is not the whole installation. A restorable set is:
    deduplicates by collector/run/sequence.
 5. Optional operational metadata: `install-state.json`, units and the built
    release. Keep the release matching the database schema for rollback.
+6. Explicit recordings: the private `HUB_RECORDINGS_DIR` (default
+   `<hub database directory>/recordings`) if you want downloadable captures to
+   survive a restore. They are user output, not part of the database backup.
 
 For a consistent set, prefer stopping both services cleanly, then run the online
 database backup and copy the other private files. For an online backup, the SQLite
@@ -486,7 +496,18 @@ node dist/ops.cjs measure --machines 2 --batches 30 --records-per-batch 5 \
 It writes synthetic records through the real `TelemetryStore` into a
 temporary private database and reports accepted/rejected/busy counts, ingestion
 latency, event-loop delay/utilization, RSS, database/WAL size, store queue and
-flush counters, and one history-query latency. The output is labelled synthetic.
+flush counters, and one history-query latency.
+
+For the history-mode tradeoff, use the repeatable RAM-vs-persistent benchmark.
+It measures process-attributed disk writes, latency, RSS and rows:
+
+```sh
+npm run benchmark:telemetry -- --machines 2 --seconds 120
+npm run benchmark:telemetry -- --machines 10 --seconds 60 --json
+```
+
+Use `--dir` on a real filesystem; tmpfs does not account storage writes in
+`/proc/self/io`. See [telemetry storage](telemetry-storage.md#benchmark). The output is labelled synthetic.
 Defaults are intentionally small; upper bounds are 1,000 machines, 2,000 batches,
 32 records per batch and 100,000 records total. It never opens a service socket
 or contacts a hub. `--keep` retains the temporary directory for inspection. The
@@ -536,12 +557,20 @@ cadence, inventory and metadata through Sample ingestion while retaining a
 disconnected state until an authenticated Collector reconnects.
 
 The default hub main-file plus WAL budget is 2 GiB, shared by every SQLite table.
-The main file has a page-count limit; WAL reserves up to 128 MiB inside that budget.
-Telemetry writes return busy on pressure or SQLITE_FULL, with no receipt/ack for a
-failed transaction. Retention reclaims old raw/one-minute points in bounded chunks
-while preserving the newest hour; hourly rollups retain their configured age window.
-A full newest-hour working set must fit the deployment's budget. Outboxes retry
-while the operator frees space or provisions a larger supported configuration.
+The main file has a page-count limit; WAL reserves up to 128 MiB inside that budget
+and automatic checkpointing waits for a meaningful 32–64 MiB reserve where the
+budget permits. Persistent-mode writes return busy on pressure or SQLITE_FULL,
+with no receipt/ack for a failed transaction. Retention reclaims old raw or
+ten-second points and one-minute rollups in bounded chunks while preserving the
+newest hour; hourly rollups retain their configured age window. A full
+newest-hour working set must fit the deployment's budget. Outboxes retry while
+the operator frees space or provisions a larger supported configuration.
+
+Memory mode keeps only a bounded RAM budget (`HUB_HISTORY_MEMORY_BYTES`, default
+128 MiB). It does not write routine telemetry rows, but existing historical rows
+from an older installation still occupy the database until removed with
+`ops reset-telemetry` while the hub is stopped. That command preserves users,
+credentials, enrollment, settings, alert state, metadata and inventory.
 
 Collector defaults are 64 MiB logical JSON and 80 MiB physical main+WAL per hub,
 256 MiB logical and 640 MiB physical across eight destinations. Physical pressure

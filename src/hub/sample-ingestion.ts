@@ -10,9 +10,13 @@
  * - record identity is authenticated against the current Collector session
  *   (Collector identity always; run/boot identity for live mode), so a
  *   replaced or old run can only shape history, never publish live state,
- * - the durable commit resolves first; acknowledgments represent committed
- *   acceptance/rejection only, while overload and storage room failures
- *   answer with retryAfterMs and never imply committed data,
+ * - eligible live state and Incident observations publish immediately, before
+ *   a persistent store has committed; acknowledgments still represent the
+ *   store's own acceptance contract (RAM in memory mode, COMMIT in persistent
+ *   mode), and overload/storage failures answer with retryAfterMs,
+ * - a retry or stale sequence cannot publish twice because HubState ignores
+ *   non-increasing run/sequence pairs, and session replacement clears the old
+ *   run's live row,
  * - a session that is replaced or revoked during the asynchronous commit can
  *   no longer publish live state or trigger Incidents (the commit itself
  *   stays durable and exactly-once), because publication re-checks the
@@ -26,17 +30,33 @@
  *   implying a currently connected Collector.
  */
 
-import type {
-  Inventory,
-  MetricsRecord,
-  RecordRef,
-  TelemetryRecord,
+import {
+  MAX_IN_FLIGHT_BATCHES,
+  type Inventory,
+  type MetricsRecord,
+  type RecordRef,
+  type TelemetryRecord,
 } from "../contracts";
 import type { HubState } from "./state";
 import type { TelemetryStore } from "./storage/telemetry-store";
 
-/** Maximum unacknowledged sample batches accepted per session (welcome maxInFlightBatches). */
-export const MAX_IN_FLIGHT_SAMPLE_BATCHES = 8;
+/**
+ * Both history backends expose the same ingestion surface. Live publication is
+ * deliberately independent of this store's acknowledgement policy.
+ */
+export type IngestionStorage = Pick<
+  TelemetryStore,
+  "enqueue" | "latestLive" | "saveInventory" | "loadInventory" | "getMachineMeta"
+>;
+
+/**
+ * Maximum unacknowledged sample batches accepted per session (welcome
+ * maxInFlightBatches). This is the protocol's wire maximum: existing collectors
+ * reject a larger welcome, so the persistent flush interval is bounded below
+ * to fit this window at the fastest supported 100 ms cadence instead of
+ * growing the window without limit.
+ */
+export const MAX_IN_FLIGHT_SAMPLE_BATCHES = MAX_IN_FLIGHT_BATCHES;
 /** Overload answers retry immediately with this delay, matching the previous behavior. */
 export const RETRY_AFTER_OVERLOAD_MS = 1000;
 
@@ -63,13 +83,13 @@ export type LiveSampleObserver = (
 
 export class SampleIngestion {
   private readonly state: HubState;
-  private readonly storage: TelemetryStore;
+  private readonly storage: IngestionStorage;
   private readonly onLiveSample: LiveSampleObserver | null;
   private readonly inFlight = new Map<string, number>();
 
   constructor(input: {
     state: HubState;
-    storage: TelemetryStore;
+    storage: IngestionStorage;
     onLiveSample?: LiveSampleObserver | null;
   }) {
     this.state = input.state;
@@ -98,6 +118,16 @@ export class SampleIngestion {
       return { status: "retry", retryAfterMs: RETRY_AFTER_OVERLOAD_MS };
     }
     this.inFlight.set(sessionId, inFlight + 1);
+    // Live publication is intentionally decoupled from the storage
+    // acknowledgement. In memory mode nothing else happens; in persistent mode
+    // a flush must never make the dashboard one flush behind. A retry or a
+    // later durable failure cannot double-publish because HubState ignores
+    // non-increasing run/sequence pairs, and session replacement clears the
+    // old run's live row before a stale record could apply.
+    const receivedAtMs = Date.now();
+    const live = mode === "live" ? newestLiveRecord(records, receivedAtMs) : null;
+    if (live !== null) this.publishLive(sessionId, live, receivedAtMs);
+
     // Hostname is the session's at queue time, not at publish time.
     const committed = this.storage.enqueue({
       machineId: session.machineId,
@@ -110,7 +140,6 @@ export class SampleIngestion {
       if (result.status !== "committed") {
         return { status: "retry" as const, retryAfterMs: result.retryAfterMs };
       }
-      this.publishCommittedLive(sessionId, result.newLive, result.receivedAtMs);
       return {
         status: "committed" as const,
         accepted: result.accepted,
@@ -160,20 +189,19 @@ export class SampleIngestion {
   }
 
   /**
-   * Publishes one committed live record only while its session is still the
-   * current authenticated one. A session replaced or revoked during the
-   * asynchronous commit cannot publish live state or trigger Incidents.
+   * Publishes one live record only while its session is still the current
+   * authenticated one. A replaced or revoked session cannot publish or trigger
+   * Incidents; HubState additionally enforces monotonic run/sequence order.
    */
-  private publishCommittedLive(
+  private publishLive(
     sessionId: string,
-    newLive: MetricsRecord | null,
+    record: MetricsRecord,
     receivedAtMs: number,
   ): void {
-    if (!newLive) return;
     const current = this.state.currentSession(sessionId);
     if (!current) return;
-    this.state.applyMetrics(sessionId, newLive, new Date(receivedAtMs).toISOString());
-    this.onLiveSample?.(current.machineId, newLive, receivedAtMs);
+    const applied = this.state.applyMetrics(sessionId, record, new Date(receivedAtMs).toISOString());
+    if (applied) this.onLiveSample?.(current.machineId, record, receivedAtMs);
   }
 
   /** Resolves the authenticated session for every acceptance path. */
@@ -188,4 +216,29 @@ export class SampleIngestion {
     if (remaining <= 0) this.inFlight.delete(sessionId);
     else this.inFlight.set(sessionId, remaining);
   }
+}
+
+/** Newest usable LIVE metrics record in one batch, or null. */
+function newestLiveRecord(
+  records: readonly TelemetryRecord[],
+  receivedAtMs: number,
+): MetricsRecord | null {
+  let best: MetricsRecord | null = null;
+  let bestCaptured = 0;
+  let bestSequence = -1;
+  for (const record of records) {
+    if (record.kind !== "metrics") continue;
+    const captured = Date.parse(record.capturedAt);
+    if (!Number.isFinite(captured) || captured > receivedAtMs + 86_400_000) continue;
+    if (
+      best === null ||
+      captured > bestCaptured ||
+      (captured === bestCaptured && record.sequence > bestSequence)
+    ) {
+      best = record;
+      bestCaptured = captured;
+      bestSequence = record.sequence;
+    }
+  }
+  return best;
 }

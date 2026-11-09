@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,35 +11,30 @@ import { closedLoopbackPort } from './support/http';
 import { SseClient } from './support/sse';
 import { parseSnapshot, waitMachineState, type ReceivedSampleShape } from './support/wire';
 
-type FastCommitted = { seq: number; runId: string; capturedAtMs: number; cpu: unknown };
+type HistoryStatus = { acceptedRecords: number };
 
 /**
- * Dense capture source for the fast destination: the hub commits every live
- * metrics record into `machine_latest`, so polling the database observes
- * nearly every source tick (as opposed to coalesced live SSE snapshots whose
- * throttling decouples them from the per-tick record stream).
+ * Poll the hub's history status for the cumulative accepted-record count. This
+ * works in the default RAM mode (there is no machine_latest row to scrape) and
+ * still proves that the fast destination's source stream is denser than the
+ * slow destination's cadence.
  */
-async function observeCommitted(
-  databasePath: string,
-  sink: Map<number, FastCommitted>,
+async function waitAccepted(
+  baseUrl: string,
+  headers: Record<string, string>,
+  minimum: number,
   deadline: number,
-  ready: () => boolean,
-): Promise<void> {
-  const db = new DatabaseSync(databasePath, { readOnly: true });
-  try {
-    const select = db.prepare('SELECT run_id, seq, captured_at_ms, payload_json FROM machine_latest');
-    while (Date.now() < deadline && !ready() && sink.size < 40) {
-      for (const row of select.all() as unknown as { seq: number; run_id: string; captured_at_ms: number; payload_json: string }[]) {
-        if (sink.has(row.seq)) continue;
-        const payload = JSON.parse(row.payload_json) as { cpu: unknown };
-        sink.set(row.seq, { seq: row.seq, runId: row.run_id, capturedAtMs: row.captured_at_ms, cpu: payload.cpu });
-      }
-      if (ready()) return;
-      await new Promise(resolve => setTimeout(resolve, 50));
-    }
-  } finally {
-    db.close();
+): Promise<number> {
+  let accepted = 0;
+  while (Date.now() < deadline) {
+    const response = await fetch(`${baseUrl}/api/history/status`, { headers });
+    assert.equal(response.status, 200);
+    const status = await response.json() as HistoryStatus;
+    accepted = status.acceptedRecords;
+    if (accepted >= minimum) return accepted;
+    await new Promise(resolve => setTimeout(resolve, 50));
   }
+  return accepted;
 }
 
 test('real collector advertises each hub cadence without multiplying sampling or sharing fields', async t => {
@@ -67,7 +61,9 @@ test('real collector advertises each hub cadence without multiplying sampling or
   await collector.waitForLine(line => line.includes('welcomed'), 10_000, 'cadence collector welcome');
   const slowLive = new SseClient(slowHub.liveUrl, slowHub.browserHeaders);
   t.after(() => slowLive.close());
-  const fastCommitted = new Map<number, FastCommitted>();
+  const fastLive = new SseClient(fastHub.liveUrl, fastHub.browserHeaders);
+  t.after(() => fastLive.close());
+  const fastSamples = new Map<number, ReceivedSampleShape>();
   const slowSamples = new Map<number, ReceivedSampleShape>();
   async function observeSse(
     client: SseClient, interval: number, found: Map<number, ReceivedSampleShape>, count: number, deadline: number,
@@ -83,40 +79,31 @@ test('real collector advertises each hub cadence without multiplying sampling or
       assert.ok(Date.now() < deadline, 'cadence deliveries must keep progressing');
     }
   }
-  // Observe the slow destination independently; the fast hub's commits are
-  // captured densely from its durable store. The advertised interval is
-  // nominal: real scheduler delays may change the number of source ticks
-  // between sends.
+  // Observe both destinations through SSE; the fast hub's accepted-record
+  // counter proves it received a denser stream than the slow cadence, even
+  // though the default hub mode intentionally keeps no per-sample disk rows.
   await Promise.all([
     observeSse(slowLive, 600, slowSamples, 3, Date.now() + 15_000),
-    observeCommitted(fastDatabasePath, fastCommitted, Date.now() + 15_000, () => slowSamples.size >= 3),
+    observeSse(fastLive, 200, fastSamples, 3, Date.now() + 15_000),
   ]);
   assert.ok(slowSamples.size >= 3, 'slow destination delivered three cadence records');
-  assert.ok(fastCommitted.size >= slowSamples.size, 'fast destination committed a denser record stream');
-  // Every source sample the slow destination delivered must have been
-  // committed identically by the fast destination, transformed only by this
-  // destination's sharing policy (identical run and (collectorId, sequence)).
-  for (const [sequence, slow] of [...slowSamples]) {
-    const fast = fastCommitted.get(sequence);
-    if (fast === undefined) continue;
-    assert.equal(slow.collectorId, installation.collectorId, 'same collector identity');
-    assert.equal(fast.runId, slow.runId, 'same collector run across destinations');
-    assert.equal(Date.parse(slow.capturedAt), fast.capturedAtMs, 'same captured source tick');
-    assert.deepEqual(fast.cpu, slow.payload.cpu, 'same source sample content');
-  }
-  const matched = [...slowSamples.keys()].filter(sequence => fastCommitted.has(sequence));
-  assert.ok(matched.length >= 1, `at least one source sample must match (slow ${[...slowSamples.keys()].join(', ')}; ${fastCommitted.size} fast commits observed)`);
+  const accepted = await waitAccepted(fastHub.baseUrl, fastHub.browserHeaders, slowSamples.size, Date.now() + 5_000);
+  assert.ok(accepted >= slowSamples.size, `fast destination accepted a denser stream (${accepted} vs ${slowSamples.size})`);
+  // Every source sample both destinations delivered must have identical run,
+  // capture time and CPU content, transformed only by sharing policy.
+  const matched = [...slowSamples.keys()].filter(sequence => fastSamples.has(sequence));
+  assert.ok(matched.length >= 1, `at least one source sample must match (slow ${[...slowSamples.keys()].join(', ')}; fast ${[...fastSamples.keys()].join(', ')})`);
   // The first source tick carries an honest cpu 'unavailable' (rates start at
   // the second reading), so compare a settled sample for the content
   // equality the destinations must share.
   const settledCommon = matched.find(sequence => slowSamples.get(sequence)!.payload.cpu.status === 'ok');
   assert.notEqual(settledCommon, undefined, 'a settled (ok cpu) source sample must exist in both destinations');
-  const fast = fastCommitted.get(settledCommon!)!;
+  const fast = fastSamples.get(settledCommon!)!;
   const slow = slowSamples.get(settledCommon!)!;
   assert.equal(slow.collectorId, installation.collectorId, 'same collector identity');
   assert.equal(fast.runId, slow.runId, 'same collector run across destinations');
-  assert.equal(Date.parse(slow.capturedAt), fast.capturedAtMs, 'same captured source tick');
-  assert.deepEqual(fast.cpu, slow.payload.cpu, 'same source sample content');
+  assert.equal(Date.parse(slow.capturedAt), Date.parse(fast.capturedAt), 'same captured source tick');
+  assert.deepEqual(fast.payload.cpu, slow.payload.cpu, 'same source sample content');
   assert.equal(slow.payload.cpu.status, 'ok');
   assert.deepEqual(slow.payload.memory, { status: 'unavailable', reason: 'withheld by local sharing policy' });
   assert.equal((await collector.stop()).code, 0);

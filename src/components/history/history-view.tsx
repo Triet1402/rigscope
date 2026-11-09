@@ -36,6 +36,7 @@ import {
   rangePreset,
 } from "@/history/presentation";
 import { HistoryControls, type MetricCatalog } from "./history-controls";
+import { RecordingPanel } from "./recording-panel";
 import { useStoredHistory, type HistoryError } from "./use-stored-history";
 import { HistoryCharts } from "./history-panels";
 import { useHistoryRange, useHistoryMetrics, useHistoryHidden, useHistoryAutoRefresh, useHistoryCores, useHistoryCapacityUnit } from "./history-prefs";
@@ -46,7 +47,7 @@ function errorCopy(error: HistoryError): { title: string; note: string; icon: ty
     case "unauthorized":
       return {
         title: "Session ended",
-        note: "Your session is no longer accepted, so stored history is hidden.",
+        note: "Your session is no longer accepted, so history is hidden.",
         icon: ShieldAlert,
       };
     case "denied":
@@ -321,6 +322,12 @@ export function HistoryView() {
             onRefresh={() => setRefreshNonce((value) => value + 1)}
           />
 
+          <RecordingPanel
+            machine={machine}
+            selectedMetrics={selectedMetrics}
+            csrfToken={session.kind === "signed-in" ? session.user.csrfToken : null}
+          />
+
           {degraded ? (
             <div
               role="status"
@@ -328,7 +335,7 @@ export function HistoryView() {
             >
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warn" aria-hidden />
               <span>
-                Live feed {phase === "disconnected" ? "disconnected" : "reconnecting"} · stored history available
+                Live feed {phase === "disconnected" ? "disconnected" : "reconnecting"} · history available
               </span>
               {phase === "disconnected" ? (
                 <button
@@ -441,17 +448,21 @@ export function HistoryView() {
             <Panel title="History" className="mx-auto mt-3 max-w-xl">
               <EmptyState
                 icon={HistoryIcon}
-                note="No stored history has arrived yet."
+                note="No history is available for this machine in the selected range yet."
               />
             </Panel>
           ) : (() => {
             const result = shown.result;
             const tierLabel =
-              result.tier === "raw"
-                ? "raw samples"
-                : result.tier === "1m"
-                  ? "1-minute rollups"
-                  : "1-hour rollups";
+              result.tier === "1s"
+                ? "1-second RAM summaries"
+                : result.tier === "raw"
+                  ? "raw samples"
+                  : result.tier === "10s"
+                    ? "10-second summaries"
+                    : result.tier === "1m"
+                      ? "1-minute rollups"
+                      : "1-hour rollups";
             return (
             <>
               <div className="mb-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -528,7 +539,7 @@ export function HistoryView() {
                 <Panel title="No stored points" className="mx-auto max-w-xl">
                   <EmptyState
                     icon={HistoryIcon}
-                    note={`No stored readings for ${machine === undefined ? "this machine" : machinesLabel(machine)} in ${rangeInfo.label.toLowerCase()}.`}
+                    note={`No readings for ${machine === undefined ? "this machine" : machinesLabel(machine)} in ${rangeInfo.label.toLowerCase()}.`}
                   />
                 </Panel>
               ) : (

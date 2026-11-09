@@ -53,9 +53,15 @@ services on monitored machines. Missing sensor readings stay unavailable.
 NVIDIA and available AMD GPU counters are supported; Intel GPU readings are
 partial. See the [hardware notes](docs/installation.md#hardware).
 
-History is stored in SQLite. Process details are fetched while you view them and
-are never saved to History. See [Monitoring and alerts](docs/monitoring.md) for
-retention, sharing, freshness and notification behavior.
+History is RAM-only by default: recent charts are bounded in memory and
+telemetry history disappears when the hub restarts. Users, credentials,
+enrollment, settings and alert state remain persistent. Opt into compact SQLite
+summaries with `HUB_TELEMETRY_MODE=persistent`, or start an explicit recording
+when you need a saved incident snapshot. Process details are fetched while you
+view them and are never saved to History. See
+[Monitoring and alerts](docs/monitoring.md) and
+[telemetry storage](docs/telemetry-storage.md) for retention, sharing,
+freshness and notification behavior.
 
 ## Documentation
 
@@ -66,6 +72,7 @@ retention, sharing, freshness and notification behavior.
 | [System installation](docs/system-installation.md) | Dedicated service accounts and system units |
 | [Configuration reference](docs/configuration.md) | Environment variables and source enrollment |
 | [Monitoring and alerts](docs/monitoring.md) | Data limits, sharing, users and webhooks |
+| [Telemetry storage](docs/telemetry-storage.md) | RAM vs persistent history, recording and benchmark |
 | [Sensor readings](docs/bottlenecks.md) / [Exports](docs/exports.md) | Reading meanings and downloads |
 | [Development](docs/development.md) / [Architecture](ARCHITECTURE.md) / [Design](DESIGN.md) | Source setup and implementation references |
 | [Releasing](docs/releasing.md) / [Release notes](CHANGELOG.md) | Publishing checks and version changes |

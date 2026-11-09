@@ -56,30 +56,39 @@ test('packaged collector replays a retained canonical queue and reapplies local 
   t.after(() => collector.stop());
   const current = await waitMetrics(live);
   assert.notEqual(current.metrics!.runId, identity.runId, 'replay cannot replace fresh live metrics');
+  const from = Date.parse(record.capturedAt) - 5_000;
+  const historyUrl = `${hub.baseUrl}/api/history?machineId=${creds.machineId}` +
+    `&metrics=cpu.usage,memory.used,cpu.temperature&from=${from}&to=${Date.now() + 5_000}`;
+  type HistoryBody = {
+    series: Array<{ metric: string; points: Array<{ min: number | null; max: number | null }> }>;
+  };
+  let history: HistoryBody | null = null;
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const response = await fetch(historyUrl, { headers: hub.browserHeaders });
+    assert.equal(response.status, 200);
+    history = await response.json() as HistoryBody;
+    if (history.series.some((series) => series.metric === 'memory.used' && series.points.length > 0)) break;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  // Retained canonical fields replay unchanged, while the state sharing policy
+  // is applied again before the record leaves the collector. In the default
+  // memory mode this history is RAM-only, never a points_raw row.
+  assert.equal(record.payload.cpu.status, 'ok');
+  assert.equal(record.payload.memory.status, 'ok');
+  const memorySeries = history?.series.find(series => series.metric === 'memory.used');
+  assert.ok(memorySeries, 'replayed memory series reached RAM history');
+  assert.ok(memorySeries.points.every(point => point.min === null && point.max === null),
+    'withheld memory never reaches the hub as a value');
+  assert.ok(history?.series.some(series => series.metric === 'cpu.usage' && series.points.length > 0));
+
+  // Memory mode deliberately writes no telemetry rows/receipts/gaps.
   const db = new DatabaseSync(databasePath, {readOnly: true});
   try {
-    const receipts = db.prepare('SELECT seq,kind FROM sample_receipts WHERE collector_id = ? AND run_id = ? ORDER BY seq');
-    const deadline = Date.now() + 10000;
-    while (receipts.all(collectorId, identity.runId).length < 2 && Date.now() < deadline) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+    for (const table of ['points_raw', 'points_10s', 'sample_receipts', 'gaps', 'machine_latest']) {
+      assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get()!.count, 0,
+        `${table} must stay empty in memory mode`);
     }
-    assert.deepEqual(receipts.all(collectorId, identity.runId).map(r => ({...r})), [{seq: 1, kind: 'metrics'}, {seq: 2, kind: 'gap'}]);
-    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM gaps WHERE run_id = ? AND seq = 2').get(identity.runId)!.count, 1);
-
-    // Retained canonical fields replay unchanged, while the state sharing
-    // policy is applied again to memory before the record leaves the collector.
-    assert.equal(record.payload.cpu.status, 'ok');
-    assert.equal(record.payload.memory.status, 'ok');
-    const capturedMs = Date.parse(record.capturedAt);
-    const point = (metric: string) => {
-      const series = db.prepare("SELECT series_id FROM series WHERE machine_id = ? AND metric = ? AND resource_id = ''")
-        .get(creds.machineId, metric) as {series_id: number} | undefined;
-      assert.ok(series !== undefined, `expected a ${metric} series`);
-      return db.prepare('SELECT value FROM points_raw WHERE series_id = ? AND ts_ms = ?')
-        .get(series.series_id, capturedMs) as {value: number | null} | undefined;
-    };
-    assert.equal(point('memory.used')?.value, null, 'withheld memory never reaches the hub');
-    assert.equal(point('cpu.temperature')?.value, record.payload.cpu.temperatureC, 'canonical cpu field replays as stored');
   } finally { db.close(); }
   const state = JSON.parse(readFileSync(statePath, 'utf8'));
   assert.equal(state.collectorId, collectorId);
@@ -96,8 +105,8 @@ test('packaged real collector: multi-hub live/history, process interests and dur
   const credsA = credential(collectorId, 'machine-a', 'public-token-a');
   const credsB = credential(collectorId, 'machine-b', 'public-token-b');
   const databasePath = join(dir, 'hub-a', 'telemetry.sqlite');
-  const hubA = await startHub(t, { collectors: [credsA], databasePath });
-  const hubB = await startHub(t, { collectors: [credsB], databasePath: join(dir, 'hub-b', 'telemetry.sqlite') });
+  const hubA = await startHub(t, { collectors: [credsA], databasePath, telemetryMode: 'persistent', telemetryFlushMs: 1000 });
+  const hubB = await startHub(t, { collectors: [credsB], databasePath: join(dir, 'hub-b', 'telemetry.sqlite'), telemetryMode: 'persistent', telemetryFlushMs: 1000 });
   const statePath = join(dir, 'collector.json');
   writeFileSync(statePath, JSON.stringify({ collectorId, destinations: [
     { url: hubA.collectorWsUrl, token: credsA.token }, { url: hubB.collectorWsUrl, token: credsB.token },
@@ -128,9 +137,15 @@ test('packaged real collector: multi-hub live/history, process interests and dur
   assert.ok(processes > 0, 'actual Linux process scanning reached the browser query');
   assert.equal((await fetch(url, { method: 'DELETE', headers })).status, 200);
   const historyUrl = `/api/history?machineId=${credsA.machineId}&metrics=cpu.usage,memory.used&from=${Date.now() - 60000}&to=${Date.now() + 1000}`;
-  const history = await fetch(hubA.baseUrl + historyUrl, { headers: browser.headers });
-  assert.equal(history.status, 200);
-  const before = await history.json() as { series: { points: unknown[] }[] };
+  let before: { series: { points: unknown[] }[] } = { series: [] };
+  const historyDeadline = Date.now() + 15000;
+  while (Date.now() < historyDeadline) {
+    const history = await fetch(hubA.baseUrl + historyUrl, { headers: browser.headers });
+    assert.equal(history.status, 200);
+    before = await history.json() as typeof before;
+    if (before.series.some(s => s.points.length > 0)) break;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
   assert.ok(before.series.some(s => s.points.length > 0));
   liveA.close();
   assert.equal((await hubA.stop()).code, 0);
@@ -138,7 +153,7 @@ test('packaged real collector: multi-hub live/history, process interests and dur
   assert.ok(advancingB.connected, 'a stopped destination does not interrupt the healthy hub');
   // Stop the collector so the hub restart must recover without fresh samples.
   assert.equal((await collector.stop()).code, 0);
-  const restarted = await startHub(t, { port: hubA.port, collectors: [credsA], databasePath });
+  const restarted = await startHub(t, { port: hubA.port, collectors: [credsA], databasePath, telemetryMode: 'persistent', telemetryFlushMs: 1000 });
   const restoredLive = new SseClient(restarted.liveUrl, restarted.browserHeaders);
   t.after(() => restoredLive.close());
   const event = await restoredLive.next();

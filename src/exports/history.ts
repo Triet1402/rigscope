@@ -53,7 +53,9 @@ export type HistoryExportSeries = {
 };
 
 const TIER_LABEL: Record<HistoryResult["tier"], string> = {
+  "1s": "1-second RAM summaries",
   raw: "raw samples",
+  "10s": "10-second summaries",
   "1m": "1-minute rollups",
   "1h": "1-hour rollups",
 };

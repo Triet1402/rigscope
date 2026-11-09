@@ -1,5 +1,32 @@
 # Release notes
 
+## 0.2.0
+
+- Make telemetry history RAM-only by default. Live readings update immediately,
+  a global typed-array memory budget keeps 1s/10s/1m/1h summaries, and history
+  deliberately disappears on restart. Users, credentials, enrollment, settings,
+  alert state, metadata and inventory remain persistent.
+- Add opt-in `HUB_TELEMETRY_MODE=persistent`: publish live state immediately,
+  buffer roughly five seconds, commit one compact `points_10s` batch plus folded
+  rollups, then acknowledge. Deduplication receipts now have an independent
+  seven-day lifetime. Automatic checkpointing waits for a larger WAL reserve.
+- Bound persistent delivery: use the protocol's 64-batch in-flight window,
+  default the flush interval to five seconds and reject intervals above five
+  seconds, which keeps a 100 ms collector cadence inside the window and the
+  collector's 30-second ack deadline. A waiting live sample is sent as soon as
+  an acknowledgement frees a slot, and the hub's collector message bucket covers
+  live plus replay/status traffic instead of exactly the live rate.
+- Add explicit recordings with bounded duration/size, optional recent RAM
+  backlog, restart-surviving private output, authenticated download and a
+  History panel that states whether history is temporary or saved.
+- Add `ops reset-telemetry` to discard only telemetry history while preserving
+  accounts, enrollment, settings, alert state, metadata, inventory and
+  recordings.
+- Add a repeatable RAM-vs-persistent benchmark measuring process-attributed disk
+  writes, latency, RSS and row counts, plus tests for aggregation, nulls, gaps,
+  spikes, late/duplicate samples, memory eviction, restart semantics, summary
+  commits, replay deduplication, recording limits and history reset.
+
 ## 0.1.8
 
 - Fix remaining hub stalls during retention by grouping per-series deletes into

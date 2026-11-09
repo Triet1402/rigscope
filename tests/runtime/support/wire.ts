@@ -184,13 +184,22 @@ export function parseSnapshot(data: string, what: string): HubSnapshotShape {
   return snapshot;
 }
 
-export type WelcomeShape = { type: "welcome"; hubRunId: string; machineId: string; delivery: "durable"; maxInFlightBatches: number };
+export type WelcomeShape = {
+  type: "welcome";
+  hubRunId: string;
+  machineId: string;
+  delivery: "durable" | "memory";
+  maxInFlightBatches: number;
+};
 
 export function assertWelcome(raw: unknown, what: string): WelcomeShape {
   assertExactKeys(raw, ["delivery", "hubRunId", "machineId", "maxInFlightBatches", "type"], what);
   const welcome = raw as WelcomeShape;
   assert.equal(welcome.type, "welcome", `${what}.type`);
-  assert.equal(welcome.delivery, "durable", `${what}.delivery (durable telemetry)`);
+  assert.ok(
+    welcome.delivery === "durable" || welcome.delivery === "memory",
+    `${what}.delivery (durable or memory telemetry)`,
+  );
   assert.ok(
     Number.isInteger(welcome.maxInFlightBatches) && welcome.maxInFlightBatches >= 1 && welcome.maxInFlightBatches <= 64,
     `${what}.maxInFlightBatches within 1..64`,

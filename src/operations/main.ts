@@ -24,6 +24,7 @@ import {
   backupDatabase,
   inspectDatabase,
   migrateDatabase,
+  resetTelemetryHistory,
   restoreDatabase,
 } from "./database";
 import { activateRelease, installRelease, packageRelease, rollbackRelease } from "./release";
@@ -43,6 +44,7 @@ Usage:
                [--database PATH] [--activate --confirm-stopped] [--install-deps] [--json]
   ops activate --prefix DIR --state-dir DIR --version V [--confirm-stopped] [--json]
   ops rollback --prefix DIR --state-dir DIR --confirm-stopped [--json]
+  ops reset-telemetry --database PATH [--backup-dir DIR] --confirm-stopped [--json]
   ops recover-admin --database PATH --password-file PATH [--user NAME] [--enable] [--json]
   ops measure  [--machines N] [--batches N] [--records-per-batch N] [--gpus N]
                [--viewers N] [--history-concurrency N] [--history-points N] [--mode live|replay|mixed]
@@ -332,6 +334,42 @@ async function run(): Promise<number> {
       console.log(`previous current: ${report.previous ?? "none"}; schema ${report.schemaFrom ?? "none"} -> ${report.schemaTo ?? "none"}`);
       if (report.restoredBackup !== null) console.log(`restored matching pre-upgrade backup; replaced database was backed up at ${report.restoredBackup}`);
       console.log("This command did not run systemctl; enable/restart explicitly after review.");
+    }
+    return 0;
+  }
+  if (command === "reset-telemetry") {
+    const parsed = parseArgs({
+      args: options,
+      options: {
+        database: { type: "string" },
+        "backup-dir": { type: "string" },
+        "confirm-stopped": { type: "boolean" },
+        json: { type: "boolean" },
+      },
+      allowPositionals: false,
+    });
+    const database = optionString(parsed.values, "database", true)!;
+    const backupDir = optionString(parsed.values, "backup-dir");
+    let backupPath: string | null = null;
+    if (backupDir !== undefined) {
+      const report = await backupDatabase({
+        database,
+        output: resolve(backupDir, `telemetry-pre-reset-${Date.now()}.sqlite`),
+      });
+      backupPath = report.output;
+    }
+    const report = resetTelemetryHistory({
+      database,
+      confirmStopped: optionBoolean(parsed.values, "confirm-stopped"),
+    });
+    if (optionBoolean(parsed.values, "json")) {
+      console.log(JSON.stringify({ ...report, backupPath }, null, 2));
+    } else {
+      console.log(`telemetry history reset: ${report.database}`);
+      console.log(`deleted rows: ${Object.entries(report.deleted).map(([table, rows]) => `${table}=${rows}`).join(", ")}`);
+      console.log(`preserved: ${report.preserved.join(", ")}`);
+      console.log(`integrity: ${report.integrity}`);
+      if (backupPath !== null) console.log(`pre-reset backup: ${backupPath}`);
     }
     return 0;
   }

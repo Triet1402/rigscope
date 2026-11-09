@@ -157,8 +157,16 @@ function overlapsGap(previousT: number, nextT: number, bands: readonly GapBand[]
  * downsampler-marked discontinuity.
  */
 /** Empty SQL buckets are normal when sampling is slower than the query grid. */
-export function continuityStepMs(stepMs: number, tier: "raw" | "1m" | "1h", expectedIntervalMs?: number | null): number {
-  const tierMs = tier === "1h" ? 3_600_000 : tier === "1m" ? 60_000 : 100;
+export function continuityStepMs(
+  stepMs: number,
+  tier: "1s" | "raw" | "10s" | "1m" | "1h",
+  expectedIntervalMs?: number | null,
+): number {
+  const tierMs =
+    tier === "1h" ? 3_600_000 :
+      tier === "1m" ? 60_000 :
+        tier === "10s" ? 10_000 :
+          tier === "1s" ? 1_000 : 100;
   return Math.max(stepMs, tierMs, expectedIntervalMs ?? 0);
 }
 

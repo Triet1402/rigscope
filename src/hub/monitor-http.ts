@@ -5,23 +5,29 @@ import { timingSafeEqual } from 'node:crypto';
 import type { BrowserHttpAuth, AuthOriginRules } from './auth/http';
 import { isTrustedOrigin, sendJson } from './auth/http';
 import type { HubState } from './state';
-import type { HubDatabase } from './storage/db';
-import type { TelemetryStore } from './storage/telemetry-store';
-import { HistoryQueryError, queryHistory } from './storage/history-query';
+import type { HistorySource } from './storage/history';
+import { HistoryQueryError } from './storage/history-query';
 import { METRICS } from './storage/series';
+import type { TelemetryStore } from './storage/telemetry-store';
+import type { MemoryTelemetryStore } from './storage/memory-store';
 import { ProcessViewerBudgetError, type ProcessInterests } from './process-interests';
 import { HttpInputError, readJsonBody } from './http-input';
+
+export type MonitorStorage = HistorySource & Pick<
+  TelemetryStore | MemoryTelemetryStore,
+  'getMachineMeta' | 'setMachineMeta'
+>;
 
 export class MonitorHttp {
   private readonly historyBudgets = new Map<string, { at: number; tokens: number }>();
   constructor(private readonly options: { auth: BrowserHttpAuth; origin: AuthOriginRules; state: HubState;
-    database: HubDatabase; storage: TelemetryStore; processes: ProcessInterests;
+    database?: unknown; storage: MonitorStorage; processes: ProcessInterests;
     isAdmin?: (username: string) => boolean }) {}
 
   async handle(req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
     const path = url.pathname;
-    if (!['/api/history', '/api/history/metrics', '/api/processes', '/api/machines/meta'].includes(path)) return false;
-    const { auth, origin, state, processes, database, storage } = this.options;
+    if (!['/api/history', '/api/history/metrics', '/api/history/status', '/api/processes', '/api/machines/meta'].includes(path)) return false;
+    const { auth, origin, state, processes, storage } = this.options;
     const session = auth.requestSession(req);
     if (!session) { sendJson(res, 401, { error: 'authentication required' }); return true; }
     const method = req.method ?? 'GET';
@@ -38,6 +44,11 @@ export class MonitorHttp {
         !timingSafeEqual(Buffer.from(csrf), Buffer.from(session.csrfToken))) {
         sendJson(res, 403, { error: 'missing or invalid csrf token' }); return true;
       }
+    }
+    if (path === '/api/history/status') {
+      if (method !== 'GET') { sendJson(res, 405, { error: 'GET required' }); return true; }
+      sendJson(res, 200, storage.historyStatus());
+      return true;
     }
     const machineId = url.searchParams.get('machineId') ?? '';
     if (!machineId || machineId.length > 128 || (session.scope !== '*' && !session.scope.includes(machineId))) {
@@ -61,7 +72,7 @@ export class MonitorHttp {
         budget.tokens--;
         if (this.historyBudgets.size >= 256 && !this.historyBudgets.has(session.id)) this.historyBudgets.delete(this.historyBudgets.keys().next().value!);
         this.historyBudgets.set(session.id, budget);
-        const result = queryHistory(database, { machineId,
+        const result = storage.queryHistory({ machineId,
           metrics: (url.searchParams.get('metrics') ?? 'cpu.usage,memory.used').split(','),
           ...(url.searchParams.has('resourceIds') ? { resourceIds: url.searchParams.get('resourceIds')!.split(',') } : {}),
           ...(url.searchParams.has('coreIds') ? { coreIds: url.searchParams.get('coreIds')!.split(',').filter(Boolean) } : {}),

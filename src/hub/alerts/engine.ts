@@ -520,6 +520,16 @@ export class AlertEngine {
     // guard rejects a historical/replayed/old record after a restart even if
     // the parent invocation is wrong.
     if (receivedAtMs < this.startedAtMs) return;
+    const rules = this.rulesForMachine.all(machineId) as RuleRow[];
+    // No rules is the normal default. Do not write a progress row for every
+    // one-second sample just to remember a sequence number that no rule uses;
+    // that turned an otherwise RAM-only hub into a sustained disk writer.
+    // Pending deliveries from a previously deleted rule still get a chance to
+    // drain.
+    if (rules.length === 0) {
+      void this.processNotifications();
+      return;
+    }
     try {
       this.transaction(() => {
         const progress = this.progressSelect.get(machineId) as ProgressRow | undefined;
@@ -536,8 +546,7 @@ export class AlertEngine {
           receivedAtMs,
           this.now(),
         );
-        const rows = this.rulesForMachine.all(machineId) as RuleRow[];
-        for (const row of rows) {
+        for (const row of rules) {
           const rule = mapRule(row);
           if (!rule.enabled) continue;
           if (rule.condition === "stale") {
@@ -563,6 +572,11 @@ export class AlertEngine {
 
   tick(machines: MachineState[]): void {
     if (this.stopped || this.closed) return;
+    const count = Number((this.countRules.get() as { count?: number | bigint } | undefined)?.count ?? 0);
+    if (count === 0) {
+      void this.processNotifications();
+      return;
+    }
     const at = this.now();
     try {
       this.transaction(() => {

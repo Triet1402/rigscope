@@ -21,6 +21,7 @@
 
 import { isIP } from "node:net";
 import { basename, isAbsolute, resolve } from "node:path";
+import { MAX_PERSISTENT_FLUSH_MS } from "../contracts/telemetry";
 
 /**
  * Upper bound on the HUB_COLLECTORS JSON document in bytes.
@@ -62,6 +63,31 @@ export type HubRemoteConfig = HubPublicOrigin & {
   socketPath: string;
 };
 
+export type TelemetryHistoryMode = "memory" | "persistent";
+
+export type HubHistoryConfig = {
+  mode: TelemetryHistoryMode;
+  /** Global RAM budget for memory history. */
+  memoryBudgetBytes: number;
+  /** Persistent summary flush cadence. */
+  flushIntervalMs: number;
+  retention: {
+    rawMs: number;
+    tenSecondMs: number;
+    oneMinuteMs: number;
+    oneHourMs: number;
+    receiptsMs: number;
+    gapsMs: number;
+  };
+  recordings: {
+    directory: string | null;
+    maxDurationMs: number;
+    maxBytes: number;
+    backlogMs: number;
+    maxActive: number;
+  };
+};
+
 export type HubConfig = {
   /** Loopback bind host. Unused in remote mode (kept for local callers). */
   host: string;
@@ -73,6 +99,7 @@ export type HubConfig = {
   remote: HubRemoteConfig | null;
   /** Optional deployment resource budget; defaults in the collector gateway. */
   maxCollectorConnections?: number;
+  history: HubHistoryConfig;
 };
 
 export class HubConfigError extends Error {
@@ -99,6 +126,7 @@ export function parseHubConfig(
     maxCollectorConnections = parsed;
   }
   const connectionBudget = maxCollectorConnections === undefined ? {} : {maxCollectorConnections};
+  const history = parseHistoryConfig(env);
 
   if ((publicOrigin === undefined) !== (socketPath === undefined)) {
     throw new HubConfigError(
@@ -120,6 +148,7 @@ export function parseHubConfig(
       collectors,
       development,
       remote: parseRemoteConfig(publicOrigin, socketPath),
+      history,
       ...connectionBudget,
     };
   }
@@ -130,8 +159,82 @@ export function parseHubConfig(
     collectors,
     development,
     remote: null,
+    history,
     ...connectionBudget,
   };
+}
+
+const DEFAULT_MEMORY_BUDGET_BYTES = 128 * 1024 * 1024;
+/**
+ * A collector can keep at most MAX_IN_FLIGHT_BATCHES unacknowledged messages,
+ * and sends at most one live message per MIN_EXPECTED_INTERVAL_MS. The flush
+ * interval must therefore stay below that window coverage; the headroom covers
+ * the COMMIT, ack write and scheduling jitter. This is also far below the
+ * collector's 30 s ack timeout, so a timeout never races a legitimate commit.
+ */
+const DEFAULT_PERSISTENT_FLUSH_MS = MAX_PERSISTENT_FLUSH_MS;
+const DEFAULT_RECORDING_MAX_DURATION_MS = 60 * 60_000;
+const DEFAULT_RECORDING_MAX_BYTES = 64 * 1024 * 1024;
+const DEFAULT_RECORDING_BACKLOG_MS = 10 * 60_000;
+const DEFAULT_MAX_ACTIVE_RECORDINGS = 4;
+const HOUR_MS = 3_600_000;
+const DAY_MS = 86_400_000;
+
+function parseHistoryConfig(env: Record<string, string | undefined>): HubHistoryConfig {
+  const modeValue = env.HUB_TELEMETRY_MODE ?? "memory";
+  if (modeValue !== "memory" && modeValue !== "persistent") {
+    throw new HubConfigError("HUB_TELEMETRY_MODE must be memory or persistent");
+  }
+  const memoryBudgetBytes = envInteger(
+    env.HUB_HISTORY_MEMORY_BYTES,
+    DEFAULT_MEMORY_BUDGET_BYTES,
+    1 * 1024 * 1024,
+    16 * 1024 * 1024 * 1024,
+    "HUB_HISTORY_MEMORY_BYTES",
+  );
+  const flushIntervalMs = envInteger(
+    env.HUB_TELEMETRY_FLUSH_MS,
+    DEFAULT_PERSISTENT_FLUSH_MS,
+    1_000,
+    MAX_PERSISTENT_FLUSH_MS,
+    "HUB_TELEMETRY_FLUSH_MS",
+  );
+  const retention = {
+    rawMs: envInteger(env.HUB_RETENTION_RAW_MS, 2 * DAY_MS, 0, 400 * DAY_MS, "HUB_RETENTION_RAW_MS"),
+    tenSecondMs: envInteger(env.HUB_RETENTION_10S_MS, 2 * HOUR_MS, 0, 30 * DAY_MS, "HUB_RETENTION_10S_MS"),
+    oneMinuteMs: envInteger(env.HUB_RETENTION_1M_MS, 30 * DAY_MS, 0, 400 * DAY_MS, "HUB_RETENTION_1M_MS"),
+    oneHourMs: envInteger(env.HUB_RETENTION_1H_MS, 400 * DAY_MS, 0, 800 * DAY_MS, "HUB_RETENTION_1H_MS"),
+    receiptsMs: envInteger(env.HUB_RECEIPT_RETENTION_MS, 7 * DAY_MS, HOUR_MS, 400 * DAY_MS, "HUB_RECEIPT_RETENTION_MS"),
+    gapsMs: envInteger(env.HUB_GAP_RETENTION_MS, 400 * DAY_MS, 0, 800 * DAY_MS, "HUB_GAP_RETENTION_MS"),
+  };
+  const recordings = {
+    directory: nonEmpty(env.HUB_RECORDINGS_DIR) ?? null,
+    maxDurationMs: envInteger(env.HUB_RECORDING_MAX_DURATION_MS, DEFAULT_RECORDING_MAX_DURATION_MS, 1_000, 24 * 60 * 60_000, "HUB_RECORDING_MAX_DURATION_MS"),
+    maxBytes: envInteger(env.HUB_RECORDING_MAX_BYTES, DEFAULT_RECORDING_MAX_BYTES, 64 * 1024, 1024 * 1024 * 1024, "HUB_RECORDING_MAX_BYTES"),
+    backlogMs: envInteger(env.HUB_RECORDING_BACKLOG_MS, DEFAULT_RECORDING_BACKLOG_MS, 0, 24 * 60 * 60_000, "HUB_RECORDING_BACKLOG_MS"),
+    maxActive: envInteger(env.HUB_RECORDING_MAX_ACTIVE, DEFAULT_MAX_ACTIVE_RECORDINGS, 1, 32, "HUB_RECORDING_MAX_ACTIVE"),
+  };
+  // Retention variables still describe disk history. Memory mode ignores them
+  // by design rather than rejecting a shared environment file.
+  return { mode: modeValue, memoryBudgetBytes, flushIntervalMs, retention, recordings };
+}
+
+function envInteger(
+  raw: string | undefined,
+  fallback: number,
+  min: number,
+  max: number,
+  name: string,
+): number {
+  if (raw === undefined || raw === "") return fallback;
+  if (!/^\d+$/.test(raw)) {
+    throw new HubConfigError(`${name} must be a nonnegative integer`);
+  }
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < min || value > max) {
+    throw new HubConfigError(`${name} must be between ${min} and ${max}`);
+  }
+  return value;
 }
 
 function nonEmpty(value: string | undefined): string | undefined {

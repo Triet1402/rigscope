@@ -52,11 +52,15 @@ export async function startHub(
     host?: string; port?: number; collectors?: CredentialConfig[]; stateFile?: string; databasePath?: string;
     grants?: {token:string; expiresAt:string}[];
     browserUsers?: false | { username: string; machineIds: "*" | string[]; admin?: boolean }[];
+    telemetryMode?: "memory" | "persistent";
+    telemetryFlushMs?: number;
   } = {},
 ): Promise<HubController> {
   requireArtifacts();
   const host = options.host ?? "127.0.0.1";
   const overrides: Record<string, string | undefined> = { HUB_HOST: host, HUB_PORT: String(options.port ?? 0) };
+  if (options.telemetryMode !== undefined) overrides.HUB_TELEMETRY_MODE = options.telemetryMode;
+  if (options.telemetryFlushMs !== undefined) overrides.HUB_TELEMETRY_FLUSH_MS = String(options.telemetryFlushMs);
   if (options.databasePath || options.stateFile) overrides.HUB_DATABASE_PATH = options.databasePath ?? join(dirname(options.stateFile!), 'telemetry.sqlite');
   if (options.collectors !== undefined) overrides.HUB_COLLECTORS = JSON.stringify(options.collectors);
   if (options.stateFile) overrides.HUB_STATE_FILE = options.stateFile;

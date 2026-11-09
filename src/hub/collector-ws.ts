@@ -43,8 +43,13 @@ export const HELLO_TIMEOUT_MS = 5_000;
 export const COLLECTOR_PING_INTERVAL_MS = 15_000;
 export const COLLECTOR_IDLE_TIMEOUT_MS = 45_000;
 export const COLLECTOR_SEND_BUFFER_LIMIT_BYTES = 1_048_576;
-/** Token bucket: sustained rate covers the collector's 100 ms minimum cadence. */
-export const COLLECTOR_MESSAGES_PER_SECOND = 10;
+/**
+ * Token bucket: sustained rate covers one live message at the collector's
+ * 100 ms minimum cadence, the default four replay batches per second and
+ * periodic status/inventory traffic. A rate of exactly one live message per
+ * 100 ms would exhaust the bucket after any control message.
+ */
+export const COLLECTOR_MESSAGES_PER_SECOND = 20;
 export const COLLECTOR_MESSAGE_BURST = 30;
 export const MAX_COLLECTOR_CONNECTIONS = 100;
 
@@ -95,14 +100,17 @@ export class CollectorGateway {
   private readonly maxConnections: number;
   private readonly onDetail: (machineId: string, message: DetailResult | DetailEnded) => void;
   private readonly onDisconnect: (machineId: string) => void;
+  private readonly delivery: "durable" | "memory";
 
   constructor(input: { state: HubState; ingestion: SampleIngestion;
     maxConnections?: number;
+    delivery?: "durable" | "memory";
     onDetail?: (machineId: string, message: DetailResult | DetailEnded) => void;
     onDisconnect?: (machineId: string) => void }) {
     this.state = input.state;
     this.ingestion = input.ingestion;
     this.maxConnections = input.maxConnections ?? MAX_COLLECTOR_CONNECTIONS;
+    this.delivery = input.delivery ?? "durable";
     if (!Number.isSafeInteger(this.maxConnections) || this.maxConnections < 1) {
       throw new Error("collector connection budget must be a positive safe integer");
     }
@@ -341,7 +349,7 @@ export class CollectorGateway {
       type: "welcome",
       hubRunId: this.state.hubRunId,
       machineId,
-      delivery: "durable",
+      delivery: this.delivery,
       maxInFlightBatches: MAX_IN_FLIGHT_SAMPLE_BATCHES,
     };
     this.send(connection, JSON.stringify(welcome));

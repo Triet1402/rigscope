@@ -25,6 +25,15 @@ export const MAX_MESSAGE_BYTES = 262_144;
 /** Max bytes for a detail.result message (process tables). */
 export const MAX_DETAIL_BYTES = 1_048_576;
 export const MAX_BATCH_RECORDS = 32;
+/**
+ * Largest unacknowledged sample-batch window a hub may advertise. Existing
+ * collectors reject a welcome above this bound, so it is the protocol ceiling;
+ * the hub's persistent flush interval is bounded to fit it at the fastest
+ * supported 100 ms cadence.
+ */
+export const MAX_IN_FLIGHT_BATCHES = 64;
+/** Shared delivery bound used by hub flush configuration and collector live-slot reservation. */
+export const MAX_PERSISTENT_FLUSH_MS = 5_000;
 export const MAX_CORES = 1024;
 export const MAX_GPUS = 16;
 export const MAX_FILESYSTEMS = 64;
@@ -334,7 +343,12 @@ export type WelcomeMessage = {
   type: "welcome";
   hubRunId: string;
   machineId: string;
-  delivery: "durable";
+  /**
+   * `durable` means an ack follows a crash-safe commit. `memory` means the hub
+   * accepted the sample into RAM and its history intentionally disappears on
+   * hub restart. Collectors keep the same outbox/retry behavior for both.
+   */
+  delivery: "durable" | "memory";
   /** Maximum unacknowledged samples messages the collector may have outstanding. */
   maxInFlightBatches: number;
 };
@@ -419,8 +433,16 @@ export function parseHubMessage(value: unknown): HubMessage {
   switch (o.type) {
     case "welcome": {
       keys(o, ["type", "hubRunId", "machineId", "delivery", "maxInFlightBatches"], "welcome");
-      if (o.delivery !== "durable") throw new Error(`invalid welcome: unexpected delivery ${desc(o.delivery)}`);
-      return { type: "welcome", hubRunId: id(o.hubRunId, "hubRunId"), machineId: id(o.machineId, "machineId"), delivery: "durable", maxInFlightBatches: int(o.maxInFlightBatches, "maxInFlightBatches", 1, 64) };
+      if (o.delivery !== "durable" && o.delivery !== "memory") {
+        throw new Error(`invalid welcome: unexpected delivery ${desc(o.delivery)}`);
+      }
+      return {
+        type: "welcome",
+        hubRunId: id(o.hubRunId, "hubRunId"),
+        machineId: id(o.machineId, "machineId"),
+        delivery: o.delivery,
+        maxInFlightBatches: int(o.maxInFlightBatches, "maxInFlightBatches", 1, MAX_IN_FLIGHT_BATCHES),
+      };
     }
     case "ack": {
       keys(o, ["type", "accepted", "rejected"], "ack", ["retryAfterMs"]);

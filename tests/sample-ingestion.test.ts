@@ -115,7 +115,7 @@ function machineSnapshot(state: HubState) {
 }
 
 describe("sample ingestion module", () => {
-  it("acknowledges only after the durable commit is visible to another connection", async () => {
+  it("publishes live state immediately but acknowledges only after the durable commit is visible", async () => {
     const rigging = rig();
     try {
       startSession(rigging.state);
@@ -126,8 +126,17 @@ describe("sample ingestion module", () => {
           [metrics(1, BASE)],
         ),
       );
-      // Before any flush, nothing is committed and nothing is published.
-      assert.equal(rigging.published.length, 0);
+      // The dashboard is never held behind the ten-second persistent flush.
+      assert.equal(rigging.published.length, 1);
+      assert.equal(machineSnapshot(rigging.state).metrics?.sequence, 1);
+      // But the durable commit (and therefore the acknowledgement) is pending.
+      const observerBefore = new DatabaseSync(rigging.path);
+      try {
+        const receipts = observerBefore.prepare("SELECT COUNT(*) AS n FROM sample_receipts").get() as { n: number };
+        assert.equal(Number(receipts.n), 0);
+      } finally {
+        observerBefore.close();
+      }
       await flush(rigging);
       const outcome: SampleOutcome = await submission;
       assert.equal(outcome.status, "committed");
@@ -269,13 +278,14 @@ describe("sample ingestion module", () => {
     }
   });
 
-  it("does not publish a session replaced before its commit resolves", async () => {
+  it("clears a replaced session's live row even though its earlier sample was published", async () => {
     const rigging = rig();
     try {
       startSession(rigging.state, "session-1", "run-1");
       const stale = promised(rigging.ingestion.submitSamples("session-1", "live", [metrics(1, BASE)]));
+      assert.equal(rigging.published.length, 1);
       // A new authenticated run supersedes the session while the batch is
-      // still uncommitted.
+      // still uncommitted. Replacement clears the old run's live row.
       startSession(rigging.state, "session-2", "run-2", "host-2");
       await flush(rigging);
       const outcome = await stale;
@@ -284,7 +294,6 @@ describe("sample ingestion module", () => {
       if (outcome.status !== "committed") return;
       assert.deepEqual(outcome.accepted, [{ runId: "run-1", sequence: 1 }]);
       assert.equal(count(rigging, "SELECT COUNT(*) AS n FROM sample_receipts WHERE run_id = 'run-1'"), 1);
-      assert.equal(rigging.published.length, 0);
       const snapshot = machineSnapshot(rigging.state);
       assert.equal(snapshot.connected, true);
       assert.equal(snapshot.metrics, undefined);
@@ -293,27 +302,28 @@ describe("sample ingestion module", () => {
       await flush(rigging);
       const replacementOutcome = await replacement;
       assert.equal(replacementOutcome.status, "committed");
-      assert.equal(rigging.published.length, 1);
+      assert.equal(rigging.published.length, 2);
       assert.equal(machineSnapshot(rigging.state).metrics?.runId, "run-2");
     } finally {
       await teardown(rigging);
     }
   });
 
-  it("does not publish a session revoked before its commit resolves", async () => {
+  it("keeps the last published reading but stops accepting after revocation", async () => {
     const rigging = rig();
     try {
       startSession(rigging.state, "session-1", "run-1");
       const stale = promised(rigging.ingestion.submitSamples("session-1", "live", [metrics(1, BASE)]));
+      assert.equal(rigging.published.length, 1);
       assert.equal(rigging.state.endSession("session-1"), true);
       await flush(rigging);
       const outcome = await stale;
       assert.equal(outcome.status, "committed");
       assert.equal(outcome.status !== "committed" ? true : outcome.accepted.length, 1);
-      assert.equal(rigging.published.length, 0);
       const snapshot = machineSnapshot(rigging.state);
       assert.equal(snapshot.connected, false);
-      assert.equal(snapshot.metrics, undefined);
+      // Last-known state is retained while offline, exactly as before.
+      assert.equal(snapshot.metrics?.sequence, 1);
     } finally {
       await teardown(rigging);
     }
@@ -359,7 +369,7 @@ describe("sample ingestion module", () => {
     }
   });
 
-  it("answers retry and never publishes when storage cannot accept the batch", async () => {
+  it("answers retry while live publication stays independent of a failed store", async () => {
     const rigging = rig();
     try {
       startSession(rigging.state);
@@ -377,7 +387,12 @@ describe("sample ingestion module", () => {
       } finally {
         observer.close();
       }
-      assert.equal(rigging.published.length, 0);
+      // Publishing is decoupled from storage; the collector will retry and the
+      // duplicate sequence cannot publish twice.
+      assert.equal(rigging.published.length, 1);
+      const retry = promised(rigging.ingestion.submitSamples("session-1", "live", [metrics(1, BASE)]));
+      assert.equal((await retry).status, "retry");
+      assert.equal(rigging.published.length, 1);
     } finally {
       await teardown(rigging);
     }

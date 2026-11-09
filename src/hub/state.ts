@@ -232,12 +232,19 @@ export class HubState {
       ? { machineId: row.machineId, collectorId: row.collectorId, runId: row.runId, bootId: row.bootId, hostname: row.hostname, expectedIntervalMs: row.expectedIntervalMs } : null;
   }
 
-  applyMetrics(sessionId: string, record: MetricsRecord, receivedAt: string): void {
+  /**
+   * Applies one LIVE record when it belongs to the current session and is newer
+   * than the last accepted sequence. Returns false for a duplicate or stale
+   * record, so callers do not repeat live-only side effects (Incident
+   * observation) for a retry.
+   */
+  applyMetrics(sessionId: string, record: MetricsRecord, receivedAt: string): boolean {
     const row = this.bySession.get(sessionId);
-    if (!row || row.runId !== record.runId || row.bootId !== record.bootId || row.collectorId !== record.collectorId) return;
-    if (row.lastSequence !== null && record.sequence <= row.lastSequence) return;
+    if (!row || row.runId !== record.runId || row.bootId !== record.bootId || row.collectorId !== record.collectorId) return false;
+    if (row.lastSequence !== null && record.sequence <= row.lastSequence) return false;
     this.setMetrics(row, record, receivedAt);
     this.emit();
+    return true;
   }
 
   /** Restore last-known readings without manufacturing a new receipt or connection. */

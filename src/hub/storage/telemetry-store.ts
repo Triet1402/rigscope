@@ -32,6 +32,13 @@ import { isStorageFullError, DEFAULT_MAX_DATABASE_DISK_BYTES } from "./db";
 export { DEFAULT_MAX_DATABASE_DISK_BYTES } from "./db";
 import { RetentionManager, type RetentionPolicy, type RetentionStatus } from "./retention";
 import { flattenMetrics, SeriesCatalog } from "./series";
+import {
+  queryHistory,
+  type HistoryQuery,
+  type HistoryQueryBudget,
+  type HistoryResult,
+} from "./history-query";
+import type { HistorySource, HistoryStatus } from "./history";
 
 const DAY_MS = 86_400_000;
 const FUTURE_TOLERANCE_MS = DAY_MS;
@@ -84,6 +91,13 @@ export type TelemetryStoreOptions = {
   flushIntervalMs?: number;
   maxRecordsPerTransaction?: number;
   retention?: Partial<RetentionPolicy>;
+  /**
+   * `raw` keeps the historical one-row-per-reading layout used by tests and
+   * operators who explicitly want every sample. `summary` writes one compact
+   * ten-second aggregate row per series and is the opt-in persistent-history
+   * default in the hub composition root.
+   */
+  storageTier?: "raw" | "summary";
   /** Soft retention trigger retained for compatibility. */
   maxDatabaseBytes?: number | null;
   /**
@@ -119,13 +133,26 @@ type LiveUpsert = {
 
 type TxnCounters = { committed: number; duplicates: number; rejected: number };
 
-export class TelemetryStore {
+type SummaryAggregate = {
+  min: number | null;
+  max: number | null;
+  sum: number;
+  count: number;
+  nullCount: number;
+};
+
+/** One compact summary per series and fixed bucket inside a flush. */
+type SummaryBuckets = Map<number, Map<number, SummaryAggregate>>;
+
+export class TelemetryStore implements HistorySource {
+  readonly historyMode = "persistent" as const;
   private readonly database: HubDatabase;
   private readonly now: () => number;
   private readonly maxQueuedRecords: number;
   private readonly flushIntervalMs: number;
   private readonly maxRecordsPerTransaction: number;
   private readonly maxPhysicalBytes: number | null;
+  private readonly storageTier: "raw" | "summary";
   private readonly series: SeriesCatalog;
   private readonly retention: RetentionManager;
 
@@ -145,6 +172,7 @@ export class TelemetryStore {
 
   private readonly receiptInsert: StatementSync;
   private readonly rawInsert: StatementSync;
+  private readonly upsert10s: StatementSync;
   private readonly upsert1m: StatementSync;
   private readonly upsert1h: StatementSync;
   private readonly gapInsert: StatementSync;
@@ -171,6 +199,10 @@ export class TelemetryStore {
       "maxRecordsPerTransaction",
     );
     this.maxPhysicalBytes = resolvePhysicalLimit(options);
+    this.storageTier = options.storageTier ?? "raw";
+    if (this.storageTier !== "raw" && this.storageTier !== "summary") {
+      throw new Error("storageTier must be raw or summary");
+    }
 
     const db = options.database.db;
     this.series = new SeriesCatalog(db);
@@ -182,6 +214,7 @@ export class TelemetryStore {
     this.rawInsert = db.prepare(
       "INSERT OR IGNORE INTO points_raw (series_id, ts_ms, value) VALUES (?, ?, ?)",
     );
+    this.upsert10s = prepareRollupUpsert(db, "points_10s");
     this.upsert1m = prepareRollupUpsert(db, "points_1m");
     this.upsert1h = prepareRollupUpsert(db, "points_1h");
     this.gapInsert = db.prepare(
@@ -415,6 +448,63 @@ export class TelemetryStore {
     };
   }
 
+  queryHistory(query: HistoryQuery, budget: HistoryQueryBudget = {}): HistoryResult {
+    return queryHistory(this.database, query, {
+      ...budget,
+      nowMs: budget.nowMs ?? this.now(),
+      retention: { ...this.retention.policy, ...budget.retention },
+      tiers:
+        budget.tiers ??
+        (this.storageTier === "summary" ? (["10s", "1m", "1h"] as const) : undefined),
+    });
+  }
+
+  historyStatus(): HistoryStatus {
+    const stats = this.stats();
+    const physical = this.database.physicalLimit();
+    const now = this.now();
+    const retention = this.retention.policy;
+    return {
+      mode: "persistent",
+      persistentHistory: true,
+      availableFromMs:
+        this.storageTier === "summary"
+          ? now - Math.max(retention.tenSecondMs, retention.oneMinuteMs, retention.oneHourMs)
+          : now - Math.max(retention.rawMs, retention.oneMinuteMs, retention.oneHourMs),
+      availableToMs: now,
+      memory: null,
+      persistence: {
+        enabled: true,
+        storageTier: this.storageTier,
+        flushIntervalMs: this.flushIntervalMs,
+        queuedRecords: stats.queuedRecords,
+        queuedBatches: stats.queuedBatches,
+        lastFlushMs: stats.lastFlushMs,
+        lastFlushDurationMs: stats.lastFlushDurationMs,
+        writeFailures: stats.writeFailures,
+        lastWriteError: stats.lastWriteError,
+        dbBytes: stats.dbBytes,
+        dbWalBytes: stats.dbWalBytes,
+        dbBytesLimit: physical?.limitBytes ?? this.maxPhysicalBytes,
+        tiers:
+          this.storageTier === "summary"
+            ? [
+                { tier: "10s", stepMs: 10_000, retentionMs: retention.tenSecondMs, bytes: stats.dbBytes },
+                { tier: "1m", stepMs: 60_000, retentionMs: retention.oneMinuteMs, bytes: 0 },
+                { tier: "1h", stepMs: 3_600_000, retentionMs: retention.oneHourMs, bytes: 0 },
+              ]
+            : [
+                { tier: "raw", stepMs: 100, retentionMs: retention.rawMs, bytes: stats.dbBytes },
+                { tier: "1m", stepMs: 60_000, retentionMs: retention.oneMinuteMs, bytes: 0 },
+                { tier: "1h", stepMs: 3_600_000, retentionMs: retention.oneHourMs, bytes: 0 },
+              ],
+      },
+      gaps: 0,
+      acceptedRecords: stats.committedRecords,
+      generatedAt: new Date(now).toISOString(),
+    };
+  }
+
   /** Drains the queue immediately; intended for tests and shutdown. */
   async flushNow(): Promise<void> {
     if (this.closed) return;
@@ -571,11 +661,15 @@ export class TelemetryStore {
     // in order, so a later live batch can supersede an earlier one.
     const cursors = new Map<string, LatestCursor | null>();
     const upserts = new Map<string, LiveUpsert>();
+    const summaries: SummaryBuckets = new Map();
 
     try {
       this.database.db.exec("BEGIN IMMEDIATE");
       for (const pending of selected) {
-        this.processBatch(pending, counters, cursors, upserts);
+        this.processBatch(pending, counters, cursors, upserts, summaries);
+      }
+      if (this.storageTier === "summary" && summaries.size > 0) {
+        this.writeSummaries(summaries);
       }
       // Persist the final latest record per machine in the same transaction.
       for (const [machineId, live] of upserts) {
@@ -648,6 +742,7 @@ export class TelemetryStore {
     counters: TxnCounters,
     cursors: Map<string, LatestCursor | null>,
     upserts: Map<string, LiveUpsert>,
+    summaries: SummaryBuckets,
   ): void {
     const batch = pending.batch;
     let best: MetricsRecord | null = null;
@@ -697,7 +792,11 @@ export class TelemetryStore {
           : undefined;
         for (const point of flattenMetrics(record.payload, known)) {
           const seriesId = this.series.idFor(batch.machineId, point.metric, point.resourceId);
-          this.insertPoint(seriesId, capturedMs, point.value);
+          if (this.storageTier === "summary") {
+            addSummaryPoint(summaries, seriesId, capturedMs, point.value);
+          } else {
+            this.insertPoint(seriesId, capturedMs, point.value);
+          }
         }
         if (batch.mode === "live") {
           if (
@@ -757,6 +856,40 @@ export class TelemetryStore {
   }
 
   /**
+   * Writes one compact ten-second summary per series/bucket and folds the same
+   * aggregate into both larger rollups. The ten-second row is upserted because
+   * late or replayed samples may extend a bucket across flushes; the one-minute
+   * and one-hour rows only receive the new delta, so a sample is counted once.
+   */
+  private writeSummaries(summaries: SummaryBuckets): void {
+    for (const [seriesId, buckets] of summaries) {
+      for (const [bucketMs, aggregate] of buckets) {
+        this.upsert10s.run(
+          seriesId,
+          bucketMs,
+          aggregate.min,
+          aggregate.max,
+          aggregate.sum,
+          aggregate.count,
+          aggregate.nullCount,
+        );
+        this.applyRollupAggregate(
+          this.upsert1m,
+          seriesId,
+          Math.floor(bucketMs / 60_000) * 60_000,
+          aggregate,
+        );
+        this.applyRollupAggregate(
+          this.upsert1h,
+          seriesId,
+          Math.floor(bucketMs / 3_600_000) * 3_600_000,
+          aggregate,
+        );
+      }
+    }
+  }
+
+  /**
    * Writes one raw point and incrementally updates both rollup tiers. The raw
    * INSERT OR IGNORE guard prevents a collision (same series/timestamp) from
    * double-counting a rollup.
@@ -782,6 +915,23 @@ export class TelemetryStore {
     }
   }
 
+  private applyRollupAggregate(
+    statement: StatementSync,
+    seriesId: number,
+    bucketMs: number,
+    aggregate: SummaryAggregate,
+  ): void {
+    statement.run(
+      seriesId,
+      bucketMs,
+      aggregate.min,
+      aggregate.max,
+      aggregate.sum,
+      aggregate.count,
+      aggregate.nullCount,
+    );
+  }
+
   private resolveCommitted(pending: PendingBatch): void {
     if (pending.settled) return;
     pending.settled = true;
@@ -801,7 +951,10 @@ export class TelemetryStore {
   }
 }
 
-function prepareRollupUpsert(db: { prepare(sql: string): StatementSync }, table: "points_1m" | "points_1h"): StatementSync {
+function prepareRollupUpsert(
+  db: { prepare(sql: string): StatementSync },
+  table: "points_10s" | "points_1m" | "points_1h",
+): StatementSync {
   return db.prepare(
     `INSERT INTO ${table} (series_id, bucket_ms, min, max, sum, count, null_count) ` +
       "VALUES (?, ?, ?, ?, ?, ?, ?) " +
@@ -933,6 +1086,35 @@ function nonnegativeInt(value: number | undefined, fallback: number, name: strin
     throw new Error(`${name} must be a nonnegative safe integer`);
   }
   return resolved;
+}
+
+const SUMMARY_STEP_MS = 10_000;
+
+function addSummaryPoint(
+  summaries: SummaryBuckets,
+  seriesId: number,
+  tsMs: number,
+  value: number | null,
+): void {
+  const bucketMs = Math.floor(tsMs / SUMMARY_STEP_MS) * SUMMARY_STEP_MS;
+  let buckets = summaries.get(seriesId);
+  if (buckets === undefined) {
+    buckets = new Map();
+    summaries.set(seriesId, buckets);
+  }
+  let aggregate = buckets.get(bucketMs);
+  if (aggregate === undefined) {
+    aggregate = { min: null, max: null, sum: 0, count: 0, nullCount: 0 };
+    buckets.set(bucketMs, aggregate);
+  }
+  if (value === null) {
+    aggregate.nullCount += 1;
+  } else {
+    aggregate.min = aggregate.min === null ? value : Math.min(aggregate.min, value);
+    aggregate.max = aggregate.max === null ? value : Math.max(aggregate.max, value);
+    aggregate.sum += value;
+    aggregate.count += 1;
+  }
 }
 
 function yieldToEventLoop(): Promise<void> {

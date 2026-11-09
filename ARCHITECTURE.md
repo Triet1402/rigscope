@@ -56,7 +56,7 @@ src/
     enrollment/            # credentials and hub-local machine mapping
     telemetry/             # validation, persistence, latest state, freshness
     subscriptions/         # browser interests -> expiring detail requests
-    history/               # SQLite batches, queries, retention, rollups
+    history/               # RAM rings or SQLite summary batches, queries, retention
     alerts/                # incident lifecycle and notifications
     transport/             # WebSocket, SSE, and HTTP handlers
   app/                     # fleet and machine-scoped UI
@@ -123,10 +123,13 @@ The implemented coordination boundaries are:
   selection with view-specific fallbacks, and coordinates navigation and persistence.
   Views consume the selection; explicit missing Machines retain their access outcome.
 - `src/hub/sample-ingestion.ts` authenticates Sample identity against the current
-  Collector session, commits through `TelemetryStore`, then publishes eligible live
-  Samples and Incident observations only while that session remains current. It also
-  restores persisted metrics, cadence, inventory and metadata at startup without
-  marking a Collector connected. Transport formats acknowledgments from its outcomes.
+  Collector session, publishes eligible live Samples and Incident observations
+  immediately, and submits the same records to the configured history store.
+  Live publication is independent of the acknowledgement latency; the store
+  answers `committed` only after its own durability contract (RAM acceptance or
+  a persistent COMMIT). It restores persisted metrics, cadence, inventory and
+  metadata at startup when the mode has them, without marking a Collector
+  connected. Transport formats acknowledgments from its outcomes.
 - `collector/destinations/connection.ts` owns each Hub connection's sharing policy,
   cadence, recovered queue sanitation, inventory and durable append-before-send path.
   Collector runtime fans shared Samples out to these connections. Sampling, GPU
@@ -233,10 +236,23 @@ extra work promptly. Requests must fit local policy and reported capabilities.
 
 ## Storage and scale
 
-Each hub owns a SQLite database, one bounded write queue, batched writes, retention, and
-rollups that preserve min/max. Never scan the OS or write telemetry once per browser.
-Bound query/transaction work. Measure event loop delay during ingestion, history queries,
-retention and rendering; move synchronous database work to a worker thread if needed.
+Each hub owns a SQLite database for control state and optional history, one bounded write
+queue, retention, and summaries that preserve min/max. Telemetry history has two explicit
+backends behind one bounded query interface:
+
+- **Memory (default).** Fixed-size typed-array rings per series and tier, a global RAM
+  budget, and cardinality eviction/rejection. Nothing on the telemetry path commits per
+  sample; lost history on restart is intentional.
+- **Persistent (opt-in).** One transaction per roughly five seconds writes a compact
+  ten-second summary per series plus folded one-minute/hourly rollups. Live publication is
+  decoupled; acknowledgements still follow COMMIT. Receipt lifetime is independent of
+  chart retention.
+
+Never scan the OS or write telemetry once per browser. Bound query/transaction work and
+account for temporary query/flush allocations. Recordings are explicit, bounded private
+files, not another per-sample index. Measure event loop delay during ingestion, history
+queries, retention and rendering; move synchronous database work to a worker thread if
+needed.
 
 One hub application instance owns connection registry, leases, latest state, and bounded
 browser replay. Many connections do not require multiple backend replicas. Replicas later

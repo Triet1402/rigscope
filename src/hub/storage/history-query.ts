@@ -30,7 +30,7 @@ const MAX_GAPS = 500;
  * the row budget, not this value, decides whether raw is affordable. For larger
  * ranges `maxPoints` raises the bucket size well above this.
  */
-const TIER_RESOLUTION_MS = { raw: 100, "1m": 60_000, "1h": 3_600_000 } as const;
+const TIER_RESOLUTION_MS = { raw: 100, "10s": 10_000, "1m": 60_000, "1h": 3_600_000 } as const;
 
 export type HistoryQuery = {
   machineId: string;
@@ -58,16 +58,34 @@ export type HistoryGap = {
   droppedRecords?: number;
 };
 
+/** A finer in-RAM tier may exist; disk tiers are raw/10s/1m/1h. */
+export type HistoryTier = "1s" | "raw" | "10s" | "1m" | "1h";
+
 export type HistoryResult = {
   machineId: string;
   fromMs: number;
   toMs: number;
   stepMs: number;
-  tier: "raw" | "1m" | "1h";
+  tier: HistoryTier;
   series: HistorySeries[];
   gaps: HistoryGap[];
   truncated: boolean;
   elapsedMs: number;
+};
+
+export type HistoryQueryBudget = {
+  maxSeries?: number;
+  maxRowsScanned?: number;
+  maxElapsedMs?: number;
+  /** Pass the hub's retention policy if it differs from the defaults. */
+  retention?: Partial<RetentionPolicy>;
+  /**
+   * Storage tiers this backend can answer from. The disk summary backend
+   * omits `raw`; the default keeps the historical raw/1m/1h ladder.
+   */
+  tiers?: readonly HistoryTier[];
+  /** Deterministic clock for tests and composition; defaults to Date.now(). */
+  nowMs?: number;
 };
 
 export class HistoryQueryError extends Error {
@@ -78,7 +96,9 @@ export class HistoryQueryError extends Error {
   }
 }
 
-type Tier = HistoryResult["tier"];
+type Tier = "raw" | "10s" | "1m" | "1h";
+
+const DEFAULT_TIERS: readonly Tier[] = ["raw", "10s", "1m", "1h"];
 
 type SeriesRow = { series_id: number | bigint; metric: string; resource_id: string };
 
@@ -94,13 +114,7 @@ type AggregateRow = {
 export function queryHistory(
   db: HubDatabase,
   q: HistoryQuery,
-  budget: {
-    maxSeries?: number;
-    maxRowsScanned?: number;
-    maxElapsedMs?: number;
-    /** Pass the hub's retention policy if it differs from the defaults. */
-    retention?: Partial<RetentionPolicy>;
-  } = {},
+  budget: HistoryQueryBudget = {},
 ): HistoryResult {
   const started = performance.now();
   const maxPoints = validatedMaxPoints(q.maxPoints);
@@ -111,7 +125,7 @@ export function queryHistory(
   validatedQuery(q);
 
   const rangeMs = q.toMs - q.fromMs;
-  const nowMs = Date.now();
+  const nowMs = budget.nowMs ?? Date.now();
 
   let allSeries = loadSeries(db, q);
   let truncated = false;
@@ -131,6 +145,7 @@ export function queryHistory(
     q.toMs,
     nowMs,
     retention,
+    budget.tiers,
     maxRowsScanned,
     maxElapsedMs,
     started,
@@ -216,6 +231,7 @@ type TierCandidate = {
 
 const TIER_CANDIDATES: readonly TierCandidate[] = [
   { tier: "raw", resolutionMs: TIER_RESOLUTION_MS.raw, retentionMs: 0 },
+  { tier: "10s", resolutionMs: TIER_RESOLUTION_MS["10s"], retentionMs: 0 },
   { tier: "1m", resolutionMs: TIER_RESOLUTION_MS["1m"], retentionMs: 0 },
   { tier: "1h", resolutionMs: TIER_RESOLUTION_MS["1h"], retentionMs: 0 },
 ];
@@ -227,6 +243,7 @@ function chooseTier(
   toMs: number,
   nowMs: number,
   retention: RetentionPolicy,
+  tiers: readonly HistoryTier[] | undefined,
   maxRowsScanned: number,
   maxElapsedMs: number,
   started: number,
@@ -237,15 +254,25 @@ function chooseTier(
   timeExceeded: boolean;
   overBudget: boolean;
 } {
-  const candidates: readonly TierCandidate[] = TIER_CANDIDATES.map((candidate) => ({
+  const allowed = new Set<Tier>(
+    (tiers ?? DEFAULT_TIERS).filter((tier): tier is Tier => tier !== "1s"),
+  );
+  const candidates: readonly TierCandidate[] = TIER_CANDIDATES.filter((candidate) =>
+    allowed.has(candidate.tier),
+  ).map((candidate) => ({
     ...candidate,
     retentionMs:
       candidate.tier === "raw"
         ? retention.rawMs
-        : candidate.tier === "1m"
-          ? retention.oneMinuteMs
-          : retention.oneHourMs,
+        : candidate.tier === "10s"
+          ? retention.tenSecondMs
+          : candidate.tier === "1m"
+            ? retention.oneMinuteMs
+            : retention.oneHourMs,
   }));
+  if (candidates.length === 0) {
+    throw new HistoryQueryError("no history storage tiers are available");
+  }
   const available = candidates.filter((candidate) => fromMs >= nowMs - candidate.retentionMs);
   // The oldest tier is always a usable fallback even if a custom retention
   // policy is shorter than the requested range.
@@ -266,6 +293,11 @@ function chooseTier(
       maxRowsScanned,
     );
     if (rows <= maxRowsScanned) {
+      // An empty finer tier (for example a freshly upgraded database with no
+      // ten-second summaries yet, or a per-core series that only keeps coarser
+      // history) falls through to the next tier instead of hiding older data
+      // that is already available.
+      if (rows === 0 && candidate !== pool[pool.length - 1]) continue;
       return {
         tier: candidate.tier,
         resolutionMs: candidate.resolutionMs,
@@ -334,7 +366,7 @@ function countRowsBounded(
 ): number {
   if (seriesIds.length === 0) return 0;
   const column = tier === "raw" ? "ts_ms" : "bucket_ms";
-  const table = tier === "raw" ? "points_raw" : `points_${tier}`;
+  const table = tableForTier(tier);
   const statement = db.db.prepare(
     `SELECT COUNT(*) AS n FROM (` +
       `SELECT 1 FROM ${table} WHERE series_id = ? AND ${column} >= ? AND ${column} <= ? LIMIT ?` +
@@ -375,7 +407,7 @@ function readSeries(
           `SELECT ? + CAST((bucket_ms - ?) / ? AS INTEGER) * ? AS bucket, ` +
             "MIN(min) AS min_value, MAX(max) AS max_value, " +
             "SUM(sum) AS sum_value, SUM(count) AS count_value, COUNT(*) AS row_count " +
-            `FROM (SELECT bucket_ms, min, max, sum, count FROM points_${tier} ` +
+            `FROM (SELECT bucket_ms, min, max, sum, count FROM ${tableForTier(tier)} ` +
             "WHERE series_id = ? AND bucket_ms >= ? AND bucket_ms <= ? ORDER BY bucket_ms LIMIT ?) " +
             "GROUP BY bucket ORDER BY bucket",
         );
@@ -408,8 +440,12 @@ function readSeries(
  */
 function fromBucketMs(tier: Tier, fromMs: number): number {
   if (tier === "raw") return fromMs;
-  const span = tier === "1m" ? 60_000 : 3_600_000;
+  const span = tier === "10s" ? 10_000 : tier === "1m" ? 60_000 : 3_600_000;
   return Math.floor(fromMs / span) * span;
+}
+
+function tableForTier(tier: Tier): "points_raw" | "points_10s" | "points_1m" | "points_1h" {
+  return tier === "raw" ? "points_raw" : `points_${tier}`;
 }
 
 function readGaps(db: HubDatabase, machineId: string, fromMs: number, toMs: number): HistoryGap[] {
@@ -473,7 +509,7 @@ function readGaps(db: HubDatabase, machineId: string, fromMs: number, toMs: numb
   return gaps.slice(0, MAX_GAPS);
 }
 
-function validatedQuery(q: HistoryQuery): void {
+export function validatedQuery(q: HistoryQuery): void {
   if (q === null || typeof q !== "object") throw new HistoryQueryError("query must be an object");
   if (typeof q.machineId !== "string" || q.machineId.length === 0 || q.machineId.length > 256) {
     throw new HistoryQueryError("machineId must be a nonempty string");
@@ -516,7 +552,7 @@ function validatedQuery(q: HistoryQuery): void {
   }
 }
 
-function validatedMaxPoints(value: number | undefined): number {
+export function validatedMaxPoints(value: number | undefined): number {
   if (value === undefined) return DEFAULT_MAX_POINTS;
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new HistoryQueryError("maxPoints must be a positive safe integer");
@@ -524,7 +560,7 @@ function validatedMaxPoints(value: number | undefined): number {
   return Math.min(value, MAX_POINTS);
 }
 
-function validatedBudget(value: number | undefined, fallback: number, name: string): number {
+export function validatedBudget(value: number | undefined, fallback: number, name: string): number {
   if (value === undefined) return fallback;
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new HistoryQueryError(`${name} must be a positive safe integer`);

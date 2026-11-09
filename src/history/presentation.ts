@@ -210,7 +210,10 @@ export function parseHistoryResult(value: unknown): HistoryResult | null {
   if (typeof value.machineId !== "string" || value.machineId.length === 0) return null;
   if (!finite(value.fromMs) || !finite(value.toMs) || value.toMs <= value.fromMs) return null;
   if (!finite(value.stepMs) || value.stepMs <= 0) return null;
-  if (value.tier !== "raw" && value.tier !== "1m" && value.tier !== "1h") return null;
+  if (
+    value.tier !== "1s" && value.tier !== "raw" && value.tier !== "10s" &&
+    value.tier !== "1m" && value.tier !== "1h"
+  ) return null;
   if (typeof value.truncated !== "boolean" || !finite(value.elapsedMs)) return null;
   if (!Array.isArray(value.series) || !Array.isArray(value.gaps)) return null;
 

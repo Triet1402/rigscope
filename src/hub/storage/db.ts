@@ -173,7 +173,11 @@ class SqliteHubDatabase implements HubDatabase {
     const walBudgetBytes = Math.max(64 * 1024, Math.min(HUB_WAL_RESERVE_BYTES, Math.floor(limitBytes / 16)));
     const mainBudgetBytes = Math.max(pageSize, limitBytes - walBudgetBytes);
     const requestedPages = Math.max(1, Math.floor(mainBudgetBytes / pageSize));
-    const checkpointPages = Math.max(16, Math.min(1000, Math.floor(walBudgetBytes / pageSize)));
+    // Persistent summary mode flushes one larger transaction every ten
+    // seconds. Checkpoint only after a meaningful WAL reserve has filled
+    // (32–64 MiB where the configured budget permits) instead of forcing a
+    // ~4 MiB checkpoint cycle. Small budgets keep a proportional reserve.
+    const checkpointPages = Math.max(16, Math.min(16_384, Math.floor(walBudgetBytes / pageSize)));
 
     this.db.exec(`PRAGMA journal_size_limit = ${walBudgetBytes}`);
     this.db.exec(`PRAGMA wal_autocheckpoint = ${checkpointPages}`);

@@ -14,8 +14,8 @@
  * primary-key range seek instead.
  *
  * Under soft `maxDatabaseBytes` or hard `maxPhysicalBytes` pressure we delete
- * the oldest raw points first, but never the most recent hour, then the oldest
- * one-minute rollups (also keeping the most recent hour). One-hour rollups are
+ * the oldest raw or ten-second points first, but never the most recent hour, then
+ * the oldest one-minute rollups (also keeping the most recent hour). One-hour rollups are
  * the long-term history and are only removed by normal age retention. If the
  * last hour alone exceeds the hard cap, ingestion rejects busy; it never deletes
  * recent history to pretend the budget fits.
@@ -27,9 +27,18 @@ const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
 
 export type RetentionPolicy = {
+  /** Raw one-second (or collector-cadence) samples; persistent raw mode only. */
   rawMs: number;
+  /** Compact ten-second summaries written by persistent summary mode. */
+  tenSecondMs: number;
   oneMinuteMs: number;
   oneHourMs: number;
+  /**
+   * Deduplication receipts. This is deliberately independent of every chart
+   * retention window: shortening history must never let a replayed collector
+   * sample count twice. It is also much longer than the collector outbox's
+   * ten-minute age cap.
+   */
   receiptsMs: number;
   gapsMs: number;
 };
@@ -37,28 +46,30 @@ export type RetentionPolicy = {
 /** Defaults are deliberately conservative; callers may override per hub. */
 export const DEFAULT_RETENTION_POLICY: RetentionPolicy = {
   rawMs: 2 * DAY_MS,
+  tenSecondMs: 2 * HOUR_MS,
   oneMinuteMs: 30 * DAY_MS,
   oneHourMs: 400 * DAY_MS,
-  receiptsMs: 2 * DAY_MS,
+  receiptsMs: 7 * DAY_MS,
   gapsMs: 400 * DAY_MS,
 };
 
 /**
- * Merges a partial policy. `receiptsMs` and `gapsMs` default to the *resolved*
- * raw/hour values, so `{ rawMs }` also shortens receipts unless explicitly set.
+ * Merges a partial policy. Retention windows are independent: shortening
+ * `rawMs` no longer shortens `receiptsMs`, because deduplication must outlive
+ * the chart data a replayed sample could otherwise recreate.
  */
 export function resolveRetentionPolicy(partial?: Partial<RetentionPolicy>): RetentionPolicy {
   const rawMs = checkedMs(partial?.rawMs, DEFAULT_RETENTION_POLICY.rawMs, "rawMs");
+  const tenSecondMs = checkedMs(partial?.tenSecondMs, DEFAULT_RETENTION_POLICY.tenSecondMs, "tenSecondMs");
   const oneMinuteMs = checkedMs(partial?.oneMinuteMs, DEFAULT_RETENTION_POLICY.oneMinuteMs, "oneMinuteMs");
   const oneHourMs = checkedMs(partial?.oneHourMs, DEFAULT_RETENTION_POLICY.oneHourMs, "oneHourMs");
-  const receiptsDefault = partial?.rawMs !== undefined ? rawMs : DEFAULT_RETENTION_POLICY.receiptsMs;
-  const gapsDefault = partial?.oneHourMs !== undefined ? oneHourMs : DEFAULT_RETENTION_POLICY.gapsMs;
   return {
     rawMs,
+    tenSecondMs,
     oneMinuteMs,
     oneHourMs,
-    receiptsMs: checkedMs(partial?.receiptsMs, receiptsDefault, "receiptsMs"),
-    gapsMs: checkedMs(partial?.gapsMs, gapsDefault, "gapsMs"),
+    receiptsMs: checkedMs(partial?.receiptsMs, DEFAULT_RETENTION_POLICY.receiptsMs, "receiptsMs"),
+    gapsMs: checkedMs(partial?.gapsMs, DEFAULT_RETENTION_POLICY.gapsMs, "gapsMs"),
   };
 }
 
@@ -114,6 +125,9 @@ export const RETENTION_DELETE_SQL = {
   raw:
     "DELETE FROM points_raw WHERE (series_id, ts_ms) IN " +
     "(SELECT series_id, ts_ms FROM points_raw WHERE series_id = ? AND ts_ms < ? LIMIT ?)",
+  tenSecond:
+    "DELETE FROM points_10s WHERE (series_id, bucket_ms) IN " +
+    "(SELECT series_id, bucket_ms FROM points_10s WHERE series_id = ? AND bucket_ms < ? LIMIT ?)",
   oneMinute:
     "DELETE FROM points_1m WHERE (series_id, bucket_ms) IN " +
     "(SELECT series_id, bucket_ms FROM points_1m WHERE series_id = ? AND bucket_ms < ? LIMIT ?)",
@@ -147,6 +161,7 @@ export class RetentionManager {
   };
 
   private readonly deleteRaw;
+  private readonly delete10s;
   private readonly delete1m;
   private readonly delete1h;
   private readonly deleteReceipts;
@@ -180,6 +195,7 @@ export class RetentionManager {
     // so they read the clustered primary key. Receipts and gaps use their
     // captured_at/to_ms indexes, so one global bounded statement is enough.
     this.deleteRaw = database.db.prepare(RETENTION_DELETE_SQL.raw);
+    this.delete10s = database.db.prepare(RETENTION_DELETE_SQL.tenSecond);
     this.delete1m = database.db.prepare(RETENTION_DELETE_SQL.oneMinute);
     this.delete1h = database.db.prepare(RETENTION_DELETE_SQL.oneHour);
     this.deleteReceipts = database.db.prepare(
@@ -225,7 +241,7 @@ export class RetentionManager {
 
   /**
    * Synchronous, bounded pressure relief for the write path. Deletes only
-   * oldest raw/one-minute rows outside the most-recent-hour floor, then asks
+   * oldest raw/ten-second/one-minute rows outside the most-recent-hour floor, then asks
    * SQLite for bounded incremental reclaim. It never deletes one-hour rollups
    * to pretend a hard cap fits.
    */
@@ -259,6 +275,9 @@ export class RetentionManager {
 
     let deleted = this.deleteTierChunk(this.deleteRaw, seriesIds, rawCutoff);
     if (deleted === 0) {
+      deleted = this.deleteTierChunk(this.delete10s, seriesIds, nowMs - this.policy.tenSecondMs);
+    }
+    if (deleted === 0) {
       deleted = this.deleteTierChunk(this.delete1m, seriesIds, nowMs - this.policy.oneMinuteMs);
     }
     if (deleted === 0) {
@@ -276,6 +295,7 @@ export class RetentionManager {
       const floorCutoff = nowMs - HOUR_MS;
       effectiveRawCutoff = Math.max(rawCutoff, floorCutoff);
       deleted = this.deleteTierChunk(this.deleteRaw, seriesIds, effectiveRawCutoff);
+      if (deleted === 0) deleted = this.deleteTierChunk(this.delete10s, seriesIds, floorCutoff);
       if (deleted === 0) deleted = this.deleteTierChunk(this.delete1m, seriesIds, floorCutoff);
       if (deleted > 0) {
         this.db.reclaimPages(64);

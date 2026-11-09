@@ -85,11 +85,14 @@ describe("retention", () => {
     }
   });
 
-  it("merges a partial policy, including receipts/gaps defaults", () => {
+  it("merges a partial policy without coupling receipts to chart retention", () => {
     const merged = resolveRetentionPolicy({ rawMs: 1000 });
     assert.equal(merged.rawMs, 1000);
-    assert.equal(merged.receiptsMs, 1000);
+    // Dedup must outlive every chart tier so a replayed collector record can
+    // never re-create history that expired.
+    assert.equal(merged.receiptsMs, DEFAULT_RETENTION_POLICY.receiptsMs);
     assert.equal(merged.gapsMs, DEFAULT_RETENTION_POLICY.gapsMs);
+    assert.equal(resolveRetentionPolicy({ receiptsMs: 5_000 }).receiptsMs, 5_000);
     assert.throws(() => resolveRetentionPolicy({ rawMs: -1 }), /nonnegative/);
   });
 

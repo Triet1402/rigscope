@@ -17,13 +17,45 @@ configuration files at `0600`; do not commit them.
 | --- | --- |
 | `HUB_HOST`, `HUB_PORT` | Local listener: `127.0.0.1:8081`. Only literal loopback addresses are accepted. Port `0` selects an unused port for tests. |
 | `HUB_PUBLIC_ORIGIN`, `HUB_SOCKET_PATH` | Remote access: set both the exact HTTPS origin and an absolute Unix socket path in a private directory. The hub then has no TCP listener. |
-| `HUB_DATABASE_PATH` | SQLite database for telemetry, users, alerts and the collector registry. Defaults beside `HUB_STATE_FILE`, or under `$XDG_STATE_HOME/rigscope/hub/` (falling back to `~/.local/state`). |
+| `HUB_DATABASE_PATH` | SQLite database for control state (users, alerts and the collector registry) and, only when enabled, telemetry history. Defaults beside `HUB_STATE_FILE`, or under `$XDG_STATE_HOME/rigscope/hub/` (falling back to `~/.local/state`). |
+| `HUB_TELEMETRY_MODE` | `memory` (default) keeps bounded history in RAM and writes no routine telemetry rows. `persistent` opts into compact SQLite summaries. See [telemetry storage](telemetry-storage.md). |
+| `HUB_HISTORY_MEMORY_BYTES` | Global RAM budget for memory history. Default `134217728` (128 MiB). |
+| `HUB_TELEMETRY_FLUSH_MS` | Persistent-mode write interval. Default and maximum `5000` ms (5 seconds); allowed 1000–5000. The bound keeps one commit inside the 64-batch collector window at the fastest supported 100 ms cadence and well below the collector's 30 s ack timeout. |
+| `HUB_RETENTION_RAW_MS` | Persistent raw-mode retention. Default 2 days. Persistent summary mode does not write raw rows. |
+| `HUB_RETENTION_10S_MS` | Ten-second summary retention in persistent mode. Default 2 hours. |
+| `HUB_RETENTION_1M_MS` | One-minute rollup retention. Default 30 days. |
+| `HUB_RETENTION_1H_MS` | One-hour rollup retention. Default 400 days. |
+| `HUB_RECEIPT_RETENTION_MS` | Deduplication receipt lifetime, independent of chart retention. Default 7 days. |
+| `HUB_GAP_RETENTION_MS` | Explicit collector gap retention. Default 400 days. |
+| `HUB_RECORDINGS_DIR` | Private directory for explicit recordings. Default `recordings/` beside the hub database (0700 directory, 0600 files). |
+| `HUB_RECORDING_MAX_DURATION_MS` | Maximum recording duration. Default 1 hour; maximum 24 hours. |
+| `HUB_RECORDING_MAX_BYTES` | Maximum recording file size. Default 64 MiB; maximum 1 GiB. |
+| `HUB_RECORDING_BACKLOG_MS` | Recent RAM history a new recording may include. Default 10 minutes. |
+| `HUB_RECORDING_MAX_ACTIVE` | Concurrent active recordings. Default 4; maximum 32. |
 | `HUB_BROWSER_USERS` | First-run users as JSON: `{username,passwordHash,machineIds,admin?}`. `machineIds` is `"*"` or a list; `[]` allows no machines. |
 | `HUB_ADMIN_USERS` | Comma-separated usernames to make administrators during first import. If omitted, an existing bootstrap account named `owner` becomes an administrator. Other users need an explicit `admin:true`. |
 | `HUB_COLLECTORS` | First-run collector credentials as JSON: `{collectorId,machineId,token}`. The limit applies to JSON bytes, not a fixed machine count. |
 | `HUB_MAX_COLLECTOR_CONNECTIONS` | Maximum concurrent collector connections. Positive integer; defaults to `100`. Choose a value based on measured capacity. |
 | `HUB_STATE_FILE` | Private enrollment file to import from an existing installation; also enables enrollment. Keep it with the deployment configuration for recovery. |
 | `HUB_ENROLLMENT_GRANTS` | Initial grants as JSON: `{token,expiresAt}`. Expiry must be within 15 minutes. Used grants stay consumed after import and restart. |
+
+### Telemetry history mode
+
+The default `HUB_TELEMETRY_MODE=memory` keeps recent charts in a bounded RAM
+budget and deliberately loses telemetry history when the hub restarts. Users,
+credentials, enrollment, settings and alert records remain in SQLite.
+
+Set `HUB_TELEMETRY_MODE=persistent` to keep compact ten-second summaries, with
+one transaction roughly every `HUB_TELEMETRY_FLUSH_MS` (five seconds by
+default). Collectors still acknowledge only after that transaction commits, so
+the flush interval cannot exceed the collector's 64-batch in-flight window at
+its advertised cadence; the hub rejects values above five seconds. See
+[telemetry storage](telemetry-storage.md) for aggregation, deduplication,
+recording and reset details.
+
+Switching an existing installation to memory mode does not automatically delete
+old telemetry rows. They are ignored, but can be reclaimed explicitly with
+`ops reset-telemetry` after stopping the hub (see [operations](operations.md)).
 
 ### First-run users and credentials
 

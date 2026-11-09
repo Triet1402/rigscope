@@ -20,22 +20,58 @@ driver and readable counters; see [Hardware](installation.md#hardware) and
 
 ## History and delivery
 
-The hub acknowledges samples after committing them to SQLite. A collector keeps
-unacknowledged samples in a persistent queue for each hub and retries after a
-disconnect. The hub removes duplicates using the collector, run and sequence IDs.
-Replayed samples fill History without replacing current live readings or opening
-alerts for past threshold crossings.
+History is **RAM-only by default**. Live readings update immediately, recent
+charts come from a bounded memory budget, and telemetry history disappears when
+the hub restarts. Users, credentials, enrollment, settings, alert records,
+machine names/tags and inventory remain persistent.
 
-Default retention:
+In memory mode the collector's acknowledgement means the hub accepted the sample
+into RAM. The collector keeps the same durable outbox and retries after a
+disconnect; it does not gain extra disk work from the hub's choice. Deduplication
+uses a compact per-run interval set for the hub process lifetime. Because both
+history and receipts disappear together on restart, a replay cannot double-count
+restored chart data.
+
+Set `HUB_TELEMETRY_MODE=persistent` to opt into disk history. The hub buffers a
+five-second window, publishes live state immediately, writes one compact
+transaction, and only then acknowledges. Replay deduplication uses durable
+receipts whose lifetime is independent of chart retention (default seven days).
+Replayed samples fill History without replacing current live readings or opening
+alerts for past threshold crossings. A graceful shutdown flushes pending
+summaries; after a crash the collector replays anything that was never committed.
+
+Default memory history:
 
 | Resolution | Kept for |
 | --- | --- |
-| Raw samples | 48 hours |
-| One-minute summaries | 30 days |
-| One-hour summaries | 400 days |
+| 1-second detail | 2 minutes |
+| 10-second summaries | 1 hour |
+| One-minute summaries | 24 hours |
+| One-hour summaries | 7 days |
 
-Summaries retain minimum and maximum values. History queries limit the number
-of points, series, scanned rows and time spent. The UI marks partial results.
+Per-core CPU keeps less detail; machine-wide and capacity metrics keep more.
+Persistent mode writes compact ten-second summaries and folds them into
+one-minute and one-hour tiers; it does not write a raw row per reading. It keeps
+10-second summaries for 2 hours, one-minute summaries for 30 days and hourly
+summaries for 400 days by default. Both modes retain minimum and maximum values,
+so short spikes remain visible, and both preserve explicit unavailable readings
+and gaps.
+
+RAM history is bounded by `HUB_HISTORY_MEMORY_BYTES` (default 128 MiB) across all
+machines. When the budget fills, the oldest fine-grained tiers are dropped first
+and new cardinality beyond the sustainable budget is rejected with visible
+pressure. History queries limit points, series, scanned rows and elapsed time;
+the UI marks partial results.
+
+### Recording
+
+Use **History → Recording** to start an explicit capture for the current
+machine and selected metrics. Choose a resolution from 1 second to 1 hour,
+a duration and whether to include recent RAM history. The capture is bounded by
+duration and bytes, survives restart through its private persisted output, and
+can be downloaded by its creator. Recording also works when chart history is
+temporary, which is the intended way to keep an incident snapshot. See
+[telemetry storage](telemetry-storage.md#recording).
 
 Hover over a History or Overview recent-usage chart to inspect a recorded time
 and its bucket averages. The time marker follows across charts in the same view;
@@ -49,11 +85,12 @@ Each collector queue keeps up to ten minutes or 64 MiB of queued JSON per hub,
 with a 256 MiB total JSON limit. Physical SQLite files, including WAL files,
 have separate limits of 80 MiB per hub and 640 MiB across eight hubs.
 
-The hub's default database limit is 2 GiB, including its WAL file and all tables.
-Retention protects the newest hour of telemetry. If old-data cleanup cannot
-free enough space, the hub stops acknowledging new samples and collectors retry.
-Existing oversized databases report pressure; startup does not run a destructive
-cleanup.
+In persistent mode the hub's default database limit is 2 GiB, including WAL and
+all control tables. Retention protects the newest hour; if old-data cleanup
+cannot free enough space, the hub stops acknowledging new samples and collectors
+retry. Existing oversized databases report pressure; startup does not run a
+destructive cleanup. In memory mode old historical rows may still occupy the
+file until you run `ops reset-telemetry`; they are not read or updated.
 
 These are application limits, not filesystem quotas. A transaction can briefly
 grow the WAL before checkpointing. Blocked checkpoints stop further ingestion
@@ -92,7 +129,10 @@ credentials persist in SQLite. Browser sessions stay in memory, expire after
 Alerts support above/below thresholds, durations, unavailable readings, missing
 receipts, maintenance and recovery. Value, unavailable and stale-receipt rules
 apply to the machines tracked by that hub. Replayed samples do not open past
-incidents.
+incidents. Alert rules, incidents and pending notifications stay durable in both
+history modes; with no rules configured, live ingestion does not write per-sample
+alert progress. Enabling rules may write alert state on evaluation, which is
+operational state rather than telemetry history.
 
 In **Alerts**, configure one HTTPS webhook channel. Its URL, headers and HMAC
 secret are write-only. Loopback HTTP is allowed for controlled test sinks.

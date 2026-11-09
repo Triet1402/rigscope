@@ -17,7 +17,7 @@ describe("hub database", () => {
     const dbPath = join(dir, "nested", "hub.db");
     try {
       const db = openHubDatabase(dbPath);
-      assert.equal(db.schemaVersion(), 5);
+      assert.equal(db.schemaVersion(), 6);
       assert.equal(statSync(dbPath).mode & 0o777, 0o600);
       assert.equal(statSync(join(dir, "nested")).mode & 0o777, 0o700);
       const migrations = db.db.prepare("SELECT version, name FROM schema_migrations ORDER BY version").all();
@@ -29,16 +29,17 @@ describe("hub database", () => {
           { version: 3, name: "admin" },
           { version: 4, name: "alerts" },
           { version: 5, name: "collector_registry" },
+          { version: 6, name: "telemetry_modes_and_recordings" },
         ],
       );
       db.close();
 
       // Reopening must not rerun either migration nor change the recorded rows.
       const reopened = openHubDatabase(dbPath);
-      assert.equal(reopened.schemaVersion(), 5);
+      assert.equal(reopened.schemaVersion(), 6);
       assert.equal(
         (reopened.db.prepare("SELECT COUNT(*) AS n FROM schema_migrations").get() as { n: number }).n,
-        5,
+        6,
       );
       reopened.close();
     } finally {
@@ -68,7 +69,7 @@ describe("hub database", () => {
 
       const upgraded = openHubDatabase(dbPath);
       try {
-        assert.equal(upgraded.schemaVersion(), 5);
+        assert.equal(upgraded.schemaVersion(), 6);
         const columns = new Set(
           (upgraded.db.prepare("PRAGMA table_info(machine_latest)").all() as Array<{ name: string }>).map(
             (column) => column.name,
@@ -197,7 +198,7 @@ describe("hub database", () => {
 
   it("accepts :memory: for tests", () => {
     const db = openHubDatabase(":memory:");
-    assert.equal(db.schemaVersion(), 5);
+    assert.equal(db.schemaVersion(), 6);
     assert.ok(db.sizeBytes() > 0);
     db.close();
   });

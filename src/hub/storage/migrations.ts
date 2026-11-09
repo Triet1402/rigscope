@@ -187,4 +187,53 @@ export const MIGRATIONS: Migration[] = [
   { version: 3, name: 'admin', up: adminSchema },
   { version: 4, name: 'alerts', up: installAlertSchema },
   { version: 5, name: 'collector_registry', up: installRegistrySchema },
+  { version: 6, name: 'telemetry_modes_and_recordings', up: telemetryModesAndRecordings },
 ];
+
+/**
+ * Summary-mode telemetry and explicit recordings.
+ *
+ * `points_10s` is a compact immutable summary tier used instead of one raw row
+ * per collector sample when persistent history is enabled. It keeps the same
+ * min/max/sum/count/null_count contract as the existing rollups, so spikes and
+ * unavailable readings survive.
+ *
+ * Recording metadata is control state (survives restart); the captured data
+ * itself is a private append-only JSON-lines file owned by RecordingManager.
+ */
+function telemetryModesAndRecordings(db: DatabaseSync): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS points_10s (
+      series_id INTEGER NOT NULL,
+      bucket_ms INTEGER NOT NULL,
+      min REAL,
+      max REAL,
+      sum REAL NOT NULL DEFAULT 0,
+      count INTEGER NOT NULL DEFAULT 0,
+      null_count INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (series_id, bucket_ms)
+    ) WITHOUT ROWID;
+
+    CREATE TABLE IF NOT EXISTS recordings (
+      id TEXT PRIMARY KEY,
+      created_by TEXT NOT NULL,
+      status TEXT NOT NULL,
+      machines_json TEXT NOT NULL,
+      metrics_json TEXT NOT NULL,
+      resolution_ms INTEGER NOT NULL,
+      created_at_ms INTEGER NOT NULL,
+      started_at_ms INTEGER NOT NULL,
+      stopped_at_ms INTEGER,
+      deadline_ms INTEGER NOT NULL,
+      max_bytes INTEGER NOT NULL,
+      bytes_written INTEGER NOT NULL DEFAULT 0,
+      file_name TEXT NOT NULL,
+      include_backlog INTEGER NOT NULL DEFAULT 0,
+      reason TEXT,
+      error TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS recordings_created
+      ON recordings (created_at_ms DESC);
+  `);
+}

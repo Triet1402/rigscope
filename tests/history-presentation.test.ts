@@ -189,7 +189,7 @@ test("parses a valid history result and rejects malformed shapes", () => {
   assert.equal(parseHistoryResult({ ...valid, machineId: "" }), null);
   assert.equal(parseHistoryResult({ ...valid, toMs: valid.fromMs }), null);
   assert.equal(parseHistoryResult({ ...valid, stepMs: 0 }), null);
-  assert.equal(parseHistoryResult({ ...valid, tier: "1s" }), null);
+  assert.equal(parseHistoryResult({ ...valid, tier: "2s" }), null);
   assert.equal(parseHistoryResult({ ...valid, series: [{ ...valid.series[0], points: [{ t: 1, min: 0, max: 1, avg: "x" }] }] }), null);
   assert.equal(parseHistoryResult({ ...valid, gaps: [{ fromMs: 1, toMs: 2, kind: "weird" }] }), null);
   const nullable = result({ series: [series("cpu.usage", "", [{ t: 1, min: null, max: null, avg: null }])] });

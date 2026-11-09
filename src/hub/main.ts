@@ -32,6 +32,9 @@ import { homedir } from "node:os";
 import { openHubDatabase } from "./storage/db";
 import { APPLICATION_VERSION } from "../runtime/version";
 import { TelemetryStore } from "./storage/telemetry-store";
+import { MemoryTelemetryStore } from "./storage/memory-store";
+import { RecordingManager } from "./recordings/manager";
+import { RecordingHttp } from "./recordings/http";
 import { ProcessInterests } from "./process-interests";
 import { MonitorHttp } from "./monitor-http";
 import { CollectorRegistry } from "./enrollment/registry";
@@ -208,13 +211,23 @@ async function main(): Promise<void> {
     alerts.stop();
     processInterests.stop();
     feed.stop();
+    recordings.close();
     closeAllFrameworkSockets();
     const httpClosed = new Promise<void>((resolve) => server.close(() => resolve()));
     // Drop remaining keep-alive/idle HTTP and SSE-adjacent connections; SSE
     // responses were ended above and sockets close with the server.
     server.closeIdleConnections?.();
     server.closeAllConnections?.();
-    const results = await Promise.allSettled([httpClosed, nextApp.close(), storage.close(), alerts.drain(2000)]);
+    // Alerts may still persist incident transitions; drain them before the
+    // telemetry store flushes and closes the shared SQLite handle. The
+    // persistent store's close is itself the graceful flush of pending
+    // summaries, so it runs last.
+    const results = await Promise.allSettled([httpClosed, nextApp.close(), alerts.drain(2000)]);
+    try {
+      await storage.close();
+    } catch (error) {
+      results.push({ status: "rejected", reason: error });
+    }
     database.close();
     releaseDatabaseLease();
     if (config.remote !== null) {
@@ -286,11 +299,37 @@ async function main(): Promise<void> {
   const state = new HubState({ collectors: registry.identities(true), hubRunId });
   state.synchronizeIdentities(registry.identities());
   const enrollment = stateFile ? registry : undefined;
-  const storage = new TelemetryStore({ database, maxRecordsPerTransaction: 32,
-    maxDatabaseBytes: 2 * 1024 * 1024 * 1024 });
+  // Memory history is the default: live state and bounded summaries stay in
+  // RAM, and no telemetry rows/receipts/latest snapshots are written during
+  // routine ingestion. Opt-in persistent history writes one compact summary
+  // transaction roughly every five seconds.
+  const storage = config.history.mode === "memory"
+    ? new MemoryTelemetryStore({
+        database,
+        budgetBytes: config.history.memoryBudgetBytes,
+      })
+    : new TelemetryStore({
+        database,
+        storageTier: "summary",
+        flushIntervalMs: config.history.flushIntervalMs,
+        maxRecordsPerTransaction: 8192,
+        maxDatabaseBytes: 2 * 1024 * 1024 * 1024,
+        retention: config.history.retention,
+      });
   const ingestion = new SampleIngestion({ state, storage,
     onLiveSample: (machineId, record, receivedAtMs) => alerts.observe(machineId, record, receivedAtMs) });
   ingestion.restorePersisted();
+  const recordingsDirectory =
+    config.history.recordings.directory ?? join(dirname(databasePath), "recordings");
+  const recordings = new RecordingManager({
+    database,
+    history: storage,
+    directory: recordingsDirectory,
+    maxDurationMs: config.history.recordings.maxDurationMs,
+    maxBytes: config.history.recordings.maxBytes,
+    backlogMs: config.history.recordings.backlogMs,
+    maxActive: config.history.recordings.maxActive,
+  });
   const feed = new LiveFeed(state);
   // Session logout and fixed expiration both end that session's open SSE
   // streams and framework upgrades immediately, even while a stream sits idle.
@@ -329,9 +368,12 @@ async function main(): Promise<void> {
   const alertTimer = setInterval(() => alerts.tick(state.snapshot().machines), 1000); alertTimer.unref();
   const processInterests = new ProcessInterests((machineId, message) => gateway.sendToMachine(machineId, message));
   const gateway = new CollectorGateway({ state, ingestion, maxConnections: config.maxCollectorConnections,
+    delivery: storage.historyMode === "memory" ? "memory" : "durable",
     onDetail: (machineId, message) => processInterests.receive(machineId, message),
     onDisconnect: machineId => processInterests.disconnect(machineId) });
-  const monitorHttp = new MonitorHttp({ auth, origin: authOrigin, state, database, storage, processes: processInterests,
+  const monitorHttp = new MonitorHttp({ auth, origin: authOrigin, state, storage, processes: processInterests,
+    isAdmin: username => admin.isAdmin(username) });
+  const recordingHttp = new RecordingHttp({ auth, origin: authOrigin, state, recordings,
     isAdmin: username => admin.isAdmin(username) });
 
   const { default: createNextApp } = await import("next");
@@ -525,6 +567,7 @@ async function main(): Promise<void> {
     if (await collectorAdminHttp.handle(req, res, apiUrl)) return;
     if (await adminHttp.handle(req, res, apiUrl)) return;
     if (await alertsHttp.handle(req, res, apiUrl)) return;
+    if (await recordingHttp.handle(req, res, apiUrl)) return;
     if (await monitorHttp.handle(req, res, apiUrl)) return;
 
     // Remaining requests belong to Next.js (UI + future routes): they are

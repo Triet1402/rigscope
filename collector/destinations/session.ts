@@ -7,7 +7,7 @@
  *   reported once and then retried with backoff while the outbox keeps
  *   everything),
  * - gives fresh metrics priority through the outbox's dedicated live slot,
- *   reserving one in-flight window slot so a long replay can never starve it,
+ *   reserving a flush window of live slots so replay cannot starve it,
  * - pumps replay batches through a token bucket, bounded by the hub's
  *   advertised window, the local window, record count and serialized bytes,
  * - serializes durable records exactly as stored, with every current metric
@@ -30,6 +30,8 @@ import {
   MAX_BATCH_RECORDS,
   MAX_DETAIL_BYTES,
   MAX_MESSAGE_BYTES,
+  MAX_IN_FLIGHT_BATCHES,
+  MAX_PERSISTENT_FLUSH_MS,
   parseHubMessage,
 } from '../../src/contracts';
 import type {
@@ -90,7 +92,13 @@ export type SocketFactory = (
 
 export const DEFAULT_ACK_TIMEOUT_MS = 30_000;
 export const DEFAULT_REPLAY_BATCHES_PER_SECOND = 4;
-export const DEFAULT_MAX_LOCAL_IN_FLIGHT_BATCHES = 8;
+/**
+ * Local cap on unacknowledged batches. It matches the hub's wire maximum so a
+ * collector can use the whole negotiated window; the hub's persistent flush
+ * interval is bounded so that a window of this size covers a commit at the
+ * fastest supported 100 ms cadence.
+ */
+export const DEFAULT_MAX_LOCAL_IN_FLIGHT_BATCHES = 64;
 export const DEFAULT_MAX_BATCH_BYTES = 200_000;
 /** How often retention limits are applied while the session is running. */
 export const OUTBOX_ENFORCE_INTERVAL_MS = 10_000;
@@ -692,9 +700,14 @@ export class DestinationSession {
   // Delivery
   // -------------------------------------------------------------------------
 
-  /** Window slots reserved for live delivery (one when the window is > 1). */
+  /** Reserve a flush window of live samples so replay cannot starve fresh delivery. */
   private liveReservation(): number {
-    return this.inFlightWindow > 1 ? 1 : 0;
+    if (this.inFlightWindow <= 1) return 0;
+    // Legacy hubs and explicit smaller local windows retain their original
+    // replay capacity; they cannot cover the full persistent flush window.
+    if (this.inFlightWindow < MAX_IN_FLIGHT_BATCHES) return 1;
+    const liveSlots = Math.ceil(MAX_PERSISTENT_FLUSH_MS / this.expectedIntervalMs) + 2;
+    return Math.min(this.inFlightWindow - 1, liveSlots);
   }
 
   private replayCapacity(): number {
@@ -812,6 +825,9 @@ export class DestinationSession {
     this.inFlight.delete(batchId);
     this.outbox.release(batch.refs);
     this.log(`ack timed out for ${batch.refs.length} record(s); will resend`);
+    // A freed slot must also drain a live record that was waiting for one;
+    // otherwise live waits for the next sample or reconnect.
+    this.sendLiveBatch();
     this.pumpReplay();
   }
 
@@ -858,6 +874,10 @@ export class DestinationSession {
       this.log(`hub asked to retry after ${delay}ms; replay paused`);
     }
 
+    // Live is never blocked behind replay or a retry pause. Send it first now
+    // that acknowledgements may have freed a slot, then let replay use what is
+    // left of the window.
+    this.sendLiveBatch();
     this.pumpReplay();
   }
 
