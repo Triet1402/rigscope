@@ -123,34 +123,30 @@ temperatures. nvidia-smi does not expose these, so the collector reads them
 from the GPU's undocumented thermal registers, the same technique as
 [gddr6-core-junction-vram-temps](https://github.com/ThomasBaruzier/gddr6-core-junction-vram-temps)
 (with credits there for the register findings). Register reads go through each
-GPU's sysfs BAR0 file (`/sys/bus/pci/devices/<bdf>/resource0`), so no kernel
-`iomem=relaxed` flag, no native helper and no root daemon are needed. Readings
+GPU's sysfs BAR0 file (`/sys/bus/pci/devices/<bdf>/resource0`), using a read-only memory mapping in a bounded, unprivileged Python 3 helper.
+Python 3 must be installed on the collector machine. No kernel
+`iomem=relaxed` flag, compiled addon or root daemon is needed. Readings
 join the dashboard, History charts (`Junction`, `VRAM temp`), CSV/JSON exports
 and alerts (`GPU junction hot`, `GPU VRAM hot`).
 
-The BAR0 file is root-owned by default. The fast path grants everything in
-one command (group, membership, and the persistent udev rule):
+The BAR0 file is root-owned by default. User-scope collector installation and
+upgrade automatically install the persistent udev rules and grant the account
+running the collector access. Setup asks for sudo when a grant needs repair.
+The collector launcher activates new group memberships using `sg`, without a
+logout or reboot. The helper runs with the collector's user privileges.
+
+The manual controls remain available for inspection and explicit changes:
 
 ```sh
-rigscope gpu-temps enable      # also: rigscope gpu-temps status|disable
+rigscope gpu-temps status     # also: enable|disable
+rigscope cpu-power status    # also: enable|disable
 ```
 
-`enable` asks for your sudo password. When standard input is not a terminal
-(scripts, CI), it changes nothing and prints the exact
-`sudo env "PATH=$PATH" rigscope …` command instead.
-
-`status` needs no sudo and probes the registers for real; it prints the exact
-fix command when access is missing and exits with code 3 in that case.
-`enable` grants the sudo-invoking user and, when present, the
-`rigscope-collector` service account.
-
-The new group only reaches a user-scope collector after the login session is
-recreated (log out and back in, or reboot; restarting the unit is not enough
-because the systemd user manager keeps the old group list). Restart the
-collector afterwards and check for `gpu register temps: N device(s)` in
-`journalctl -u rigscope-collector` on a system-scope install, or the user
-journal (`rigscope logs collector --follow` or `journalctl --user`) on a
-user-scope install.
+`status` probes the mapping and sensors, distinguishing mapping failures from
+unsupported register values. `enable` asks for sudo and installs the group,
+membership and persistent udev rule. Restart a running collector after a manual
+grant. The terminal's own group list can remain stale until a new login, even
+though the collector launcher activates the granted groups immediately.
 
 A `rigscope try` trial is covered by the same user grant. Without access, or
 when the registers do not decode, the feature reports nothing: junction and

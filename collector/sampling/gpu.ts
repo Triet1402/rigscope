@@ -364,9 +364,9 @@ export class GpuPoller {
   /**
    * Awaits the in-flight sensor cycle within the same budget as an
    * `nvidia-smi` invocation so a sensor promise that never settles or rejects
-   * cannot hold up the snapshot. The register reads themselves are synchronous
-   * sysfs reads on the event loop, so this budget cannot preempt a read that
-   * blocks: it only bounds waiting on the cycle's promise. Failures never
+   * cannot hold up the snapshot. The mmap helper has its own process timeout. Its synchronous invocation
+   * blocks the event loop until it returns, so this promise budget only
+   * bounds waiting on the cycle's promise. Failures never
    * invalidate the `nvidia-smi` readings; GpuTempsPoller reports its own
    * diagnostics.
    */

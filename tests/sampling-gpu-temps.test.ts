@@ -39,6 +39,8 @@ test('selectSensorProfile: Blackwell ids use the GDDR7 map, Ampere uses GDDR6', 
   assert.equal(selectSensorProfile(0x2204), 'gddr6'); // RTX 3090
   assert.equal(selectSensorProfile(0x2b85), 'gddr7'); // RTX 5090
   assert.equal(selectSensorProfile(0x2c02), 'gddr7'); // RTX 5070
+  assert.equal(selectSensorProfile(0x2d19), 'gddr7'); // RTX 5060 Laptop
+  assert.equal(selectSensorProfile(0x2d59), 'gddr7'); // RTX 5060 Laptop variant
 });
 
 test('decodeGddr6Junction: temperature byte at bits 8..15', () => {
@@ -116,27 +118,30 @@ test('discoverNvidiaDisplays: only NVIDIA display functions, ids parsed', () => 
   assert.deepEqual(devices, [{bdf: '0000:03:00.0', deviceId: 0x2b85}]);
 });
 
-test('readGpuRegisterTemps: GDDR6 and GDDR7 devices decode together', () => {
-  const sysfs = fakeSysfs({'0000:c1:00.0': '0x2204', '0000:c2:00.0': '0x2b85'});
+for (const blackwellId of ['0x2b85', '0x2d19', '0x2d59']) {
+  test(`readGpuRegisterTemps: GDDR6 and GDDR7 ${blackwellId} devices decode together`, () => {
+    const sysfs = fakeSysfs({'0000:c1:00.0': '0x2204', '0000:c2:00.0': blackwellId});
 
-  const r6 = `${SYSFS}/0000:c1:00.0/resource0`;
-  sysfs.registers.set(`${r6}@0x2046c`, 52 << 8);
-  sysfs.registers.set(`${r6}@0xe2a8`, Math.round(72.0 * 32));
+    const r6 = `${SYSFS}/0000:c1:00.0/resource0`;
+    sysfs.registers.set(`${r6}@0x2046c`, 52 << 8);
+    sysfs.registers.set(`${r6}@0xe2a8`, Math.round(72.0 * 32));
 
-  const r7 = `${SYSFS}/0000:c2:00.0/resource0`;
-  sysfs.registers.set(`${r7}@0xad0a90`, 61 * 256); // channel 0
-  sysfs.registers.set(`${r7}@0xad0a94`, 68 * 256); // channel 1 (hottest)
-  sysfs.registers.set(`${r7}@0xad0aa0`, 65 * 256); // hardware hotspot (below channel 1)
-  // FBPA 0: status marks sub-register 0 valid at 72C; FBPA 1 is poisoned.
-  sysfs.registers.set(`${r7}@0x9024d0`, 1 << 24);
-  sysfs.registers.set(`${r7}@0x9024c0`, 56 << 16);
-  sysfs.registers.set(`${r7}@0x9064d0`, 0xbadf0001);
+    const r7 = `${SYSFS}/0000:c2:00.0/resource0`;
+    sysfs.registers.set(`${r7}@0xad0a90`, 61 * 256); // channel 0
+    sysfs.registers.set(`${r7}@0xad0a94`, 68 * 256); // channel 1 (hottest)
+    sysfs.registers.set(`${r7}@0xad0aa0`, 65 * 256); // hardware hotspot (below channel 1)
+    // FBPA 0: status marks sub-register 0 valid at 72C; FBPA 1 is poisoned.
+    sysfs.registers.set(`${r7}@0x9024d0`, 1 << 24);
+    sysfs.registers.set(`${r7}@0x9024c0`, 56 << 16);
+    sysfs.registers.set(`${r7}@0x9064d0`, 0xbadf0001);
 
-  const sensors = readGpuRegisterTemps(sysfs.readers, SYSFS);
-  assert.equal(sensors.size, 2);
-  assert.deepEqual(sensors.get('c1:00.0'), {junctionTemperatureC: 52, vramTemperatureC: 72});
-  assert.deepEqual(sensors.get('c2:00.0'), {junctionTemperatureC: 68, vramTemperatureC: 72});
-});
+    const sensors = readGpuRegisterTemps(sysfs.readers, SYSFS);
+    assert.equal(sensors.size, 2);
+    assert.deepEqual(sensors.get('c1:00.0'), {junctionTemperatureC: 52, vramTemperatureC: 72});
+    assert.deepEqual(sensors.get('c2:00.0'), {junctionTemperatureC: 68, vramTemperatureC: 72});
+  });
+
+}
 
 test('readGpuRegisterTemps: unreadable registers stay absent, not null series', () => {
   const sysfs = fakeSysfs({'0000:c1:00.0': '0x2204'});
@@ -200,7 +205,7 @@ test('GpuTempsPoller: latest() exposes readings and diagnostics log once per sta
   await poller.pollOnce();
   await poller.pollOnce();
   assert.deepEqual(events, [
-    'gpu register temps: GPU BAR0 registers are not readable; '
+    'gpu register temps: GPU BAR0 mapping failed (check Python 3 and permissions); '
       + 'install packaging/system/90-rigscope-gpu-temps.rules (see docs/monitoring.md)',
   ]);
 
@@ -217,7 +222,7 @@ test('GpuTempsPoller: latest() exposes readings and diagnostics log once per sta
   sysfs.registers.delete(`${r6}@0x2046c`);
   await poller.pollOnce();
   assert.equal(events.length, 3);
-  assert.ok(events[2]?.includes('not readable'));
+  assert.ok(events[2]?.includes('mapping failed'));
 });
 
 test('GpuTempsPoller: readable but unsupported registers report unsupported, not access', async () => {

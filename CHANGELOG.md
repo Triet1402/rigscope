@@ -1,5 +1,20 @@
 # Release notes
 
+## 0.2.4
+
+Released 2026-11-09.
+
+- User-scope install, collector enable and upgrade automatically reconcile CPU
+  package-power and NVIDIA temperature permissions for the collector owner.
+  A leftover service account no longer steals the user's RAPL grant. The
+  launcher activates newly granted groups without a logout or reboot.
+- Read NVIDIA memory BAR registers through read-only mappings instead of
+  ordinary file reads, which Linux rejects with EIO. A bounded Python 3 helper
+  isolates device faults; setup installs Python when missing on supported
+  distributions. Add both RTX 5060 Laptop PCI IDs to the GDDR7 decoder.
+- Use the latest CLI in the documented upgrade command so installations whose
+  upgrader predates sensor setup receive the same automatic reconciliation.
+
 ## 0.2.3
 
 - `rigscope gpu-temps enable|disable` and `rigscope cpu-power enable|disable`

@@ -182,20 +182,14 @@ const defaultHost: HardwareAccessHost = {
       const sensors = readGpuRegisterTemps(defaultReaders);
       if (sensors.size === 0) {
         // Distinguish a missing permission from an unsupported card: if any
-        // device's BAR0 file is readable, the registers answered but this card
+        // device's BAR0 can be mapped, the access path works but this card
         // has no decodable thermal sensors.
-        const registersReadable = devices.some((device) => {
-          try {
-            accessSync(`${SYSFS_PCI_DIR}/${device.bdf}/resource0`, constants.R_OK);
-            return true;
-          } catch {
-            return false;
-          }
-        });
+        const registersReadable = devices.some((device) =>
+          defaultReaders.canRead?.(`${SYSFS_PCI_DIR}/${device.bdf}/resource0`) === true);
         if (registersReadable) {
           return {present: false, readable: false, detail: `${devices.length} NVIDIA device(s) found, no supported thermal registers`};
         }
-        return {present: true, readable: false, detail: `${devices.length} NVIDIA device(s) found, registers not readable`};
+        return {present: true, readable: false, detail: `${devices.length} NVIDIA device(s) found, BAR0 mapping unavailable (check Python 3 and permissions)`};
       }
       const parts = [...sensors.values()].map((value) => {
         const pieces: string[] = [];
@@ -303,7 +297,7 @@ function userExists(host: HardwareAccessHost, user: string): boolean {
 /** Accounts to grant: whoever invoked sudo, plus a system collector account. */
 function granteesFor(host: HardwareAccessHost, feature: HardwareFeature): string[] {
   const collectorPresent = userExists(host, COLLECTOR_ACCOUNT);
-  if (feature.exclusiveToCollector === true && collectorPresent) {
+  if (feature.exclusiveToCollector === true && collectorPresent && host.systemInstallationPresent()) {
     // A system-scope install owns this group; adding the sudo user there
     // would break the `rigscope system` account audit for no benefit.
     return [COLLECTOR_ACCOUNT];
@@ -377,7 +371,7 @@ function reloadUdev(host: HardwareAccessHost, subsystem: string): number {
   return 0;
 }
 
-function runEnable(host: HardwareAccessHost, feature: HardwareFeature, lines: string[]): number {
+function runEnable(host: HardwareAccessHost, feature: HardwareFeature, lines: string[], activationAdvice = true): number {
   if (host.uid() !== 0) {
     printError(`This mutation requires root. Run: ${sudoCommand(feature.id, 'enable')} (no change was made)`);
     return 1;
@@ -433,10 +427,10 @@ function runEnable(host: HardwareAccessHost, feature: HardwareFeature, lines: st
 
   for (const line of lines) console.log(line);
   printSuccess(`${feature.title}: grant installed`);
-  if (!host.systemInstallationPresent()) {
+  if (activationAdvice && !host.systemInstallationPresent()) {
     printWarning('Log out and back in (or reboot) before restarting the collector: the systemd '
       + 'user manager keeps old group memberships until the session is recreated.');
-  } else {
+  } else if (activationAdvice) {
     console.log(`Restart the collector to pick up the new group: systemctl restart rigscope-collector`);
   }
   console.log(`Verify with: rigscope ${feature.id} status — then ${feature.grantHint}.`);
@@ -513,8 +507,9 @@ function runStatus(host: HardwareAccessHost, feature: HardwareFeature): number {
       return 0;
     }
     if (installed && members.length > 0) {
-      printWarning('Grant installed, but this login session does not have the group yet. '
-        + 'Log out and back in (or restart the collector) to activate it.');
+      printWarning('Grant installed, but this process cannot read the sensors. '
+        + 'Ensure the account running the collector belongs to the group above, '
+        + 'then log out and back in (or reboot) before restarting a user collector.');
       return 3;
     }
     printWarning(`Not enabled. Run: rigscope ${feature.id} enable`);
@@ -559,4 +554,63 @@ export function runHardwareAccessCommand(
   if (subcommand === 'enable') return runEnable(host, feature, []);
   if (subcommand === 'disable') return runDisable(host, feature);
   return runStatus(host, feature);
+}
+
+/** Reconcile grants during install/upgrade, before starting the collector.
+ * Hardware detection does not depend on having permission to read sensors.
+ */
+export function setupCollectorHardware(
+  host: HardwareAccessHost = defaultHost,
+  detected: HardwareFeature[] = detectedHardware(),
+): number {
+  if (detected.length === 0) return 0;
+  const user = host.env.SUDO_USER || host.run('id', ['-un'], 'user lookup').stdout.trim();
+  const pending = detected.filter(feature => {
+    const contents = host.readFile(join(UDEV_DIR, feature.ruleFile));
+    if (!contents?.includes('Managed by Rigscope')) return true;
+    const group = installedRuleGroup(contents) ?? feature.group;
+    return !groupMembers(host, group).includes(user);
+  });
+  const needsPython = detected.some(feature => feature.id === 'gpu-temps')
+    && host.run('python3', ['-I', '-c', 'import mmap, struct, json'], 'GPU mapping runtime').status !== 0;
+  if (pending.length === 0 && !needsPython) return 0;
+  if (host.uid() !== 0) {
+    const result = host.escalate?.(['sensor-setup']);
+    if (result === null || result === undefined) {
+      printError('Sensor setup requires administrator access during installation. Run the installation from an interactive terminal.');
+      return 1;
+    }
+    return result;
+  }
+  if (needsPython) {
+    const osRelease = host.readFile('/etc/os-release') ?? '';
+    const family = osRelease.match(/^ID=(.*)$/m)?.[1]?.replace(/"/g, '') ?? '';
+    const managers: Record<string, [string, string[]]> = {
+      ubuntu: ['apt-get', ['install', '-y', 'python3']], debian: ['apt-get', ['install', '-y', 'python3']],
+      arch: ['pacman', ['-S', '--needed', '--noconfirm', 'python']], manjaro: ['pacman', ['-S', '--needed', '--noconfirm', 'python']],
+      fedora: ['dnf', ['install', '-y', 'python3']], rhel: ['dnf', ['install', '-y', 'python3']],
+      alpine: ['apk', ['add', 'python3']],
+    };
+    const manager = managers[family];
+    if (!manager || host.run(manager[0], manager[1], 'install GPU mapping runtime').status !== 0
+        || host.run('python3', ['-I', '-c', 'import mmap, struct, json'], 'GPU mapping runtime').status !== 0) {
+      printError('Python 3 is required for GPU sensor mappings and could not be installed automatically.');
+      return 1;
+    }
+  }
+  for (const feature of pending) {
+    // This entry point belongs to a user installation. A stale service account
+    // must not divert grants away from its actual collector owner.
+    if (runEnable({...host, systemInstallationPresent: () => false}, feature, [], false) !== 0) return 1;
+  }
+  return 0;
+}
+
+function detectedHardware(): HardwareFeature[] {
+  const features: HardwareFeature[] = [];
+  try {
+    if (readdirSync('/sys/class/powercap').some(name => /^intel-rapl:\d+$/.test(name))) features.push(HARDWARE_FEATURES['cpu-power']);
+  } catch { /* no RAPL driver */ }
+  if (discoverNvidiaDisplays(defaultReaders).length > 0) features.push(HARDWARE_FEATURES['gpu-temps']);
+  return features;
 }

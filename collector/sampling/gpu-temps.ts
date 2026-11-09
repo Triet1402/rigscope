@@ -1,5 +1,5 @@
 /**
- * NVIDIA junction and VRAM temperature sampling — pure TypeScript.
+ * NVIDIA junction and VRAM temperature sampling — read-only PCI mappings.
  *
  * Reads the same undocumented GPU thermal registers as
  * github.com/ThomasBaruzier/gddr6-core-junction-vram-temps (which credits
@@ -16,7 +16,7 @@
  *                            bits at +0x10, poison pattern 0xBADF00xx
  *
  * Access goes through `/sys/bus/pci/devices/<bdf>/resource0`, the kernel's
- * mapped view of BAR0, via positioned reads — no mmap, no native code, no
+ * mapped view of BAR0, via a bounded Python 3 mmap helper — no compiled addon, no
  * /dev/mem and no `iomem=relaxed` kernel flag. Reading that file needs
  * permission: it is root-owned 0600 by default, and
  * `packaging/system/90-rigscope-gpu-temps.rules` grants a dedicated group
@@ -26,7 +26,8 @@
  * stay absent and the poller only logs once. GPU core temperature keeps
  * coming from `nvidia-smi`.
  */
-import { accessSync, closeSync, constants, openSync, readdirSync, readFileSync, readSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { readMappedPciRegisters } from './pci-registers';
 
 export type GpuSensorValues = {
   junctionTemperatureC: number | null;
@@ -60,6 +61,8 @@ const BLACKWELL_DEVICE_IDS = new Set([
   0x2c05, // RTX 5070 Ti
   0x2c02, // RTX 5070
   0x2d04, // RTX 5060 Ti
+  0x2d19, // RTX 5060 Laptop
+  0x2d59, // RTX 5060 Laptop variant
   0x2c33, // RTX PRO 4000 SFF (Blackwell generation)
 ]);
 
@@ -184,61 +187,9 @@ export const defaultReaders: GpuRegisterReaders = {
       return null;
     }
   },
-  readRegister: (resourcePath, offset) => {
-    let fd: number | null = null;
-    try {
-      fd = openSync(resourcePath, 'r');
-      const buffer = Buffer.alloc(4);
-      const bytesRead = readSync(fd, buffer, 0, 4, offset);
-      if (bytesRead !== 4) return null;
-      return buffer.readUInt32LE(0);
-    } catch {
-      return null;
-    } finally {
-      if (fd !== null) {
-        try {
-          closeSync(fd);
-        } catch {
-          // Close failures never change the reading.
-        }
-      }
-    }
-  },
-  readRegisters: (resourcePath, offsets) => {
-    let fd: number | null = null;
-    try {
-      fd = openSync(resourcePath, 'r');
-      const handle = fd;
-      return offsets.map((offset) => {
-        const buffer = Buffer.alloc(4);
-        try {
-          const bytesRead = readSync(handle, buffer, 0, 4, offset);
-          if (bytesRead !== 4) return null;
-          return buffer.readUInt32LE(0);
-        } catch {
-          return null;
-        }
-      });
-    } catch {
-      return offsets.map(() => null);
-    } finally {
-      if (fd !== null) {
-        try {
-          closeSync(fd);
-        } catch {
-          // Close failures never change the reading.
-        }
-      }
-    }
-  },
-  canRead: (path) => {
-    try {
-      accessSync(path, constants.R_OK);
-      return true;
-    } catch {
-      return false;
-    }
-  },
+  readRegister: (resourcePath, offset) => readMappedPciRegisters(resourcePath, [offset])[0] ?? null,
+  readRegisters: readMappedPciRegisters,
+  canRead: (path) => readMappedPciRegisters(path, [0])[0] !== null,
 };
 
 function parseHexAttribute(raw: string | null): number | null {
@@ -445,8 +396,7 @@ export type GpuTempsPollerOptions = {
 /**
  * Reads the register temperatures on demand: `GpuPoller` drives the cadence
  * by calling `pollOnce()` each cycle it already runs for `nvidia-smi`, so
- * this poller owns no timer of its own. All work is bounded, in-process
- * sysfs reads; the diagnostics log once per state change, never per cycle.
+ * this poller owns no timer of its own. Register access uses a bounded, unprivileged helper; the diagnostics log once per state change, never per cycle.
  */
 export class GpuTempsPoller implements GpuSensorSource {
   private readonly readers: GpuRegisterReaders;
@@ -521,7 +471,7 @@ export class GpuTempsPoller implements GpuSensorSource {
         `gpu register temps: no supported thermal registers on ${devices.length} device(s)`);
       return;
     }
-    this.emitOnStateChange('access', () => 'gpu register temps: GPU BAR0 registers are not readable; '
+    this.emitOnStateChange('access', () => 'gpu register temps: GPU BAR0 mapping failed (check Python 3 and permissions); '
       + 'install packaging/system/90-rigscope-gpu-temps.rules (see docs/monitoring.md)');
   }
 

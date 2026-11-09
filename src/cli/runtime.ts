@@ -1,3 +1,4 @@
+import {collectorLaunch} from './collector-launch';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
 import { parseQueueMode } from '../../collector/config';
@@ -111,7 +112,9 @@ export async function runInstallation(root: string, dir: string, component?: Com
   process.on('SIGTERM', signal);
   process.on('SIGINT', signal);
   function launch(role: Component) {
-    const child = spawn(process.execPath, [join(root, 'dist', `${role}.cjs`)], {cwd: root, stdio: 'inherit', env: {
+    const entry = join(root, 'dist', `${role}.cjs`);
+    const launch = role === 'collector' ? collectorLaunch(process.execPath, entry) : {command: process.execPath, args: [entry]};
+    const child = spawn(launch.command, launch.args, {cwd: root, stdio: 'inherit', env: {
       ...environment, NODE_ENV: 'production',
       ...(role === 'hub' ? hubEnvironment(dir, config!) : {COLLECTOR_MODE: 'real', COLLECTOR_STATE_FILE: join(dir, 'collector', 'state.json'),
         COLLECTOR_HEALTH_FILE: join(dir, 'run', 'collector-health.json'), ...collectorEnvironment}),

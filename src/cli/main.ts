@@ -23,7 +23,7 @@ import { describeMachineDataReport, recordMachineDataTransition, type MachineDat
 import { recoverAdminPassword } from '../operations/recovery';
 import { acquireProcessLease } from '../runtime/process-lease';
 import { runSystemCommand } from './system';
-import { runHardwareAccessCommand } from './hardware-access';
+import { runHardwareAccessCommand, setupCollectorHardware } from './hardware-access';
 import { selectInstallation, systemInstallationPresent } from './selection';
 import { collectorEnrolled, startInstallation } from './lifecycle';
 import { probeHealth, healthTarget } from './health';
@@ -195,6 +195,7 @@ function printMachineDataOutcome(machineHistory: MachineDataReport): void {
 
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
+  if (argv[0] === 'sensor-setup' && argv.length === 1) return setupCollectorHardware();
   if (argv[0] === 'system') return runSystemCommand(argv.slice(1));
   if (argv[0] === 'help' && argv[1] === 'system') return runSystemCommand(['help']);
   if (argv[0] === 'gpu-temps' || argv[0] === 'cpu-power') return runHardwareAccessCommand(argv);
@@ -372,6 +373,9 @@ async function main(): Promise<number> {
             existing.users.length > 0 && componentEnabled(existing, 'hub')) {
           await pairColocatedCollector(dir);
         }
+        if (target === 'collector' && setupCollectorHardware() !== 0) {
+          throw new Error('Collector sensor setup failed; collector has not been enabled.');
+        }
         const result = configureComponent(dir, target, {enabled: true, origin: values.origin, socket: values.socket, port: values.port});
         if (result.password) console.log(`Username: owner\nPassword: ${result.password}\nSave this password; it is shown once.`);
         writeService(dir, target);
@@ -449,6 +453,9 @@ async function main(): Promise<number> {
         // behind. Mark the one-time RAM-first transition complete so future
         // upgrades preserve durable history and queues the operator opts into,
         // rather than treating this installation as never-transitioned.
+        if (componentEnabled(readSetup(dir)!, 'collector') && setupCollectorHardware() !== 0) {
+          throw new Error('Collector sensor setup failed; installation has not started.');
+        }
         recordMachineDataTransition(dir, installedVersion);
         writeService(dir);
         alias = installAlias(dir, ROOT);
@@ -580,6 +587,9 @@ async function main(): Promise<number> {
     }
     if (command === 'upgrade') {
       if (!existsSync(join(dir, 'runtime'))) throw new Error('Install a managed runtime before upgrading.');
+      if (componentEnabled(config, 'collector') && setupCollectorHardware() !== 0) {
+        throw new Error('Collector sensor setup failed; upgrade has not started.');
+      }
       console.log('Staging upgrade…');
       const source = values.from ? (/^[./]/.test(values.from) ? resolve(values.from) : values.from) : 'rigscope@latest';
       const report = await upgradeInstallation({

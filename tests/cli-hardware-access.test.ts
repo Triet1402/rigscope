@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 
 import {
   HARDWARE_FEATURES,
+  setupCollectorHardware,
   packageRulePath,
   runHardwareAccessCommand,
   type HardwareAccessHost,
@@ -192,13 +193,14 @@ test('enable keeps a Rigscope-managed rule and grants the group it names', () =>
   assert.equal(commands.some((line) => line.includes('rigscope-gpu')), false);
 });
 
-test('cpu-power enable reserves the RAPL group for the system collector when it exists', () => {
+test('cpu-power enable reserves the RAPL group for an installed system collector', () => {
   // `rigscope system` audits this group and fails unless the dedicated
   // collector is its only member, so the sudo user must not be added.
   const source = packageRulePath(HARDWARE_FEATURES['cpu-power']);
   const host = fakeHost({
     files: {[source]: 'Managed by Rigscope: rapl rule'},
     users: ['triet', 'rigscope-collector'],
+    systemInstallation: true,
   });
   assert.equal(runHardwareAccessCommand(['cpu-power', 'enable'], host), 0);
   const commands = host.calls.map((call) => [call.command, ...call.args].join(' '));
@@ -313,4 +315,60 @@ test('the packaged RAPL rule stays byte-identical to the system renderer', () =>
     readFileSync(packageRulePath(HARDWARE_FEATURES['cpu-power']), 'utf8'),
     renderRaplRule(DEFAULT_SYSTEM_ACCOUNTS),
   );
+});
+
+test('cpu-power enable grants the user when only a leftover collector account exists', () => {
+  const source = packageRulePath(HARDWARE_FEATURES['cpu-power']);
+  const host = fakeHost({files: {[source]: 'Managed by Rigscope: rapl rule'}, users: ['triet', 'rigscope-collector']});
+  assert.equal(runHardwareAccessCommand(['cpu-power', 'enable'], host), 0);
+  assert.ok(host.calls.some(call => call.command === 'gpasswd' && call.args.join(' ') === '-a triet rigscope-rapl'));
+});
+
+
+test('installation repairs a stale service-account-only grant for the actual user', () => {
+  const feature = HARDWARE_FEATURES['cpu-power'];
+  const source = packageRulePath(feature);
+  const host = fakeHost({users: ['triet', 'rigscope-collector'],
+    groups: {'rigscope-rapl': ['rigscope-collector']},
+    files: {[source]: 'Managed by Rigscope: rapl rule', '/etc/udev/rules.d/90-rigscope-rapl.rules': 'Managed by Rigscope: rapl rule'}});
+  assert.equal(setupCollectorHardware(host, [feature]), 0);
+  assert.ok(host.groups.get('rigscope-rapl')?.includes('triet'));
+  host.calls.length = 0;
+  assert.equal(setupCollectorHardware(host, [feature]), 0);
+  assert.equal(host.calls.some(call => call.command === 'gpasswd' || call.command === 'udevadm'), false);
+});
+test('installation requests elevation once for both sensors and skips machines without sensors', () => {
+  const host = fakeHost({uid: 1000});
+  const escalations: readonly string[][] = [];
+  host.escalate = argv => { (escalations as string[][]).push([...argv]); return 0; };
+  assert.equal(setupCollectorHardware(host, []), 0);
+  assert.equal(escalations.length, 0);
+  assert.equal(setupCollectorHardware(host, Object.values(HARDWARE_FEATURES)), 0);
+  assert.deepEqual(escalations, [['sensor-setup']]);
+});
+
+test('GPU setup installs its mapping runtime even when grants already exist', () => {
+  const host = fakeHost({groups: {'rigscope-gpu': ['triet']}, files: {
+    '/etc/os-release': 'ID=arch\n', [RULE_PATH]: 'Managed by Rigscope: gpu rule',
+  }});
+  const original = host.run;
+  let pythonInstalled = false;
+  host.run = (command, args, label) => {
+    if (command === 'python3') return {status: pythonInstalled ? 0 : 127, stdout: '', stderr: ''};
+    if (command === 'pacman') {
+      assert.deepEqual(args, ['-S', '--needed', '--noconfirm', 'python']);
+      pythonInstalled = true;
+    }
+    return original(command, args, label);
+  };
+  assert.equal(setupCollectorHardware(host, [GPU]), 0);
+  assert.equal(pythonInstalled, true);
+  assert.equal(host.calls.some(call => call.command === 'gpasswd'), false);
+});
+
+test('failed elevation stops setup rather than claiming sensors were enabled', () => {
+  const host = fakeHost({uid: 1000});
+  host.escalate = () => 1;
+  assert.equal(setupCollectorHardware(host, [GPU]), 1);
+  assert.equal(host.calls.some(call => call.command === 'gpasswd'), false);
 });

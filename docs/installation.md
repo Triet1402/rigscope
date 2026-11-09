@@ -259,10 +259,18 @@ For another HTTPS proxy, see the [proxy requirements](development.md#https-bound
 
 ## Upgrades
 
+Use the latest CLI for upgrades so setup migrations run even when the installed
+CLI predates them. Collector installations automatically reconcile CPU power
+and NVIDIA temperature access during install and upgrade. Administrator access
+is requested when grants need repair; no separate sensor-enable command or
+new login session is needed. Python 3 is installed automatically for GPU
+mappings on Debian/Ubuntu, Arch/Manjaro, Fedora/RHEL and Alpine when missing.
+
+
 Use the installed command:
 
 ```sh
-rigscope upgrade
+npx --yes rigscope@latest upgrade
 ```
 
 It gets `rigscope@latest` from npm, backs up the hub database and replaces the
