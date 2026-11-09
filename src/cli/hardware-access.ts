@@ -15,7 +15,7 @@
  */
 import { accessSync, constants, existsSync, readFileSync, renameSync, writeFileSync, rmSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import {
   defaultReaders,
   discoverNvidiaDisplays,
@@ -46,6 +46,12 @@ export type HardwareAccessHost = {
   systemInstallationPresent(): boolean;
   /** True when a system-scope installation owns the package-power grant. */
   systemPowerEnabled(): boolean;
+  /**
+   * Re-run this invocation as root when that is possible (interactive terminal,
+   * sudo available). Returns the child's exit status, or null to fall back to
+   * the printed copy-paste hint. Omitted by test hosts.
+   */
+  escalate?(argv: readonly string[]): number | null;
 };
 
 export type HardwareProbe = {
@@ -106,9 +112,33 @@ export function packageRulePath(feature: HardwareFeature): string {
   return join(PACKAGE_ROOT, 'packaging', 'system', feature.ruleFile);
 }
 
+/**
+ * Re-run this exact invocation under sudo, so `rigscope gpu-temps enable`
+ * works from any installation layout without the caller reconstructing a sudo
+ * command. `sudo` replaces PATH with its own `secure_path`, which cannot find
+ * the installer's `~/.local/bin` launcher, but the child is started by absolute
+ * path and therefore needs neither the launcher nor sudo's PATH.
+ *
+ * Only an interactive terminal is elevated. Scripts keep the deterministic
+ * printed hint. Returns null when escalation is not possible.
+ */
+function requestRoot(argv: readonly string[]): number | null {
+  if (process.stdin.isTTY !== true) return null;
+  const script = process.argv[1];
+  if (script === undefined) return null;
+  const result = spawnSync('sudo', ['--', process.execPath, ...process.execArgv, resolve(script), ...argv], {
+    stdio: 'inherit',
+    env: process.env,
+  });
+  if (result.error !== undefined) return null;
+  if (result.signal !== null) return 1;
+  return result.status ?? 1;
+}
+
 const defaultHost: HardwareAccessHost = {
   uid: () => process.getuid?.() ?? -1,
   env: process.env,
+  escalate: requestRoot,
   run: (command, args, _label) => {
     try {
       const stdout = execFileSync(command, args, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
@@ -231,17 +261,29 @@ Grants read access to hardware sensors the unprivileged collector cannot
 reach by default. status never changes anything and requires no sudo.
 
   status    Report group, rule and an actual sensor read
-  enable    Create the group, grant collectors, install the udev rule (sudo)
-  disable   Remove the rule and group memberships (sudo)
+  enable    Create the group, grant collectors, install the udev rule (prompts for sudo)
+  disable   Remove the rule and group memberships (prompts for sudo)
 
-On a system-scope install, prefer sudo rigscope system power grant --apply:
+On a system-scope install, prefer ${sudoCommand('system', 'power', 'grant', '--apply')}:
 it also records the grant in rigscope system state. Revoke with
-sudo rigscope system power revoke --apply: cpu-power disable refuses to remove
-a system-managed rule so that state stays consistent.
+${sudoCommand('system', 'power', 'revoke', '--apply')}: cpu-power disable
+refuses to remove a system-managed rule so that state stays consistent.
 
 After enabling on a user-scope install, log out and back in (or reboot):
 the systemd user manager keeps the old group list until the session is
 recreated. See docs/monitoring.md for details.`;
+
+/**
+ * The command to show when a mutation needs root.
+ *
+ * `sudo` replaces PATH with its own `secure_path`, which does not include
+ * `~/.local/bin` — where the installer puts the launcher — or a Node runtime
+ * installed there for the launcher's shebang. Passing the invoking user's PATH
+ * through `env` keeps both resolvable, unlike a bare `sudo rigscope`.
+ */
+function sudoCommand(...args: string[]): string {
+  return `sudo env "PATH=$PATH" ${['rigscope', ...args].join(' ')}`;
+}
 
 function groupExists(host: HardwareAccessHost, group: string): boolean {
   return host.run('getent', ['group', group], 'group lookup').status === 0;
@@ -337,7 +379,7 @@ function reloadUdev(host: HardwareAccessHost, subsystem: string): number {
 
 function runEnable(host: HardwareAccessHost, feature: HardwareFeature, lines: string[]): number {
   if (host.uid() !== 0) {
-    printError(`This mutation requires root. Run: sudo rigscope ${feature.id} enable (no change was made)`);
+    printError(`This mutation requires root. Run: ${sudoCommand(feature.id, 'enable')} (no change was made)`);
     return 1;
   }
   const grantees = granteesFor(host, feature);
@@ -403,14 +445,14 @@ function runEnable(host: HardwareAccessHost, feature: HardwareFeature, lines: st
 
 function runDisable(host: HardwareAccessHost, feature: HardwareFeature): number {
   if (host.uid() !== 0) {
-    printError(`This mutation requires root. Run: sudo rigscope ${feature.id} disable (no change was made)`);
+    printError(`This mutation requires root. Run: ${sudoCommand(feature.id, 'disable')} (no change was made)`);
     return 1;
   }
   if (feature.id === 'cpu-power' && host.systemPowerEnabled()) {
     // The `rigscope system` state owns this grant; removing it here would
     // desynchronize that state from the actual rule and group membership.
     printError('This system-scope installation owns the package-power grant. '
-      + 'Run: sudo rigscope system power revoke --apply');
+      + `Run: ${sudoCommand('system', 'power', 'revoke', '--apply')}`);
     return 1;
   }
   const rulePath = join(UDEV_DIR, feature.ruleFile);
@@ -475,7 +517,7 @@ function runStatus(host: HardwareAccessHost, feature: HardwareFeature): number {
         + 'Log out and back in (or restart the collector) to activate it.');
       return 3;
     }
-    printWarning(`Not enabled. Run: sudo rigscope ${feature.id} enable`);
+    printWarning(`Not enabled. Run: rigscope ${feature.id} enable`);
     return 3;
   }
   if (!probe.present) {
@@ -510,6 +552,10 @@ export function runHardwareAccessCommand(
     return 2;
   }
   const feature = HARDWARE_FEATURES[id];
+  if ((subcommand === 'enable' || subcommand === 'disable') && host.uid() !== 0) {
+    const elevated = host.escalate?.([id, subcommand]);
+    if (elevated != null) return elevated;
+  }
   if (subcommand === 'enable') return runEnable(host, feature, []);
   if (subcommand === 'disable') return runDisable(host, feature);
   return runStatus(host, feature);

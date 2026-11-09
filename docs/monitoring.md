@@ -132,8 +132,12 @@ The BAR0 file is root-owned by default. The fast path grants everything in
 one command (group, membership, and the persistent udev rule):
 
 ```sh
-sudo rigscope gpu-temps enable      # also: rigscope gpu-temps status|disable
+rigscope gpu-temps enable      # also: rigscope gpu-temps status|disable
 ```
+
+`enable` asks for your sudo password. When standard input is not a terminal
+(scripts, CI), it changes nothing and prints the exact
+`sudo env "PATH=$PATH" rigscope …` command instead.
 
 `status` needs no sudo and probes the registers for real; it prints the exact
 fix command when access is missing and exits with code 3 in that case.

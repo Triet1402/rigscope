@@ -89,6 +89,43 @@ test('enable refuses to run without root and changes nothing', () => {
   assert.deepEqual(host.calls, []);
 });
 
+test('enable and disable escalate through sudo in an interactive terminal', () => {
+  for (const subcommand of ['enable', 'disable'] as const) {
+    const host = fakeHost({uid: 1000});
+    const escalated: Array<readonly string[]> = [];
+    host.escalate = (argv) => {
+      escalated.push(argv);
+      return 0;
+    };
+    assert.equal(runHardwareAccessCommand(['gpu-temps', subcommand], host), 0);
+    assert.deepEqual(escalated, [['gpu-temps', subcommand]]);
+    assert.deepEqual(host.calls, [], 'the unprivileged process must not mutate anything');
+  }
+});
+
+test('escalation can be declined or fail without mutating anything', () => {
+  const declined = fakeHost({uid: 1000});
+  declined.escalate = () => null;
+  assert.equal(runHardwareAccessCommand(['gpu-temps', 'enable'], declined), 1);
+  assert.deepEqual(declined.calls, []);
+
+  const failed = fakeHost({uid: 1000});
+  failed.escalate = () => 1;
+  assert.equal(runHardwareAccessCommand(['gpu-temps', 'enable'], failed), 1);
+  assert.deepEqual(failed.calls, []);
+});
+
+test('root runs the mutation directly instead of escalating', () => {
+  const host = fakeHost({uid: 0, files: {[RULE_SOURCE]: 'Managed by Rigscope: gpu rule'}});
+  let escalated = false;
+  host.escalate = () => {
+    escalated = true;
+    return 0;
+  };
+  assert.equal(runHardwareAccessCommand(['gpu-temps', 'enable'], host), 0);
+  assert.equal(escalated, false);
+});
+
 test('gpu-temps enable: creates group, grants sudo user, installs rule, reloads udev', () => {
   const host = fakeHost({files: {[RULE_SOURCE]: 'Managed by Rigscope: gpu rule'}});
   assert.equal(runHardwareAccessCommand(['gpu-temps', 'enable'], host), 0);

@@ -41,8 +41,8 @@ The trial uses separate data and stops with Ctrl+C.
 | Stop or start the installation | `rigscope stop` / `rigscope start` |
 | Open the dashboard through Tailscale HTTPS | [Set up remote access](docs/installation.md#access-from-another-computer) |
 | Monitor another machine | [Add a collector](docs/installation.md#add-machines-and-hubs) |
-| Enable junction/VRAM GPU temperatures | `sudo rigscope gpu-temps enable` |
-| Enable CPU package power (RAPL) | `sudo rigscope cpu-power enable` |
+| Enable junction/VRAM GPU temperatures | `rigscope gpu-temps enable` |
+| Enable CPU package power (RAPL) | `rigscope cpu-power enable` |
 | Install a downloaded package | [Install from an archive](docs/installation.md#install-from-an-archive) |
 
 Each collector connects outbound to up to eight hubs. Each hub has its own users,

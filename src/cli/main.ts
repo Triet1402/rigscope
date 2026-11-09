@@ -53,8 +53,8 @@ Usage: rigscope <command> [options]
               Reset a managed user password; coordinate stopping the hub
   uninstall   Remove services, command and all saved data (default)
   system      Optional system installation (plan first; apply requires sudo)
-  gpu-temps   NVIDIA junction/VRAM sensor access: status|enable|disable (enable needs sudo)
-  cpu-power   CPU package power (RAPL) access: status|enable|disable (enable needs sudo)
+  gpu-temps   NVIDIA junction/VRAM sensor access: status|enable|disable (prompts for sudo)
+  cpu-power   CPU package power (RAPL) access: status|enable|disable (prompts for sudo)
   config      Show the private configuration path
 
 Options:

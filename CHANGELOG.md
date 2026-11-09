@@ -1,5 +1,15 @@
 # Release notes
 
+## 0.2.3
+
+- `rigscope gpu-temps enable|disable` and `rigscope cpu-power enable|disable`
+  now request sudo themselves in an interactive terminal, so a new user runs
+  the command once instead of reconstructing a sudo invocation. `sudo` replaces
+  `PATH` with its own `secure_path`, which cannot find the installer's
+  `~/.local/bin` launcher, so the old `sudo rigscope …` hint failed with
+  `command not found`. Non-interactive runs change nothing and print
+  `sudo env "PATH=$PATH" rigscope …` to run in scripts.
+
 ## 0.2.2
 
 - Add `rigscope gpu-temps` and `rigscope cpu-power` commands
