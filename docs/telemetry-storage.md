@@ -24,10 +24,30 @@ inventory. Only telemetry history is ephemeral by default.
 | Routine telemetry writes | None | One transaction roughly every 5 seconds |
 | Deduplication | Per-run in-RAM interval set | `sample_receipts` with an independent 7-day TTL |
 
-The hub sends `delivery: "memory"` or `"durable"` in `welcome`. Collectors keep
-the same durable per-destination outbox, retry and in-flight behavior in both
-cases, so delayed acknowledgements do not move sustained writes from the hub to
-the collectors.
+The hub sends `delivery: "memory"` or `"durable"` in `welcome`: it describes the
+hub's choice, not the collector's. Collectors retry and hold in-flight batches
+the same way in both cases, so delayed acknowledgements do not move sustained
+writes from the hub to the collectors.
+
+## Collector delivery queue
+
+Unacknowledged samples wait in a bounded queue per destination. Its retention is
+independent of the hub's history mode.
+
+| | `COLLECTOR_QUEUE_MODE=memory` (default) | `COLLECTOR_QUEUE_MODE=durable` |
+| --- | --- | --- |
+| Pending samples | RAM | SQLite file per destination |
+| Routine collector disk writes | None | One insert, one in-flight update and one delete per sample |
+| Collector restart | Pending samples are lost | Everything unacknowledged is replayed |
+| Reported to the hub | `delivery.queueMode: "memory"` | `delivery.queueMode: "durable"` |
+
+Both modes share the same bounds (10 minutes and 64 MiB per destination, 256 MiB
+aggregate), the same live-slot priority, and the same coalesced `gap` records
+that tell the hub "samples were captured here and dropped" rather than "no
+samples were captured". Choose `durable` when a collector restart losing a few
+minutes of samples matters more than a database write per sample; `rigscope`
+reports `queueMode` under a connection's delivery facts so the difference is
+visible without guessing the configuration.
 
 ### Memory history defaults
 
@@ -95,9 +115,9 @@ explicitly constructs the store in raw mode (used by tests and measurement).
   also far below the collector's 30-second per-batch ack timeout. The
   collector reserves enough slots for a full flush window of live samples,
   plus two samples of headroom, and drains a waiting live
-  record as soon as an acknowledgement frees capacity. Its durable outbox
-  keeps the existing 10-minute/64 MiB per-destination bounds, so delayed acks
-  do not turn into sustained collector writes or silent data movement.
+  record as soon as an acknowledgement frees capacity. Its delivery queue keeps
+  the existing 10-minute/64 MiB per-destination bounds in either mode, so
+  delayed acks do not turn into unbounded queueing or silent data movement.
 
 Dedup receipts default to **7 days** and are independent of chart retention.
 Shortening raw/10-second history can no longer let a replayed sample recreate
@@ -133,11 +153,50 @@ A recording is an explicit, bounded capture and is separate from chart history.
 Recordings are not part of a database-only backup. If they matter, include the
 recordings directory in the same private backup set as the hub database.
 
+## The one-time machine-data transition
+
+The first `rigscope upgrade` (or `rigscope system upgrade --apply`) after the
+RAM-first release completes a one-time transition. It discards the previous
+design's on-disk machine-derived data once, explicitly authorized for this
+transition even for data an operator had opted into keeping:
+
+- hub database: telemetry rows and their summaries, `sample_receipts`, `gaps`,
+  `machine_latest`, `series`, `inventory`, and the machine-derived alert
+  history (`alert_incidents`, `alert_machine_progress`,
+  `alert_observed_resources`);
+- the collector's pre-RAM-first durable outbox tree.
+
+It always preserves accounts and sessions, collector enrollment and grants,
+settings, alert rules/jobs/webhook configuration, machine display names and
+tags (`machine_meta`), and recordings.
+
+The transition is recorded in a version-independent
+`machine-data-transition.json` marker in the installation's state root, written
+only after the activated release verified healthy. Every upgrade after that —
+including upgrades to future versions — reads the marker and preserves durable
+history and queues you opt back into, so `COLLECTOR_QUEUE_MODE=durable` and
+durable hub history survive later upgrades intact. An installation created by
+`install` (fresh or reset) is recorded as already transitioned.
+
+Until the marker is written the transition is reversible: the queue tree is
+renamed aside rather than deleted, and the upgrade's recorded pre-upgrade
+database copy restores the cleared rows if activation fails — even when the
+previous runtime could still read the schema, because the transition removed
+rows, not schema. A cleanup that cannot finish never fails an otherwise healthy
+upgrade: it is reported as a visible warning, the marker stays unwritten, and
+the next upgrade retries it. The upgrade output states exactly how much was
+discarded.
+
+If you skipped the transition window (for example after re-registering an
+installation with `rigscope install`) and want old rows gone, use the explicit
+reset below.
+
 ## Reset old history
 
 Switching an existing installation to memory mode does not read or rewrite old
-telemetry rows, but they still occupy the database. To discard them explicitly
-while preserving users, enrollment, settings and alert state:
+telemetry rows, but they still occupy the database if the one-time transition
+above has not run. To discard them explicitly while preserving users,
+enrollment, settings and alert state:
 
 ```sh
 rigscope stop
@@ -185,3 +244,15 @@ the history-array budget.
 These numbers are development-host measurements, not a promised multiplier or
 capacity guarantee. Re-run on the deployment host and payload before choosing
 retention or budgets.
+
+If an earlier transition attempt was interrupted, its staged collector queue is
+kept for manual recovery; a retry does not delete another attempt's copy. If a
+failed replacement runtime creates a new queue, rollback preserves that queue
+separately and restores the original pending queue. An existing malformed or
+unreadable transition marker blocks the upgrade before clearing data; repair
+the marker rather than deleting it, which would request another reset.
+
+Failure to write the completion marker is reported without failing a healthy
+upgrade and leaves the transition pending. Failure to remove a staged queue
+after the marker was written is also reported, but later upgrades still preserve
+new history because completion has already been recorded.

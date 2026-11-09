@@ -98,6 +98,14 @@ function DeliveryFacts({ view }: { view: CollectorConnectionView }) {
   const delivery = view.delivery;
   return (
     <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+      {delivery.queueMode === undefined ? null : (
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="text-xs text-muted-foreground">Backlog stored</dt>
+          <dd className="text-xs text-foreground">
+            {delivery.queueMode === "durable" ? "On disk, survives a restart" : "In RAM, lost on a restart"}
+          </dd>
+        </div>
+      )}
       <div className="flex items-baseline justify-between gap-3">
         <dt className="text-xs text-muted-foreground">Backlog records</dt>
         <dd className="tnum text-xs text-foreground">{delivery.pendingRecords}</dd>

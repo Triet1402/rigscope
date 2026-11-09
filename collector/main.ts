@@ -1,13 +1,15 @@
 /** Collector composition root: persistent installation, explicit enrollment,
  * one real (or explicit mock) sampling loop, independently filtered destinations.
- * Delivery is always the durable telemetry protocol with per-hub outboxes.
+ * Delivery is always the acknowledged telemetry protocol; unacknowledged samples
+ * wait in RAM by default and only in a per-hub SQLite outbox when
+ * COLLECTOR_QUEUE_MODE=durable.
  */
 import { hostname as systemHostname } from 'node:os';
 import { defaultStatePath, updateInstallation } from './local-state';
 import { enrollCollector } from './enroll';
 import { ConfigError, MOCK_HOSTNAME, parseCollectorConfig } from './config';
 import { generateRunId, readBootIdentity } from './identity';
-import { runDurableCollector } from './runtime';
+import { runCollectorLoop } from './runtime';
 
 function log(line: string): void {
   console.log(line);
@@ -82,7 +84,7 @@ async function run(): Promise<number> {
 
   // One durable runtime owns sampling, outboxes, sessions and shutdown; it
   // runs until a signal arrives and never resolves away from here.
-  await runDurableCollector(config, identity, process.env.COLLECTOR_STATE_FILE || defaultStatePath(), isMock);
+  await runCollectorLoop(config, identity, process.env.COLLECTOR_STATE_FILE || defaultStatePath(), isMock);
   return 0;
 }
 

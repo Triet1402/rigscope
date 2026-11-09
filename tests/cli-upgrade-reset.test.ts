@@ -125,6 +125,7 @@ test('rigscope upgrade resets an incompatible managed installation', {timeout: 1
 
     assert.equal(existsSync(join(dir, 'hub', 'telemetry.sqlite')), false, 'old history is removed');
     assert.equal(existsSync(join(dir, 'backups', 'old.sqlite')), false, 'old backups are removed');
+    assert.equal(existsSync(join(dir, 'machine-data-transition.json')), true, 'the reset records the one-time machine-data transition as complete');
 
     const collector = JSON.parse(readFileSync(join(dir, 'collector', 'state.json'), 'utf8'));
     assert.equal('version' in collector, false, 'collector state is canonical');
@@ -210,6 +211,7 @@ test('rigscope install replaces an incompatible runtime and removes owned units 
     assert.equal(existsSync(join(unitDir, combinedUnitName(dir))), false, 'the historical combined unit is removed');
     assert.ok(existsSync(join(unitDir, unitName(dir, 'hub'))));
     assert.ok(existsSync(join(unitDir, unitName(dir, 'collector'))));
+    assert.equal(existsSync(join(dir, 'machine-data-transition.json')), true, 'a fresh install records the one-time transition as complete');
 
     const config = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8'));
     assert.equal('version' in config, false);

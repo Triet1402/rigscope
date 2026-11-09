@@ -1,17 +1,18 @@
 /**
- * Shared disk budget across per-destination outboxes.
+ * Shared byte budget across per-destination delivery queues.
  *
- * Each destination owns an independent outbox (and therefore its own file),
- * but total disk use is bounded both logically (record JSON) and physically
- * (actual main+WAL bytes). The budget is deliberately tiny and synchronous:
- * outboxes register themselves when they open, report their logical and
- * physical byte counts, and enforcement asks the budget which outbox is
- * largest when either cap is exceeded.
+ * Each destination owns an independent queue, but total use is bounded both
+ * logically (record JSON) and, for durable queues, physically (actual
+ * main+WAL bytes). The budget is deliberately tiny and synchronous: queues
+ * register themselves when they open, report their logical and physical byte
+ * counts, and enforcement asks the budget which queue is largest when either
+ * cap is exceeded. A memory queue reports 0 physical bytes, so the physical
+ * path only ever selects durable victims.
  *
- * The type-only import of DestinationOutbox keeps outbox.ts <-> budget.ts a
- * type cycle with no runtime edge.
+ * The type-only import keeps outbox.ts <-> budget.ts a type cycle with no
+ * runtime edge.
  */
-import type { DestinationOutbox } from './outbox';
+import type { DestinationQueue } from './queue';
 
 /** Prototype cap for all destination outboxes on one collector. */
 export const DEFAULT_MAX_TOTAL_OUTBOX_BYTES = 256 * 1024 * 1024;
@@ -25,7 +26,7 @@ export const DEFAULT_MAX_TOTAL_OUTBOX_DISK_BYTES = 640 * 1024 * 1024;
 export class OutboxBudget {
   readonly maxTotalBytes: number;
   readonly maxTotalDiskBytes: number;
-  private readonly outboxes = new Set<DestinationOutbox>();
+  private readonly outboxes = new Set<DestinationQueue>();
 
   constructor(
     maxTotalBytes: number = DEFAULT_MAX_TOTAL_OUTBOX_BYTES,
@@ -41,12 +42,12 @@ export class OutboxBudget {
     this.maxTotalDiskBytes = maxTotalDiskBytes;
   }
 
-  register(outbox: DestinationOutbox): void {
+  register(outbox: DestinationQueue): void {
     this.outboxes.add(outbox);
     outbox.attachBudget(this);
   }
 
-  unregister(outbox: DestinationOutbox): void {
+  unregister(outbox: DestinationQueue): void {
     if (this.outboxes.delete(outbox)) outbox.attachBudget(null);
   }
 
@@ -77,8 +78,8 @@ export class OutboxBudget {
    * outboxes that have nothing evictable (for example only in-flight records)
    * without adding another public obligation to the budget.
    */
-  largest(exclude?: ReadonlySet<DestinationOutbox>): DestinationOutbox | null {
-    let largest: DestinationOutbox | null = null;
+  largest(exclude?: ReadonlySet<DestinationQueue>): DestinationQueue | null {
+    let largest: DestinationQueue | null = null;
     let largestBytes = -1;
     for (const outbox of this.outboxes) {
       if (exclude?.has(outbox)) continue;
@@ -91,13 +92,17 @@ export class OutboxBudget {
     return largest;
   }
 
-  /** Physical counterpart of `largest`, using measured main+WAL bytes. */
-  largestByDisk(exclude?: ReadonlySet<DestinationOutbox>): DestinationOutbox | null {
-    let largest: DestinationOutbox | null = null;
+  /**
+   * Physical counterpart of `largest`, using measured main+WAL bytes. A memory
+   * queue owns no file, so it is never a physical-budget victim.
+   */
+  largestByDisk(exclude?: ReadonlySet<DestinationQueue>): DestinationQueue | null {
+    let largest: DestinationQueue | null = null;
     let largestBytes = -1;
     for (const outbox of this.outboxes) {
       if (exclude?.has(outbox)) continue;
       const bytes = outbox.diskBytes();
+      if (bytes === 0) continue;
       if (bytes > largestBytes) {
         largest = outbox;
         largestBytes = bytes;

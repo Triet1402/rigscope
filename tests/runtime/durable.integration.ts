@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -52,6 +52,9 @@ test('packaged collector replays a retained canonical queue and reapplies local 
   t.after(() => live.close());
   const collector = startChild('retained-real-collector', ['dist/collector.cjs'], baseEnv('collector', {
     COLLECTOR_MODE: 'real', COLLECTOR_STATE_FILE: statePath, COLLECTOR_INTERVAL_MS: '500',
+    // Replaying a retained queue is the durable mode; the default RAM queue
+    // intentionally cannot recover another run's unacknowledged samples.
+    COLLECTOR_QUEUE_MODE: 'durable',
   }));
   t.after(() => collector.stop());
   const current = await waitMetrics(live);
@@ -116,6 +119,7 @@ test('packaged real collector: multi-hub live/history, process interests and dur
   t.after(() => { liveA.close(); liveB.close(); });
   const collector = startChild('durable-real-collector', ['dist/collector.cjs'], baseEnv('collector', {
     COLLECTOR_MODE: 'real', COLLECTOR_STATE_FILE: statePath, COLLECTOR_INTERVAL_MS: '500',
+    COLLECTOR_QUEUE_MODE: 'durable',
   }));
   t.after(() => collector.stop());
   const [firstA, firstB] = await Promise.all([waitMetrics(liveA), waitMetrics(liveB)]);
@@ -165,4 +169,48 @@ test('packaged real collector: multi-hub live/history, process interests and dur
   const restoredHistory = await fetch(restarted.baseUrl + historyUrl, { headers: restarted.browserHeaders });
   assert.equal(restoredHistory.status, 200);
   assert.ok((await restoredHistory.json() as { series: { points: unknown[] }[] }).series.some(s => s.points.length));
+});
+
+test('the default collector writes no queue file and reports its queue as memory', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'rigscope-ram-queue-runtime-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const creds = credential('ram-queue-collector', 'ram-queue-machine', 'public-ram-queue-token');
+  const hub = await startHub(t, { collectors: [creds], databasePath: join(dir, 'hub', 'telemetry.sqlite') });
+
+  const stateDir = join(dir, 'collector');
+  const live = new SseClient(hub.liveUrl, hub.browserHeaders);
+  t.after(() => live.close());
+  const collector = startChild('ram-queue-collector', ['dist/collector.cjs'], baseEnv('collector', {
+    COLLECTOR_MODE: 'mock',
+    COLLECTOR_STATE_FILE: join(stateDir, 'state.json'),
+    COLLECTOR_ID: 'ram-queue-collector',
+    COLLECTOR_HOSTNAME: 'ram-queue-machine',
+    COLLECTOR_HUBS: JSON.stringify([{ url: hub.collectorWsUrl, token: creds.token }]),
+    COLLECTOR_INTERVAL_MS: '250',
+  }));
+  t.after(() => collector.stop());
+
+  // Samples are being delivered, so the queue is in use, not merely unopened.
+  await waitMetrics(live);
+
+  // The whole point of the default: routine delivery creates no queue on disk.
+  assert.equal(existsSync(join(stateDir, 'outbox')), false, 'the default queue must not create a directory');
+  assert.deepEqual(
+    existsSync(stateDir) ? readdirSync(stateDir).filter((name) => name.startsWith('outbox')) : [],
+    [],
+    'no queue file or WAL may appear in the collector state directory',
+  );
+
+  // The hub must be able to tell an operator that this collector's pending
+  // samples do not survive a collector restart.
+  const deadline = Date.now() + 20_000;
+  while (Date.now() < deadline) {
+    const event = await live.next(Math.max(1, deadline - Date.now()));
+    const machine = parseHubSnapshot(JSON.parse(event.data)).machines[0];
+    if (machine?.delivery) {
+      assert.equal(machine.delivery.delivery.queueMode, 'memory');
+      return;
+    }
+  }
+  throw new Error('the collector never reported its delivery status');
 });

@@ -348,6 +348,19 @@ test('config: bounds the interval', () => {
   assert.equal(parseCollectorConfig({COLLECTOR_INTERVAL_MS: '100', COLLECTOR_HUBS: hubs}).intervalMs, 100);
 });
 
+test('config: the delivery queue defaults to RAM and durable is explicit', () => {
+  const hubs = envWithHubs()['COLLECTOR_HUBS']!;
+  assert.equal(parseCollectorConfig({COLLECTOR_HUBS: hubs}).queueMode, 'memory');
+  assert.equal(parseCollectorConfig({COLLECTOR_QUEUE_MODE: ' ', COLLECTOR_HUBS: hubs}).queueMode, 'memory');
+  assert.equal(parseCollectorConfig({COLLECTOR_QUEUE_MODE: 'durable', COLLECTOR_HUBS: hubs}).queueMode, 'durable');
+  assert.equal(parseCollectorConfig({COLLECTOR_QUEUE_MODE: ' durable ', COLLECTOR_HUBS: hubs}).queueMode, 'durable');
+  assert.equal(parseCollectorConfig({COLLECTOR_QUEUE_MODE: ' memory ', COLLECTOR_HUBS: hubs}).queueMode, 'memory');
+  assert.ok(
+    parseIssues({COLLECTOR_QUEUE_MODE: 'ephemeral', COLLECTOR_HUBS: hubs}).some((issue) =>
+      issue.includes('COLLECTOR_QUEUE_MODE')),
+  );
+});
+
 test('config: identifiers and hostname are bounded printable strings; blank strings fall back', () => {
   const hubs = envWithHubs()['COLLECTOR_HUBS']!;
   assert.ok(

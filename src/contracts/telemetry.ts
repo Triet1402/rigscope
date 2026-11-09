@@ -270,6 +270,13 @@ export type Inventory = {
 export type CollectionFailure = { metric: string; resourceId: string | null; reason: string };
 
 export type DeliveryStatus = {
+  /**
+   * How the collector retains samples it has not had acknowledged. `memory`
+   * (the collector default) loses them on a collector restart; `durable` keeps
+   * them in a per-destination SQLite outbox. Optional so a collector predating
+   * the mode still parses.
+   */
+  queueMode?: "memory" | "durable";
   pendingRecords: number;
   pendingBytes: number;
   oldestPendingCapturedAt: string | null;
@@ -672,14 +679,18 @@ export function parseInventory(value: unknown): Inventory {
 
 export function parseDeliveryStatus(value: unknown): DeliveryStatus {
   const d = obj(value, "delivery");
-  keys(d, ["pendingRecords", "pendingBytes", "oldestPendingCapturedAt", "inFlightRecords", "droppedRecords", "replaying", "lastAckAt"], "delivery");
+  keys(d, ["pendingRecords", "pendingBytes", "oldestPendingCapturedAt", "inFlightRecords", "droppedRecords", "replaying", "lastAckAt"], "delivery", ["queueMode"]);
   if (typeof d.replaying !== "boolean") throw new Error("invalid delivery: replaying");
+  if (d.queueMode !== undefined && d.queueMode !== "memory" && d.queueMode !== "durable") {
+    throw new Error(`invalid delivery: unexpected queueMode ${desc(d.queueMode)}`);
+  }
   const big = (v: unknown, f: string) => int(v, f, 0, Number.MAX_SAFE_INTEGER);
   return {
     pendingRecords: big(d.pendingRecords, "pendingRecords"), pendingBytes: big(d.pendingBytes, "pendingBytes"),
     oldestPendingCapturedAt: nullable(d.oldestPendingCapturedAt, (v) => ts(v, "oldestPendingCapturedAt")),
     inFlightRecords: big(d.inFlightRecords, "inFlightRecords"), droppedRecords: big(d.droppedRecords, "droppedRecords"),
     replaying: d.replaying, lastAckAt: nullable(d.lastAckAt, (v) => ts(v, "lastAckAt")),
+    ...(d.queueMode === undefined ? {} : { queueMode: d.queueMode as "memory" | "durable" }),
   };
 }
 

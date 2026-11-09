@@ -55,9 +55,26 @@ running, then checks:
 The health timeout is 25 seconds; change it with `--timeout SECONDS`. A failed
 start, migration or health check restores the previous runtime. It also restores
 the paired database backup if the old runtime cannot read the new schema,
-preserving the replaced database first.
+preserving the replaced database first — and additionally whenever the
+one-time machine-data transition described below had already discarded rows,
+even if the schema is compatible, because the loss there is the rows, not the
+schema.
 
-Credentials, collector identities and pending samples are retained.
+The first upgrade after the RAM-first release completes a one-time
+machine-data transition: it discards the previous design's on-disk machine
+history — telemetry rows and summaries, receipts, gaps, latest snapshots,
+inventory and machine-derived alert history — plus pre-RAM-first durable
+collector queues, once, even data previously opted into keeping. Machine
+display names/tags (`machine_meta`), accounts, sessions, enrollment and grants,
+settings, alert rules/jobs/webhook configuration and recordings are never
+discarded. A version-independent `machine-data-transition.json` marker in the
+state directory records completion; every later upgrade preserves durable
+history and queues you opt back into (`COLLECTOR_QUEUE_MODE=durable`, durable
+hub history). The upgrade output reports exactly what was discarded; a cleanup
+that cannot finish is shown as a warning and retried by the next upgrade
+instead of failing an otherwise healthy one. See
+[telemetry storage](telemetry-storage.md#the-one-time-machine-data-transition).
+Credentials and collector identities are always retained.
 `release-state.json` records which backup belongs to each runtime. Upgrading a
 stopped installation leaves it stopped and reports live checks as skipped.
 
@@ -67,7 +84,8 @@ release, stops the hub and collector completely, then removes
 the old configuration and history and installing the latest release fresh. Back
 up the state directory first if that history must be kept. There is no migration
 to the canonical format and no rollback to that old shape. Future upgrades that
-stay canonical keep accounts, history, settings and collector identities.
+stay canonical keep accounts, settings and collector identities, and — apart
+from the one-time transition above — durable history and queues.
 
 ### Roll back
 
@@ -192,7 +210,7 @@ The installer creates:
   hub.env                       private EnvironmentFile (0600, no secrets printed)
   collector.env                 private EnvironmentFile (0600)
   collector/collector.json      collector identity/enrollment (created by collector)
-  outbox/<sha256(url)[0:16]>/   per-destination collector outboxes
+  outbox/<sha256(url)[0:16]>/   per-destination queues, durable mode only
   backups/                      private pre-upgrade/pre-activation database copies
   install-state.json            canonical versions/schema backups, no credentials
   run/                          private runtime directory for a Unix socket
@@ -315,6 +333,9 @@ COLLECTOR_ENROLL_URL=ws://127.0.0.1:8081/api/collector/connect
 COLLECTOR_ENROLL_TOKEN=<one-use grant>
 COLLECTOR_MODE=real
 COLLECTOR_STATE_FILE=/home/operator/.local/state/rigscope/collector/collector.json
+# Optional: keep unacknowledged samples in a per-hub SQLite outbox so they
+# survive a collector restart. Default is RAM (no queue written to disk).
+# COLLECTOR_QUEUE_MODE=durable
 ```
 
 Remove the one-use grant after enrollment and start or restart the collector. The
@@ -422,9 +443,11 @@ The database backup is not the whole installation. A restorable set is:
    collectors) and the private hub environment file. These
    contain credentials: protect and copy them only between private locations.
 3. Collector identity/enrollment: `collector/collector.json`.
-4. Collector outboxes: `outbox/<destination-hash>/outbox.sqlite` per hub URL,
-   which may contain unacknowledged telemetry. Replay is at-least-once; the hub
-   deduplicates by collector/run/sequence.
+4. Collector queues, `outbox/<destination-hash>/outbox.sqlite` per hub URL, exist
+   only under `COLLECTOR_QUEUE_MODE=durable` and may contain unacknowledged
+   telemetry. Replay is at-least-once; the hub deduplicates by
+   collector/run/sequence. The default RAM queue holds nothing on disk, so there
+   is nothing to back up and nothing to restore.
 5. Optional operational metadata: `install-state.json`, units and the built
    release. Keep the release matching the database schema for rollback.
 6. Explicit recordings: the private `HUB_RECORDINGS_DIR` (default
@@ -482,7 +505,10 @@ use the component controls in [System installation](system-installation.md#syste
 The collector uses only `/api/collector/connect` and the canonical record shape.
 There is no old-endpoint normalization, outbox migration or old-peer payload
 conversion. Reset unfinished installations and re-enroll their collectors;
-canonical upgrades retain their identities, credentials and pending samples.
+canonical upgrades retain their identities and credentials. Pending samples are
+retained by every upgrade after the one-time machine-data transition, which
+discards pre-RAM-first durable queues once; from then on
+`COLLECTOR_QUEUE_MODE=durable` content survives upgrades.
 
 ## Measurement
 
@@ -549,10 +575,11 @@ absolute regular file; use the release's `node_modules` installed with
 ## Storage budgets and pressure recovery
 
 Each Collector Hub connection owns policy filtering, cadence, inventory and its
-durable outbox submission. On restart, recovered metrics are sanitized with the
-current sharing policy before the connection starts; capture-time cadence is not
-reapplied to retained records. Endpoint upgrade recovery and aggregate budgets
-continue to use the existing outboxes. Hub startup restores stored telemetry,
+delivery queue submission. Under `COLLECTOR_QUEUE_MODE=durable`, recovered metrics
+are sanitized with the current sharing policy before the connection starts;
+capture-time cadence is not reapplied to retained records. Endpoint upgrade
+recovery and aggregate budgets continue to use the existing queues. The default
+RAM queue starts empty, so its bounds are enforced against RAM rather than disk. Hub startup restores stored telemetry,
 cadence, inventory and metadata through Sample ingestion while retaining a
 disconnected state until an authenticated Collector reconnects.
 

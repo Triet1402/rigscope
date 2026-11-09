@@ -1,11 +1,14 @@
 /**
- * Durable per-destination outbox for telemetry.
+ * Opt-in durable per-destination outbox for telemetry
+ * (`COLLECTOR_QUEUE_MODE=durable`; the collector default is the RAM-only
+ * `MemoryDestinationQueue`).
  *
  * One SQLite file per destination (`<dir>/outbox.sqlite`, with the directory
  * derived from the destination URL by `outboxDirFor`). Records are stored as
  * their wire JSON plus a small amount of bookkeeping so a restart can replay
  * everything that was not acknowledged, including records from earlier
- * collector runs (they carry their own runId/sequence).
+ * collector runs (they carry their own runId/sequence). That durability is what
+ * costs a write per sample; the RAM queue gives it up and writes nothing.
  *
  * Delivery state has two levels: `pending` and `inflight`. In-flight records
  * are never evicted; on open every in-flight record is turned back into
@@ -41,6 +44,7 @@ import type {
   TelemetryRecord,
 } from '../../src/contracts';
 import { OutboxBudget } from './budget';
+import type { DestinationQueue, QueueMode } from './queue';
 
 export type OutboxLimits = {
   /** Maximum age of a pending record before it is evicted (default 10 min). */
@@ -197,7 +201,9 @@ function asRow(value: unknown): Row | null {
   };
 }
 
-export class DestinationOutbox {
+export class DestinationOutbox implements DestinationQueue {
+  readonly queueMode: QueueMode = 'durable';
+
   private readonly db: DatabaseSync;
   private readonly limits: OutboxLimits;
   private budget: OutboxBudget | null;
@@ -496,6 +502,7 @@ export class DestinationOutbox {
         droppedRecords: this.droppedSinceOpen,
         replaying: false,
         lastAckAt: this.lastAckAt,
+        queueMode: this.queueMode,
       };
     }
     const pending = this.db
@@ -521,6 +528,7 @@ export class DestinationOutbox {
       droppedRecords: this.droppedSinceOpen,
       replaying: pending.length > 0,
       lastAckAt: this.lastAckAt,
+      queueMode: this.queueMode,
     };
   }
 
@@ -757,12 +765,19 @@ export class DestinationOutbox {
     if (budget === null) return true;
     if (budget.diskOverBy() <= 0) return true;
     budget.checkpointAll();
-    const tried = new Set<DestinationOutbox>();
+    const tried = new Set<DestinationQueue>();
     let guard = 0;
     while (budget.diskOverBy() > 0 && guard < 256) {
       guard += 1;
-      const target = budget.largestByDisk(tried);
-      if (target === null) break;
+      const candidate = budget.largestByDisk(tried);
+      if (candidate === null) break;
+      // Only a durable outbox has pages to reclaim; a memory queue reports no
+      // physical bytes and is never selected here.
+      if (!(candidate instanceof DestinationOutbox)) {
+        tried.add(candidate);
+        continue;
+      }
+      const target = candidate;
       if (!target.canReclaimPhysical()) {
         tried.add(target);
         continue;
@@ -957,7 +972,7 @@ export class DestinationOutbox {
   private enforceBudget(): void {
     const budget = this.budget;
     if (budget === null) return;
-    const tried = new Set<DestinationOutbox>();
+    const tried = new Set<DestinationQueue>();
     let guard = 0;
     while (budget.overBy() > 0 && guard < 10_000) {
       guard += 1;
@@ -970,7 +985,7 @@ export class DestinationOutbox {
   }
 
   /** Internal: the budget's victim sheds its oldest pending metrics records. */
-  private evictForBudget(reason: GapReason): number {
+  evictForBudget(reason: GapReason): number {
     const rows = this.pendingMetrics(16);
     if (rows.length === 0) return 0;
     const evicted = this.evictRows(rows, reason);

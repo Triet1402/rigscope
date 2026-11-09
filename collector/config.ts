@@ -15,6 +15,7 @@
  */
 
 import { SHARING_KEYS, type SharingInput } from './destinations/policy';
+import { DEFAULT_COLLECTOR_QUEUE_MODE, type QueueMode } from './destinations/queue';
 
 export class ConfigError extends Error {
   readonly issues: readonly string[];
@@ -72,6 +73,12 @@ export type CollectorConfig = {
   hostnameIsMockDefault: boolean;
   intervalMs: number;
   destinations: readonly DestinationEndpoint[];
+  /**
+   * How unacknowledged samples are retained: `memory` (default) keeps the
+   * pending queue in RAM and writes nothing to disk; `durable` keeps the
+   * per-destination SQLite outbox that survives a collector restart.
+   */
+  queueMode: QueueMode;
 };
 
 function requirePrintable(value: unknown, label: string, issues: string[], maxLength: number): void {
@@ -288,6 +295,25 @@ function parseDestinations(env: EnvLike, issues: string[], destinations: Destina
   }
 }
 
+const QUEUE_MODES: readonly QueueMode[] = ['memory', 'durable'];
+
+/**
+ * Parse `COLLECTOR_QUEUE_MODE` with the collector's own rules. Exported so the
+ * launcher validates and forwards the same accepted spellings (notably trimmed
+ * input) instead of guessing at the raw environment value.
+ */
+export function parseQueueMode(env: EnvLike, issues: string[]): QueueMode {
+  const raw = env['COLLECTOR_QUEUE_MODE']?.trim();
+  if (raw === undefined || raw === '') {
+    return DEFAULT_COLLECTOR_QUEUE_MODE;
+  }
+  if (!QUEUE_MODES.includes(raw as QueueMode)) {
+    issues.push(`COLLECTOR_QUEUE_MODE must be one of ${QUEUE_MODES.join(' or ')}`);
+    return DEFAULT_COLLECTOR_QUEUE_MODE;
+  }
+  return raw as QueueMode;
+}
+
 function parseIntervalMs(env: EnvLike, issues: string[]): number {
   const raw = env['COLLECTOR_INTERVAL_MS']?.trim();
   if (raw === undefined || raw === '') {
@@ -327,6 +353,7 @@ export function parseCollectorConfig(env: EnvLike): CollectorConfig {
 
   const destinations: DestinationEndpoint[] = [];
   const intervalMs = parseIntervalMs(env, issues);
+  const queueMode = parseQueueMode(env, issues);
   parseDestinations(env, issues, destinations);
 
   if (issues.length > 0) {
@@ -339,5 +366,6 @@ export function parseCollectorConfig(env: EnvLike): CollectorConfig {
     hostnameIsMockDefault: rawHostname === '',
     intervalMs,
     destinations,
+    queueMode,
   };
 }

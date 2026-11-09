@@ -1,7 +1,7 @@
 /**
  * Per-destination WebSocket session for the durable telemetry protocol.
  *
- * One instance owns exactly one socket and one durable outbox. The session:
+ * One instance owns exactly one socket and one delivery queue. The session:
  * - sends a hello immediately on open and requires a welcome as the first
  *   inbound message (a hub that answers with something unrecognized is
  *   reported once and then retried with backoff while the outbox keeps
@@ -51,7 +51,7 @@ import type {
 import type { CollectorIdentity } from '../identity';
 import { nextReconnectDelayMs } from './backoff';
 import type { BackoffOptions } from './backoff';
-import type { DestinationOutbox } from './outbox';
+import type { DestinationQueue } from './queue';
 
 /** Welcome (and handshake) deadline for one destination. */
 export const DEFAULT_WELCOME_TIMEOUT_MS = 10_000;
@@ -124,7 +124,7 @@ export type DestinationSessionOptions = {
   /** Bearer token; only ever placed into the Authorization header. */
   token: string;
   identity: CollectorIdentity;
-  outbox: DestinationOutbox;
+  outbox: DestinationQueue;
   /** Nominal delivery cadence advertised in hello (milliseconds). */
   expectedIntervalMs: number;
   capabilities: CapabilityName[];
@@ -227,7 +227,7 @@ export class DestinationSession {
   private readonly url: string;
   private readonly token: string;
   private readonly identity: CollectorIdentity;
-  private readonly outbox: DestinationOutbox;
+  private readonly outbox: DestinationQueue;
   private readonly expectedIntervalMs: number;
   private readonly capabilities: CapabilityName[];
   private readonly socketFactory: SocketFactory;

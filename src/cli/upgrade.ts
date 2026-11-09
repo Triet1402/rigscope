@@ -5,10 +5,16 @@
  *   1. stage and inspect the new package without touching the active runtime;
  *   2. snapshot and stop active components, then hold all runtime leases;
  *   3. copy the database and record which runtime that copy belongs to;
- *   4. activate, start, then verify the expected version, database schema and
- *      previously active components within one bounded deadline;
- *   5. on failure restore the previous runtime and, only when the old runtime
- *      cannot read the new schema, the matching pre-upgrade database copy.
+ *   4. with components stopped and leases held, run the one-time machine-data
+ *      transition (see ./machine-transition) if it has not already completed;
+ *   5. activate, start, then verify the expected version, database schema and
+ *      previously active components within one bounded deadline, and only then
+ *      mark the transition complete;
+ *   6. on failure restore the previous runtime, undo the transition — rename
+ *      the staged collector queue back and restore the pre-upgrade database
+ *      copy even when the previous runtime could still read the schema,
+ *      because the transition removed rows, not schema — and when the old
+ *      runtime cannot read the new schema anyway, restore the copy there too.
  *
  * A successful systemctl call or a generic HTTP 200 is never the final check.
  * The database copy replaces a schema-incompatible database only through the
@@ -17,8 +23,16 @@
 
 import { existsSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { backupDatabase, inspectDatabase, restoreDatabase } from '../operations/database';
+import { backupDatabase, clearMachineHistory, inspectDatabase, restoreDatabase } from '../operations/database';
 import { OperationsError, assertNoActiveHubLock, ensurePrivateDir, errorMessage, timestampSlug } from '../operations/fs';
+import {
+  completeMachineDataCleanup,
+  performMachineDataCleanup,
+  undoMachineDataCleanup,
+  type MachineDataCleanup,
+  type MachineDataPaths,
+  type MachineDataReport,
+} from './machine-transition';
 import { acquireProcessLease } from '../runtime/process-lease';
 import { componentEnabled, enabledComponents, readPrivate, readSetup, type Component, type Setup } from './config';
 import { healthTarget, waitForHealth, type HealthTarget, type WaitForHealthResult } from './health';
@@ -67,6 +81,7 @@ export type UpgradeDependencies = {
   restore?: typeof restoreDatabase;
   inspect?: typeof inspectDatabase;
   inspectRuntime?: typeof inspectDatabaseWithRuntime;
+  clearHistory?: typeof clearMachineHistory;
   waitHealth?: typeof waitForHealth;
   activate?: typeof activatePackage;
   swap?: typeof swapRuntimes;
@@ -87,6 +102,15 @@ export type UpgradeReport = {
   schemaVersion: number | null;
   serviceRestarted: boolean;
   verification: Verification;
+  /**
+   * Result of the one-time machine-data transition. Only the first upgrade
+   * after the RAM-first release performs it; later upgrades report
+   * `transitioned: false` and preserve durable history and queues. Accounts,
+   * enrollment, settings, alert rules, machine names/tags and recordings are
+   * always preserved. A failed activation restores the cleared rows and the
+   * staged queue, so this describes a completed transition.
+   */
+  machineHistory: MachineDataReport;
 };
 
 export type RollbackReport = {
@@ -108,6 +132,7 @@ function dependencies(deps: UpgradeDependencies = {}) {
     restore: deps.restore ?? restoreDatabase,
     inspect: deps.inspect ?? inspectDatabase,
     inspectRuntime: deps.inspectRuntime ?? inspectDatabaseWithRuntime,
+    clearHistory: deps.clearHistory ?? clearMachineHistory,
     waitHealth: deps.waitHealth ?? waitForHealth,
     activate: deps.activate ?? activatePackage,
     swap: deps.swap ?? swapRuntimes,
@@ -215,6 +240,11 @@ function assertComponentsStopped(
       throw new OperationsError('service-active', `service ${status.unit} is still active after stop`);
     }
   }
+}
+
+/** Where the user installation keeps the data the one-time transition targets. */
+function machineDataPaths(dir: string): MachineDataPaths {
+  return { database: databasePath(dir), queueTree: join(dir, 'collector', 'outbox') };
 }
 
 function collectorStateCheck(dir: string): void {
@@ -372,6 +402,7 @@ async function recoverActivation(options: {
   config: Setup;
   previousVersion: string;
   backupPath: string | null;
+  machineData: MachineDataCleanup | null;
   running: Component[];
   startup: Partial<Record<Component, boolean>>;
   activated: boolean;
@@ -389,6 +420,14 @@ async function recoverActivation(options: {
     assertComponentsStopped(options.dir, options.deps, COMPONENT_LIST);
     if (existsSync(databasePath(options.dir))) assertNoActiveHubLock(databasePath(options.dir));
     releaseLocks = acquireInstallLocks(options.dir, options.deps.acquireLease);
+    // Undo the one-time transition while its effects are still reversible:
+    // the staged queue tree renames back, and the cleared rows come back with
+    // the pre-upgrade database copy below. A pending cleanup warning travels
+    // into the failure message so the operator sees it even here.
+    messages.push(...undoMachineDataCleanup(machineDataPaths(options.dir), options.machineData?.stagedQueues ?? null));
+    if (options.machineData?.report.warning) {
+      messages.push(`machine-data cleanup was incomplete: ${options.machineData.report.warning}`);
+    }
     if (options.activated) {
       try {
         if (existsSync(runtime)) options.deps.swap(options.dir);
@@ -403,10 +442,14 @@ async function recoverActivation(options: {
       }
     }
     const path = databasePath(options.dir);
+    // The transition cleared rows from this database. Its pre-upgrade copy is
+    // the only source for them, so restore it even when the previous runtime
+    // could still read the schema: the loss here is the rows, not the schema.
+    const transitionClearedHistory = options.machineData?.databaseCleared === true;
     if (options.backupPath !== null && existsSync(options.backupPath) && existsSync(path)) {
       try {
         const old = options.deps.inspectRuntime(join(options.dir, 'runtime'), path);
-        if (!old.integrityOk || old.newerSchema || old.ledgerProblem !== null) {
+        if (transitionClearedHistory || !old.integrityOk || old.newerSchema || old.ledgerProblem !== null) {
           const restored = await options.deps.restore({
             input: options.backupPath,
             database: path,
@@ -520,6 +563,7 @@ export async function upgradeInstallation(
   const releaseOperation = deps.acquireLease(join(options.dir, 'run', 'operation.lock'));
   let backupPath: string | null = null;
   let activated = false;
+  let machineData: MachineDataCleanup | null = null;
   try {
     stopComponents(options.dir, deps, running);
     assertComponentsStopped(options.dir, deps, running);
@@ -549,6 +593,14 @@ export async function upgradeInstallation(
     }
     deps.activate(options.dir, stage);
     activated = true;
+    // The one-time machine-data transition runs with the old components stopped
+    // and every lease still held: clearing the hub database is only safe while
+    // no hub owns it, and a failed activation must still be able to restore.
+    // The transition is reversible here — the queue tree is only renamed aside
+    // and the pre-upgrade database copy above can restore the cleared rows.
+    machineData = performMachineDataCleanup(options.dir, machineDataPaths(options.dir), deps.now, {
+      clear: deps.clearHistory,
+    });
     releaseLocks();
     releaseLocks = null;
     for (const component of running) deps.service.start(options.dir, component);
@@ -589,6 +641,10 @@ export async function upgradeInstallation(
         activatedAt: now,
       },
     });
+    // Healthy and durable: the transition may now be recorded as complete.
+    // An incomplete cleanup leaves the marker unwritten so the next upgrade
+    // retries it, and keeps the staged queue copy for inspection.
+    completeMachineDataCleanup(options.dir, machineData, expectedVersion);
     return {
       version: expectedVersion,
       previousVersion: currentVersion,
@@ -596,6 +652,7 @@ export async function upgradeInstallation(
       schemaVersion: verification.database?.schemaVersion ?? expectedSchema,
       serviceRestarted: running.length > 0,
       verification,
+      machineHistory: machineData.report,
     };
   } catch (error) {
     releaseLocks?.();
@@ -605,6 +662,7 @@ export async function upgradeInstallation(
       config,
       previousVersion: currentVersion,
       backupPath,
+      machineData,
       running,
       startup: snapshot.enabled,
       activated,

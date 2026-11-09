@@ -151,6 +151,7 @@ function delivery(): StatusMessage {
     type: "status",
     capturedAt: RECEIVED,
     delivery: {
+      queueMode: "memory",
       pendingRecords: 3,
       pendingBytes: 1500,
       oldestPendingCapturedAt: RECEIVED,
@@ -396,6 +397,9 @@ test('connections view contains only safe collector-facing facts', () => {
   assert.equal(view.delivery?.inFlightRecords, 1);
   assert.equal(view.delivery?.droppedRecords, 2);
   assert.equal(view.delivery?.replaying, true);
+  // The queue mode must reach the view: it is what tells an operator whether a
+  // reported backlog survives a collector restart.
+  assert.equal(view.delivery?.queueMode, "memory");
   assert.equal(view.delivery?.lastAckAt, RECEIVED);
   assert.equal(view.deliveryCapturedAt, RECEIVED);
   assert.deepEqual(view.failures, [

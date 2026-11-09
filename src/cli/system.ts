@@ -47,6 +47,18 @@ import { hashPassword } from '../hub/auth/password';
 import { enrollCollector } from '../../collector/enroll';
 import { CONNECT_PATH, validateHubUrl } from '../../collector/config';
 import { parseHubConfig, parsePublicOrigin } from '../hub/config';
+import {
+  completeMachineDataCleanup,
+  describeMachineDataReport,
+  machineDataKeptNote,
+  performMachineDataCleanup,
+  readMachineDataTransition,
+  recordMachineDataTransition,
+  undoMachineDataCleanup,
+  type MachineDataCleanup,
+  type MachineDataPaths,
+  type MachineDataReport,
+} from './machine-transition';
 
 /**
  * The system installation state has exactly one on-disk shape. Hub and
@@ -1060,6 +1072,10 @@ function collectorEnvTemplate(): string {
     "# COLLECTOR_ENROLL_URL=ws://127.0.0.1:8081/api/collector/connect",
     "# COLLECTOR_ENROLL_TOKEN=<one-use grant>",
     "# COLLECTOR_MODE=real",
+    "# Unacknowledged samples wait in RAM by default: no queue is written to disk",
+    "# and a collector restart loses what was never acknowledged. Set this to durable",
+    "# to keep them in a per-hub SQLite outbox across collector restarts.",
+    "# COLLECTOR_QUEUE_MODE=durable",
     "",
   ].join("\n");
 }
@@ -1125,6 +1141,8 @@ export type SystemReport = {
   current?: string | null;
   previous?: string | null;
   backupPath?: string | null;
+  /** Result of the one-time machine-data transition; upgrade only. */
+  machineHistory?: MachineDataReport;
   state?: SystemInstallState | null;
   warnings?: string[];
 };
@@ -2323,8 +2341,9 @@ async function performAdoptionCopyAsync(options: {
       sha256: sha256File(targetCollector),
       bytes: statSync(targetCollector).size,
     });
-    const outbox = join(source, "collector", "outbox");
-    if (existsSync(outbox)) copyAdoptedTree(outbox, join(paths.stateDir, "collector", "outbox"), copy.record.files);
+    // A RAM delivery queue dies with the old process, and the adopted
+    // collector will not read a queue file it no longer writes: an inherited
+    // durable outbox would only import stale samples, so it is not copied.
   }
   const enrollment = join(source, "hub", "enrollment.json");
   if (role !== "collector" && existsSync(enrollment)) {
@@ -2587,12 +2606,19 @@ async function recoverFailedUpgrade(options: {
   oldPrevious: string | null;
   beforeSchema: number | null;
   backupPath: string | null;
+  machineData: MachineDataCleanup | null;
   host: SystemHost;
   activeComponents: Component[];
   units: string[];
 }): Promise<void> {
   stopUnits(options.host, options.units);
   assertDirectoryStopped(options.paths.stateDir);
+  // Undo the one-time transition while it is still reversible: the staged
+  // collector queue renames back, and the cleared rows return with the
+  // pre-upgrade database copy below.
+  for (const message of undoMachineDataCleanup(systemMachineDataPaths(options.paths), options.machineData?.stagedQueues ?? null)) {
+    console.warn(`rigscope system upgrade recovery: ${message}`);
+  }
   replaceSymlink(join(options.paths.prefix, "current"), options.oldCurrent, options.host);
   if (options.oldPrevious === null) removeSymlink(join(options.paths.prefix, "previous"));
   else replaceSymlink(join(options.paths.prefix, "previous"), options.oldPrevious, options.host);
@@ -2603,10 +2629,14 @@ async function recoverFailedUpgrade(options: {
   } catch {
     afterSchema = null;
   }
+  // Restore when the schema outran the previous runtime (the classic failed
+  // migration) or when the transition cleared rows: that loss is the rows, not
+  // the schema, so an unchanged schema is still a database that must come back.
   if (
     options.backupPath !== null &&
     existsSync(options.backupPath) &&
-    (afterSchema === null || options.beforeSchema === null || afterSchema > options.beforeSchema)
+    (afterSchema === null || options.beforeSchema === null || afterSchema > options.beforeSchema ||
+      options.machineData?.databaseCleared === true)
   ) {
     await backupDatabase(database, join(options.paths.stateDir, "backups", `failed-upgrade-${newestTimestamp()}.sqlite`), options.host);
     replaceDatabaseFromBackup(options.backupPath, database, null, options.host);
@@ -2925,6 +2955,11 @@ async function installSystemUnlocked(options: SystemInstallOptions): Promise<Sys
         await verifySystemHealth(paths, state, host, options.startupTimeoutMs ?? 20_000, started);
       }
     }
+    // A system install — fresh or a reset of unfinished state — has no legacy
+    // machine data left to transition. Mark the one-time transition complete
+    // so future upgrades preserve durable history and queues the operator may
+    // opt into later, instead of treating this installation as un-transitioned.
+    recordMachineDataTransition(paths.stateDir, release.version, (path, content) => atomicWrite(path, content, 0o600));
     return {
       operation: "install",
       ok: true,
@@ -3321,7 +3356,7 @@ export function disableSystem(options: SystemDisableOptions): SystemReport {
     accounts: state.accounts,
     commands: [`systemctl stop ${unitFor(component)}`, `systemctl disable ${unitFor(component)}`],
     files: [],
-    notes: ["Settings, credentials, history and outboxes are retained while the component is disabled."],
+    notes: ["Settings, credentials and stored history are retained while the component is disabled; unacknowledged samples held in the collector's RAM delivery queue drain with the process."],
   };
   if (options.apply !== true) return { operation: "disable", ok: true, apply: false, message: "plan only", plan };
   assertApply(host);
@@ -3449,6 +3484,11 @@ export type SystemUpgradeOptions = SystemLifecycleOptions & {
   now?: () => number;
 };
 
+/** Where the system installation keeps the data the one-time transition targets. */
+function systemMachineDataPaths(paths: SystemPaths): MachineDataPaths {
+  return { database: hubDatabasePath(paths), queueTree: join(paths.stateDir, "collector", "outbox") };
+}
+
 async function upgradeSystemUnlocked(options: SystemUpgradeOptions): Promise<SystemReport> {
   const host = options.host ?? createSystemHost();
   const now = options.now ?? Date.now;
@@ -3514,6 +3554,7 @@ async function upgradeSystemUnlocked(options: SystemUpgradeOptions): Promise<Sys
   if (state === null || !state.active) throw new SystemError("not-installed", "no active system installation; run install first");
   const activeComponents = COMPONENTS.filter((component) => systemdActive(host, unitFor(component)));
   const activeUnits = activeComponents.map(unitFor);
+  const transitionPending = readMachineDataTransition(paths.stateDir) === null;
   const plan: SystemPlan = {
     operation: "upgrade",
     apply: options.apply === true,
@@ -3521,12 +3562,31 @@ async function upgradeSystemUnlocked(options: SystemUpgradeOptions): Promise<Sys
     components: { hub: state.components.hub.enabled, collector: state.components.collector.enabled },
     paths,
     accounts: state.accounts,
-    commands: ["stage new release", ...activeUnits.map((unit) => `systemctl stop ${unit}`), "backup database", "switch current", ...activeUnits.map((unit) => `systemctl start ${unit}`)],
-    files: [{ path: join(paths.stateDir, "backups"), mode: "0700", purpose: "pre-upgrade database backup" }],
+    commands: [
+      "stage new release",
+      ...activeUnits.map((unit) => `systemctl stop ${unit}`),
+      "backup database",
+      ...(transitionPending ? ["discard legacy machine data and collector queues once (irreversible after success)"] : []),
+      "switch current",
+      ...activeUnits.map((unit) => `systemctl start ${unit}`),
+    ],
+    files: [
+      { path: join(paths.stateDir, "backups"), mode: "0700", purpose: "pre-upgrade database backup" },
+      ...(transitionPending
+        ? [{ path: join(paths.stateDir, "machine-data-transition.json"), mode: "0600", purpose: "written once after the transition completes" }]
+        : []),
+    ],
     notes: [
       "Staging happens before any service is stopped.",
       "The exact active component set is restored; --start does not start a component that was stopped.",
       "A failed post-upgrade start restores the previous release and matching database backup.",
+      ...(transitionPending
+        ? [
+            "This upgrade completes the one-time RAM-first machine-data transition: telemetry rows, summaries, receipts, gaps, latest snapshots, inventory and machine-derived alert history are discarded, plus the pre-RAM-first durable collector queue. The transition's database copy restores the rows and the staged queue is renamed back if activation fails.",
+            `The transition always keeps ${machineDataKeptNote()}.`,
+            "Later upgrades keep the marker and preserve durable history and queues.",
+          ]
+        : ["The one-time machine-data transition already completed; durable history and collector queues are preserved."]),
     ],
   };
   if (options.apply !== true) return { operation: "upgrade", ok: true, apply: false, message: "plan only", plan };
@@ -3555,6 +3615,7 @@ async function upgradeSystemUnlocked(options: SystemUpgradeOptions): Promise<Sys
     let backupPath: string | null = null;
     let beforeSchema: number | null = null;
     let release: ReleaseStage | null = null;
+    let machineData: MachineDataCleanup | null = null;
     try {
       stopUnits(host, activeUnits);
       assertDirectoryStopped(paths.stateDir);
@@ -3589,6 +3650,12 @@ async function upgradeSystemUnlocked(options: SystemUpgradeOptions): Promise<Sys
         };
       }
       writeSystemState(paths, state);
+      // The one-time machine-data transition runs with every owned unit stopped
+      // and its lock verified dead: clearing the hub database is only safe while
+      // no hub owns it. The change is reversible — the queue tree is renamed
+      // aside and the pre-upgrade copy above restores cleared rows — until the
+      // activated release verifies healthy and the transition is marked complete.
+      machineData = performMachineDataCleanup(paths.stateDir, systemMachineDataPaths(paths), now);
       if (activeComponents.length > 0) {
         startUnits(host, activeUnits);
         await verifySystemHealth(paths,state,host,options.startupTimeoutMs ?? 20_000, activeComponents);
@@ -3601,6 +3668,7 @@ async function upgradeSystemUnlocked(options: SystemUpgradeOptions): Promise<Sys
         oldPrevious,
         beforeSchema,
         backupPath,
+        machineData,
         host,
         activeComponents,
         units: activeUnits,
@@ -3608,6 +3676,13 @@ async function upgradeSystemUnlocked(options: SystemUpgradeOptions): Promise<Sys
       throw error;
     }
     const upgraded = release!;
+    // Healthy: record the transition marker and discard the staged queue copy.
+    // An incomplete cleanup keeps the marker unwritten so a later upgrade
+    // retries it, and reports the warning instead of failing this upgrade.
+    if (machineData !== null) {
+      completeMachineDataCleanup(paths.stateDir, machineData, upgraded.version, (path, content) => atomicWrite(path, content, 0o600));
+    }
+    const machineHistory = machineData?.report;
     return {
       operation: "upgrade",
       ok: true,
@@ -3617,6 +3692,7 @@ async function upgradeSystemUnlocked(options: SystemUpgradeOptions): Promise<Sys
       current: upgraded.releaseDir,
       previous: oldCurrent,
       backupPath,
+      ...(machineHistory ? { machineHistory } : {}),
       state,
     };
   } finally {
@@ -4192,6 +4268,19 @@ function printMutationReport(report: SystemReport): void {
 }
 
 /**
+ * Shared human summary of the one-time machine-data transition for the system
+ * upgrade output; the user path prints the same text from main.ts. The warning
+ * must be visible: the upgrade still succeeded, but the next upgrade retries
+ * the incomplete cleanup.
+ */
+function printMachineDataOutcome(machineHistory: MachineDataReport | undefined): void {
+  if (machineHistory === undefined) return;
+  const described = describeMachineDataReport(machineHistory);
+  console.log(described.summary);
+  if (described.warning) console.log(`Warning: ${described.warning}`);
+}
+
+/**
  * CLI hook used by `src/cli/main.ts` and the standalone `dist/system.cjs`
  * entry. All mutations require `--apply` and root; this function never calls
  * `systemctl --user` and never touches the caller's home directory.
@@ -4347,6 +4436,7 @@ export async function runSystemCommand(argv: string[]): Promise<number> {
         // like install, instead of hiding it behind the generic message.
         printMutationReport(report);
         console.log(`Backup: ${report.backupPath ?? "none"}`);
+        printMachineDataOutcome(report.machineHistory);
       }
       return 0;
     }

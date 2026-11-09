@@ -88,9 +88,18 @@ before upgrading if history must be kept. System adoption reads only a canonical
 The low-level manifest installer follows the same rule. Its release manifest and
 `install-state.json` have one canonical shape with no format-version field; an
 unfinished pre-canonical state is rejected with an explicit reset/reinstall
-instruction and is never rewritten. Canonical upgrades retain accounts, history,
-settings and collector identities, and rollback keeps the existing paired-backup
-behaviour.
+instruction and is never rewritten. Canonical upgrades retain accounts,
+settings and collector identities. The first canonical upgrade after the
+RAM-first release additionally completes a one-time machine-data transition: it
+discards the previous design's on-disk machine history — telemetry rows and
+summaries, receipts, gaps, latest snapshots, inventory, machine-derived alert
+history and pre-RAM-first durable collector queues, including data previously
+opted into keeping — once, and a version-independent marker in the state root
+makes every later upgrade preserve durable history and queues. The marker is
+written only after the activated release verifies healthy, the transition is
+reversible until then, and machine display names/tags (`machine_meta`),
+accounts, enrollment, settings, alert configuration and recordings are never
+discarded. Rollback keeps the existing paired-backup behaviour.
 
 Database migration numbers are the one deliberate exception: `schema_migrations`
 rows order irreversible SQL changes and are not configuration or installation
@@ -198,11 +207,14 @@ subscription expires. A's subscription must not authorize sensitive delivery to 
   deduplicate in the hub transaction. Ack after durable commit, not socket receipt. Reject
   invalid records explicitly so bad samples cannot retry forever. Process results are
   transient and request-scoped.
-- Use disk-backed per-hub outboxes for periodic metrics to recover across collector restarts.
-  Bound age/bytes per destination and total disk usage. Default caps: 10 minutes / 64 MiB
+- Keep the periodic-metrics queue in RAM by default so routine delivery writes nothing to
+  disk, and treat disk retention as an explicit opt-in (`COLLECTOR_QUEUE_MODE=durable`) for
+  operators who need unacknowledged samples to survive a collector restart. Both modes bound
+  age/bytes per destination and total usage identically. Default caps: 10 minutes / 64 MiB
   per destination, whichever comes first; measure before finalizing. Evict oldest pending
   telemetry at the cap and retain a bounded, coalesced gap notice. Bound the in-flight
-  window too. Do not spool sensitive process detail by default.
+  window too. Report the mode to the hub so an operator can see whether pending samples
+  survive a restart. Do not spool sensitive process detail by default.
 - Prioritize fresh metrics over rate-limited backfill. Backfill fills history but cannot
   replace newer live state or trigger an old incident as if it just happened.
 - Bound frames, ingestion rates, outstanding requests, and browser buffers. WebSocket does

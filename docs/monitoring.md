@@ -26,8 +26,9 @@ the hub restarts. Users, credentials, enrollment, settings, alert records,
 machine names/tags and inventory remain persistent.
 
 In memory mode the collector's acknowledgement means the hub accepted the sample
-into RAM. The collector keeps the same durable outbox and retries after a
-disconnect; it does not gain extra disk work from the hub's choice. Deduplication
+into RAM. The collector queues pending samples in RAM and retries after a
+disconnect, so it gains no disk work from the hub's choice and writes no queue
+of its own. Deduplication
 uses a compact per-run interval set for the hub process lifetime. Because both
 history and receipts disappear together on restart, a replay cannot double-count
 restored chart data.
@@ -38,7 +39,9 @@ transaction, and only then acknowledges. Replay deduplication uses durable
 receipts whose lifetime is independent of chart retention (default seven days).
 Replayed samples fill History without replacing current live readings or opening
 alerts for past threshold crossings. A graceful shutdown flushes pending
-summaries; after a crash the collector replays anything that was never committed.
+summaries; after a crash the collector replays anything the hub never
+acknowledged, provided the collector itself kept it: only
+`COLLECTOR_QUEUE_MODE=durable` survives a collector restart.
 
 Default memory history:
 

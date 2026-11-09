@@ -681,3 +681,42 @@ describe("parseHubSnapshot", () => {
     });
   });
 });
+
+describe("collector delivery status queue mode", () => {
+  function statusMessage(delivery: Record<string, unknown>): unknown {
+    return {
+      type: "status",
+      capturedAt: "2026-11-02T12:00:00.000Z",
+      delivery: {
+        pendingRecords: 0,
+        pendingBytes: 0,
+        oldestPendingCapturedAt: null,
+        inFlightRecords: 0,
+        droppedRecords: 0,
+        replaying: false,
+        lastAckAt: null,
+        ...delivery,
+      },
+      failures: [],
+    };
+  }
+
+  it("carries the reported queue mode through", () => {
+    for (const mode of ["memory", "durable"] as const) {
+      const parsed = parseCollectorMessage(statusMessage({ queueMode: mode })) as {
+        delivery: { queueMode?: string };
+      };
+      assert.equal(parsed.delivery.queueMode, mode);
+    }
+  });
+
+  it("stays absent for a collector that predates the field", () => {
+    const parsed = parseCollectorMessage(statusMessage({})) as { delivery: Record<string, unknown> };
+    assert.equal("queueMode" in parsed.delivery, false);
+  });
+
+  it("rejects a queue mode outside memory or durable", () => {
+    assert.throws(() => parseCollectorMessage(statusMessage({ queueMode: "ephemeral" })), /queueMode/);
+    assert.throws(() => parseCollectorMessage(statusMessage({ queueMode: null })), /queueMode/);
+  });
+});

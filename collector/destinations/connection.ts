@@ -2,9 +2,10 @@
  * One independently owned Hub connection.
  *
  * A HubConnection owns everything that varies per Hub connection: its local
- * sharing policy, its effective delivery cadence, its durable outbox
- * directory, recovered queue sanitation, inventory selection and version
- * refresh, and the durable append-before-send submission path. The one
+ * sharing policy, its effective delivery cadence, its delivery queue (RAM by
+ * default, a per-Hub SQLite outbox only when `COLLECTOR_QUEUE_MODE=durable`),
+ * recovered queue sanitation, inventory selection and version refresh, and the
+ * append-before-send submission path. The one
  * runtime caller only fans a
  * shared sample out to every connection and hands over nothing else; filter,
  * append, notify-delivery and inventory choreography are internal
@@ -21,6 +22,8 @@
  * outbox absorbs storage failures, the session owns its own socket, timers
  * and reconnect schedule, and `acceptSample` never throws outward.
  */
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { DestinationEndpoint } from '../config';
 import type { CollectorIdentity } from '../identity';
 import type {
@@ -43,9 +46,21 @@ import {
   type SharingPolicy,
 } from './policy';
 import { DestinationOutbox, outboxDirFor } from './outbox';
+import { MemoryDestinationQueue } from './memory-queue';
+import type { DestinationQueue, QueueMode } from './queue';
 import type { OutboxBudget } from './budget';
 import { DestinationSession, type SessionState, type SocketFactory } from './session';
 import type { BackoffOptions } from './backoff';
+
+/** True when a previous durable install left a SQLite queue in this directory. */
+function leftoverDurableQueue(dir: string): boolean {
+  try {
+    return fs.existsSync(path.join(dir, 'outbox.sqlite'));
+  } catch {
+    // An unreadable state directory is not a reportable leftover.
+    return false;
+  }
+}
 
 /** The shared sampler's read-only surface, supplied by the Collector loop. */
 export type SharedSampler = {
@@ -66,8 +81,14 @@ export type HubConnectionOptions = {
   endpoint: DestinationEndpoint;
   /** Shared sampling cadence (milliseconds). */
   baseIntervalMs: number;
-  /** Collector state directory that holds this connection's outbox. */
+  /** Collector state directory that holds this connection's durable outbox. */
   stateDir: string;
+  /**
+   * How this connection retains unacknowledged samples. `memory` (the default)
+   * never creates a queue file; `durable` keeps the SQLite outbox that survives
+   * a collector restart.
+   */
+  queueMode: QueueMode;
   identity: CollectorIdentity;
   /** Shared aggregate disk budget for all of the collector's connections. */
   budget: OutboxBudget;
@@ -87,7 +108,7 @@ export class HubConnection {
   private readonly policy: SharingPolicy;
   private readonly sampleFilter: (record: MetricsRecord, monotonicMs: number) => MetricsRecord | null;
   private readonly sampler: SharedSampler;
-  private readonly outbox: DestinationOutbox;
+  private readonly outbox: DestinationQueue;
   private readonly session: DestinationSession;
   private readonly onEvent: (line: string) => void;
 
@@ -95,7 +116,7 @@ export class HubConnection {
   /** Inventory version last confirmed sent on the current socket generation. */
   private sentInventoryVersion = -1;
 
-  private constructor(options: HubConnectionOptions, outbox: DestinationOutbox) {
+  private constructor(options: HubConnectionOptions, outbox: DestinationQueue) {
     this.index = options.index;
     this.policy = normalizeSharing(options.endpoint.sharing);
     this.sampleFilter = createMetricsFilter(options.endpoint, options.baseIntervalMs);
@@ -127,22 +148,32 @@ export class HubConnection {
   }
 
   /**
-   * Opens this connection's durable outbox under its canonical endpoint URL
-   * and re-applies the privacy policy to recovered pending records so none of
-   * them can leave with forbidden fields. Sanitation never cadence-filters:
-   * retained samples were already cadence-selected when they were captured.
+   * Opens this connection's delivery queue in the configured mode and re-applies
+   * the privacy policy to any recovered pending record so none of them can
+   * leave with forbidden fields. Sanitation never cadence-filters: retained
+   * samples were already cadence-selected when they were captured.
+   *
+   * In `memory` mode no queue file is created at all. A durable queue left over
+   * from an earlier `durable` install is not opened or replayed; it is reported
+   * once so the operator knows unacknowledged samples are sitting on disk and
+   * how to discard them.
    */
   static open(options: HubConnectionOptions): HubConnection {
-    const outbox = DestinationOutbox.open({
-      dir: outboxDirFor(options.stateDir, options.endpoint.url),
-      budget: options.budget,
-      allocateSequence: options.allocateSequence,
-      identity: {
-        collectorId: options.identity.collectorId,
-        runId: options.identity.runId,
-        bootId: options.identity.bootId,
-      },
-    });
+    const identity = {
+      collectorId: options.identity.collectorId,
+      runId: options.identity.runId,
+      bootId: options.identity.bootId,
+    };
+    const dir = outboxDirFor(options.stateDir, options.endpoint.url);
+    const outbox: DestinationQueue = options.queueMode === 'durable'
+      ? DestinationOutbox.open({ dir, budget: options.budget, allocateSequence: options.allocateSequence, identity })
+      : new MemoryDestinationQueue({ budget: options.budget, allocateSequence: options.allocateSequence, identity });
+    if (options.queueMode === 'memory' && leftoverDurableQueue(dir)) {
+      options.onEvent?.(
+        `hub${options.index}: a durable outbox from an earlier COLLECTOR_QUEUE_MODE=durable install is unused; ` +
+        'run rigscope upgrade, or delete it, to discard those unacknowledged samples',
+      );
+    }
     const connection = new HubConnection(options, outbox);
     try {
       outbox.filterPending(record => applySharing(record, connection.policy));

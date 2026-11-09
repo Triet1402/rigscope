@@ -31,7 +31,8 @@ The installed `rigscope system` command and `dist/system.cjs` use the same code.
   hub/enrollment.json                  rigscope-hub 0600
   hub/run/hub.sock                     private Unix socket (remote mode)
   collector/state.json                 rigscope-collector 0600
-  collector/outbox/                    durable collector outboxes
+  collector/outbox/                    collector queues, durable mode only
+  machine-data-transition.json         root:root 0600, one-time machine-data transition marker
   backups/                             root:root 0700, pre-upgrade/pre-rollback SQLite copies
   system-install.json                  root:root 0600, canonical component state/versions/backups/adoption
   power-access.json                    root:root 0600, original counter modes for reversal
@@ -104,8 +105,14 @@ A pre-canonical system installation is reset, not migrated. `system install` and
 units completely, then remove the old configuration and history and install
 the canonical layout fresh. Back up `/var/lib/rigscope` first if that history
 must be kept; there is no rollback to the old format. Later upgrades that stay
-canonical keep accounts, history, settings, collector identities and pending
-samples, and rollback keeps its paired database backup.
+canonical keep accounts, settings and collector identities and rollback keeps
+its paired database backup. The first such upgrade after the RAM-first release
+also completes the one-time machine-data transition, discarding machine-derived
+history and pre-RAM-first durable collector queues once — even data previously
+opted into keeping — while preserving machine names/tags; a
+`machine-data-transition.json` marker in `/var/lib/rigscope` makes every
+subsequent upgrade preserve durable history and queues. See
+[telemetry storage](telemetry-storage.md#the-one-time-machine-data-transition).
 
 - With `--enable`, `--role local` initially enables both components.
 - With `--enable`, `--role hub` initially enables only the hub.
@@ -131,7 +138,7 @@ identity and RAPL grant. With no destination it tries the colocated hub:
   cleanly before collection until a destination is saved.
 
 Configured remote destinations and credentials are never overwritten. Re-running
-`enable collector` leaves its destination, token, identity and outboxes intact.
+`enable collector` leaves its destination, token and identity intact.
 
 ### Connecting to an independent hub
 

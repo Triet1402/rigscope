@@ -42,6 +42,9 @@ SupplementaryGroups=rigscope-rapl
 Environment="COLLECTOR_MODE=real"
 Environment="COLLECTOR_STATE_FILE=/var/lib/rigscope/collector/state.json"
 Environment="COLLECTOR_HEALTH_FILE=/var/lib/rigscope/collector/health.json"
+# Unacknowledged samples wait in RAM, so routine delivery writes no queue file.
+# Uncomment to keep them in a per-hub SQLite outbox across collector restarts.
+# Environment="COLLECTOR_QUEUE_MODE=durable"
 ReadWritePaths="/var/lib/rigscope/collector"
 ReadOnlyPaths="/opt/rigscope/current"
 TimeoutStopSec=10s

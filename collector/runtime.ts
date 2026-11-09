@@ -15,9 +15,16 @@ import { ProcessScanner } from './processes/scan';
 import { DetailScheduler } from './processes/scheduler';
 import { acquireProcessLease } from '../src/runtime/process-lease';
 import { APPLICATION_VERSION } from '../src/runtime/version';
-import { writePrivateFile } from '../src/operations/fs';
+import { writePrivateFileBuffered } from '../src/operations/fs';
 
-export async function runDurableCollector(config: CollectorConfig, identity: CollectorIdentity,
+/**
+ * Readiness-marker rewrite period. `rigscope` commands accept a marker up to
+ * 15 s stale, so 5 s keeps startup detection honest without a disk write per
+ * sample.
+ */
+const HEALTH_WRITE_INTERVAL_MS = 5_000;
+
+export async function runCollectorLoop(config: CollectorConfig, identity: CollectorIdentity,
   statePath: string, mock: boolean): Promise<never> {
   const temporary = mock && !process.env.COLLECTOR_STATE_FILE ? mkdtempSync(join(tmpdir(), 'rigscope-mock-')) : null;
   const stateDir = temporary ?? dirname(statePath);
@@ -30,7 +37,7 @@ export async function runDurableCollector(config: CollectorConfig, identity: Col
   try {
     for (const [index, endpoint] of config.destinations.entries()) {
       connections.push(HubConnection.open({
-        index, endpoint, stateDir, baseIntervalMs: config.intervalMs, identity,
+        index, endpoint, stateDir, baseIntervalMs: config.intervalMs, identity, queueMode: config.queueMode,
         budget, allocateSequence: () => sequence.next(), sampler,
         socketFactory: (url, options) => new WebSocket(url, { headers: options.headers,
           handshakeTimeout: options.handshakeTimeoutMs, maxPayload: options.maxPayloadBytes, perMessageDeflate: false }),
@@ -62,8 +69,10 @@ export async function runDurableCollector(config: CollectorConfig, identity: Col
       // delivery, inventory refresh and its own failure isolation.
       for (const connection of connections) connection.acceptSample(record, at);
       const healthFile = process.env.COLLECTOR_HEALTH_FILE;
-      if (healthFile && Date.now() - lastHealthWrite >= 1_000) {
-        writePrivateFile(healthFile, JSON.stringify({version: APPLICATION_VERSION,
+      if (healthFile && Date.now() - lastHealthWrite >= HEALTH_WRITE_INTERVAL_MS) {
+        // A missed heartbeat is recovered by the next tick, so this is written
+        // without fsync; the same reasoning is why the RAM queue is the default.
+        writePrivateFileBuffered(healthFile, JSON.stringify({version: APPLICATION_VERSION,
           pid: process.pid, sampledAt: Date.now()}));
         lastHealthWrite = Date.now();
       }
@@ -83,7 +92,11 @@ export async function runDurableCollector(config: CollectorConfig, identity: Col
     for (const connection of connections) connection.stop();
     releaseLease();
     if (temporary) rmSync(temporary, { recursive: true, force: true });
-    console.log('collector stopping; durable pending delivery saved');
+    // The two modes differ exactly here, so the shutdown line must not claim a
+    // durability the default mode does not provide.
+    console.log(config.queueMode === 'durable'
+      ? 'collector stopping; durable pending delivery saved'
+      : 'collector stopping; unacknowledged samples in RAM are discarded');
     setTimeout(() => process.exit(0), 250).unref();
     setTimeout(() => process.exit(0), 3000).unref();
   };

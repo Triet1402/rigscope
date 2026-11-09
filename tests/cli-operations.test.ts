@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:http';
@@ -375,6 +375,182 @@ test('a failed upgrade restores the previous runtime and the pre-upgrade databas
   assert.equal(runtimeVersion(join(dir, 'runtime-previous')), '2.0.0');
   assert.equal(service.active, true);
   assert.equal(schemaVersionOf(database), 3);
+});
+
+/**
+ * The one-time machine-data transition on the user upgrade path. The marker is
+ * version-independent, so "first upgrade" means "no marker yet", and every
+ * later upgrade must preserve durable history and queues unconditionally.
+ */
+function countTable(database: string, table: string): number {
+  const db = new DatabaseSync(database, { readOnly: true });
+  try {
+    return Number((db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n);
+  } finally {
+    db.close();
+  }
+}
+
+/** One row in a machine-derived table plus the presentation data that must survive. */
+function seedMachineData(database: string): void {
+  const db = new DatabaseSync(database);
+  try {
+    db.prepare('INSERT OR IGNORE INTO users (username, password_hash, scope_json, is_admin) VALUES (?, ?, \'*\', 1)')
+      .run('owner', 'scrypt$fixture');
+    db.prepare('INSERT OR IGNORE INTO machine_meta (machine_id, display_name, tags_json, updated_at_ms) VALUES (?, ?, ?, 1)')
+      .run('machine-1', 'Workstation', '["lab"]');
+    const existing = db.prepare("SELECT series_id FROM series WHERE machine_id = 'machine-1' AND metric = 'cpu.usage'").get() as { series_id: number } | undefined;
+    const series = existing?.series_id ?? Number(db.prepare("INSERT INTO series (machine_id, metric, resource_id) VALUES ('machine-1', 'cpu.usage', '')").run().lastInsertRowid);
+    db.prepare('INSERT INTO points_raw (series_id, ts_ms, value) VALUES (?, ?, 1)').run(series, Date.now());
+    db.prepare(
+      'INSERT INTO machine_latest (machine_id, collector_id, run_id, boot_id, seq, captured_at_ms, received_at_ms, payload_json) ' +
+        "VALUES ('machine-1', 'collector-1', 'run-1', 'boot-1', 1, 1000, 1000, '{}')",
+    ).run();
+  } finally {
+    db.close();
+  }
+}
+
+function seedQueueTree(dir: string): string {
+  const queueFile = join(dir, 'collector', 'outbox', 'hash-destination-1', 'outbox.sqlite');
+  mkdirSync(join(queueFile, '..'), { recursive: true, mode: 0o700 });
+  writeFileSync(queueFile, 'unacknowledged durable sample\n', { mode: 0o600 });
+  return queueFile;
+}
+
+function transitionFixture(name: string, schema: number): { root: string; dir: string; database: string } {
+  const root = fresh(name);
+  const dir = join(root, 'state');
+  initialize(dir, { port: '19198' });
+  writeRuntime(join(dir, 'runtime'), '1.0.0');
+  writeRuntimeState(dir, { ...emptyRuntimeState(dir), currentVersion: '1.0.0' });
+  const database = join(dir, 'hub', 'telemetry.sqlite');
+  seedDatabase(database, schema);
+  return { root, dir, database };
+}
+
+function stagedQueueNames(dir: string): string[] {
+  const collectorDir = join(dir, 'collector');
+  return existsSync(collectorDir)
+    ? readdirSync(collectorDir).filter((name) => name.startsWith('outbox.pre-transition-'))
+    : [];
+}
+
+test('the first upgrade after RAM-first discards machine data once; later upgrades preserve it', async () => {
+  const { root, dir, database } = transitionFixture('transition-upgrade', SUPPORTED_SCHEMA_VERSION);
+  seedMachineData(database);
+  const queueFile = seedQueueTree(dir);
+
+  const stageFor = (version: string) => () => {
+    const stage = join(root, `stage-${version}`);
+    writeRuntime(stage, version);
+    return stage;
+  };
+  const service = fakeService(true);
+  const healthyDeps = (version: string): UpgradeDependencies => ({
+    service,
+    stage: stageFor(version),
+    inspectRuntime: runtimeInspector(() => SUPPORTED_SCHEMA_VERSION),
+    waitHealth: async () => healthOk(),
+  });
+
+  const first = await upgradeInstallation({ root, dir, from: 'fixture@2.0.0' }, healthyDeps('2.0.0'));
+  assert.equal(first.machineHistory.transitioned, true, 'the first post-RAM-first upgrade performs the one-time transition');
+  assert.equal(first.machineHistory.warning, null);
+  assert.ok((first.machineHistory.databaseRows?.points_raw ?? 0) >= 1, 'the report counts the discarded telemetry rows');
+  assert.equal(first.machineHistory.collectorQueuesRemoved, true);
+  assert.equal(existsSync(queueFile), false, 'the pre-RAM-first durable queue tree is discarded');
+  assert.deepEqual(stagedQueueNames(dir), [], 'success leaves no staged copy behind');
+  const marker = join(dir, 'machine-data-transition.json');
+  assert.equal(existsSync(marker), true, 'the version-independent marker records the completed transition');
+  assert.equal(countTable(database, 'points_raw'), 0);
+  assert.equal(countTable(database, 'machine_latest'), 0);
+  assert.equal(countTable(database, 'machine_meta'), 1, 'machine display names/tags survive the transition');
+  assert.equal(countTable(database, 'users'), 1, 'hub accounts survive the transition');
+  assert.ok(existsSync(join(dir, 'config.json')));
+  const configAfterFirst = readFileSync(join(dir, 'config.json'), 'utf8');
+
+  // The operator opts durable retention back in; a later upgrade must keep it.
+  seedMachineData(database);
+  const queueAgain = seedQueueTree(dir);
+  const later = await upgradeInstallation({ root, dir, from: 'fixture@3.0.0' }, healthyDeps('3.0.0'));
+  assert.equal(later.version, '3.0.0');
+  assert.equal(later.machineHistory.transitioned, false, 'subsequent upgrades never repeat the transition');
+  assert.equal(later.machineHistory.databaseRows, null);
+  assert.ok(countTable(database, 'points_raw') >= 1, 'durable telemetry written after the transition is preserved');
+  assert.equal(readFileSync(queueAgain, 'utf8'), 'unacknowledged durable sample\n', 'durable queues opted into later are preserved');
+  assert.equal(readFileSync(join(dir, 'config.json'), 'utf8'), configAfterFirst, 'user settings are untouched by both upgrades');
+});
+
+test('a failed activation restores the cleared rows even on a same-schema database and renames the queue back', async () => {
+  const { root, dir, database } = transitionFixture('transition-failure', SUPPORTED_SCHEMA_VERSION);
+  seedMachineData(database);
+  const queueFile = seedQueueTree(dir);
+  // Both runtimes read the same schema: the pre-existing "restore only an
+  // incompatible database" rule would keep the already-cleared copy and lose
+  // the rows forever, so the transition itself must force the restore.
+  const service = fakeService(true);
+  const deps: UpgradeDependencies = {
+    service,
+    stage: () => {
+      const stage = join(root, 'stage-same-schema-failure');
+      writeRuntime(stage, '2.0.0');
+      return stage;
+    },
+    inspectRuntime: runtimeInspector(() => SUPPORTED_SCHEMA_VERSION),
+    waitHealth: async (_target, options) =>
+      options?.expectedVersion === '1.0.0'
+        ? healthOk()
+        : { ok: false, attempts: 1, elapsedMs: 1, last: { ok: false, statusCode: null, body: null, error: 'fixture activation refusal' }, version: null },
+  };
+  await assert.rejects(
+    upgradeInstallation({ root, dir, from: 'fixture@2.0.0', healthDeadlineMs: 100 }, deps),
+    /upgrade to 2\.0\.0 failed.*restored the collector queue tree.*restored pre-upgrade database/s,
+  );
+  assert.equal(runtimeVersion(join(dir, 'runtime')), '1.0.0', 'the previous runtime is active again');
+  assert.equal(service.active, true);
+  assert.ok(countTable(database, 'points_raw') >= 1, 'the cleared telemetry rows came back with the pre-upgrade copy');
+  assert.equal(countTable(database, 'machine_latest'), 1);
+  assert.equal(countTable(database, 'machine_meta'), 1);
+  assert.equal(readFileSync(queueFile, 'utf8'), 'unacknowledged durable sample\n', 'the staged queue tree is renamed back intact');
+  assert.deepEqual(stagedQueueNames(dir), [], 'recovery leaves no staged copy');
+  assert.equal(existsSync(join(dir, 'machine-data-transition.json')), false, 'a failed activation does not consume the one-time transition');
+});
+
+test('an incomplete machine-data cleanup is reported, never fails the upgrade, and is retried by the next upgrade', async () => {
+  const { root, dir, database } = transitionFixture('transition-warning', SUPPORTED_SCHEMA_VERSION);
+  seedMachineData(database);
+  seedQueueTree(dir);
+  const stageFor = (version: string) => () => {
+    const stage = join(root, `stage-${version}`);
+    writeRuntime(stage, version);
+    return stage;
+  };
+  const service = fakeService(true);
+  const first = await upgradeInstallation({ root, dir, from: 'fixture@2.0.0' }, {
+    service,
+    stage: stageFor('2.0.0'),
+    inspectRuntime: runtimeInspector(() => SUPPORTED_SCHEMA_VERSION),
+    waitHealth: async () => healthOk(),
+    clearHistory: () => { throw new Error('fixture clear refusal'); },
+  });
+  assert.equal(first.version, '2.0.0', 'a cleanup failure never fails an otherwise healthy upgrade');
+  assert.equal(first.machineHistory.transitioned, true);
+  assert.match(first.machineHistory.warning ?? '', /fixture clear refusal/, 'the incomplete cleanup is visible in the report');
+  assert.equal(existsSync(join(dir, 'machine-data-transition.json')), false, 'an incomplete cleanup does not mark the transition complete');
+  assert.equal(stagedQueueNames(dir).length, 1, 'the partial staged copy is kept for inspection');
+
+  const retry = await upgradeInstallation({ root, dir, from: 'fixture@3.0.0' }, {
+    service,
+    stage: stageFor('3.0.0'),
+    inspectRuntime: runtimeInspector(() => SUPPORTED_SCHEMA_VERSION),
+    waitHealth: async () => healthOk(),
+  });
+  assert.equal(retry.machineHistory.transitioned, true, 'the next upgrade retries the transition');
+  assert.equal(retry.machineHistory.warning, null);
+  assert.equal(existsSync(join(dir, 'machine-data-transition.json')), true, 'the completed retry records the marker');
+  assert.equal(stagedQueueNames(dir).length, 1, 'the retry preserves earlier recovery data for inspection');
+  assert.equal(countTable(database, 'points_raw'), 0);
 });
 
 test('rollback keeps a database the previous runtime can still read', async () => {

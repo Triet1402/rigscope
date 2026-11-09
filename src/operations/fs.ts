@@ -152,6 +152,58 @@ export function writePrivateFile(path: string, content: string | Buffer): void {
   writeFileAtomic(path, content, PRIVATE_FILE_MODE);
 }
 
+/**
+ * Write a private file without a durability barrier: the content is handed to
+ * the operating system, and neither the file nor its directory is fsynced. Use
+ * this only for state a process rewrites continuously and can recover by
+ * rewriting again, such as a readiness heartbeat. Configuration, credentials
+ * and anything a crash must not lose use {@link writePrivateFile}.
+ *
+ * The content is still staged in an exclusive owner-only temporary file and
+ * renamed into place, so a reader never observes a partial heartbeat and a
+ * failed write leaves the previous file intact. The destination must be absent
+ * or a private regular file: an existing symlink or other non-regular path is
+ * refused rather than followed.
+ */
+export function writePrivateFileBuffered(path: string, content: string | Buffer): void {
+  const absolute = resolve(path);
+  const parent = dirname(absolute);
+  ensurePrivateDir(parent);
+  try {
+    assertPrivateRegularFile(absolute, "private file");
+  } catch (error) {
+    if (!(error instanceof OperationsError) || error.code !== "missing-file") throw error;
+  }
+  // `wx` refuses to follow or reuse an existing path, so a temp-file symlink
+  // cannot redirect the write; the rename replaces the directory entry and
+  // never writes through a destination link.
+  const temporary = join(parent, `.${basename(absolute)}.tmp-${randomUUID()}`);
+  let fd: number | null = null;
+  let temporaryCreated = false;
+  try {
+    fd = openSync(temporary, "wx", PRIVATE_FILE_MODE);
+    temporaryCreated = true;
+    writeFileSync(fd, content);
+    closeSync(fd);
+    fd = null;
+    chmodSync(temporary, PRIVATE_FILE_MODE);
+    renameSync(temporary, absolute);
+  } catch (error) {
+    if (fd !== null) {
+      try {
+        closeSync(fd);
+      } catch {
+        // Preserve the original error.
+      }
+    }
+    if (temporaryCreated) removeIfExists(temporary);
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new OperationsError("missing-file", `directory does not exist: ${parent}`, { cause: error });
+    }
+    throw error;
+  }
+}
+
 export function writePublicFile(path: string, content: string | Buffer): void {
   ensurePublicDir(dirname(resolve(path)));
   writeFileAtomic(path, content, PUBLIC_FILE_MODE);

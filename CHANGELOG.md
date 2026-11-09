@@ -1,5 +1,40 @@
 # Release notes
 
+## 0.2.1
+
+- Make the collector's delivery queue RAM-only by default, mirroring the hub's
+  RAM history. Routine delivery now writes nothing to disk: the previous design
+  inserted, updated and deleted every sample in a per-destination SQLite file,
+  which was a steady write stream even when the hub acknowledged promptly. The
+  collector's readiness marker is also rewritten every five seconds instead of
+  every second, and without a durability barrier.
+- Add opt-in `COLLECTOR_QUEUE_MODE=durable` for operators who need unacknowledged
+  samples to survive a collector restart. Both modes share the same
+  10-minute/64 MiB per-destination bounds, live-slot priority, oldest-first
+  eviction and coalesced gap records, so the hub still distinguishes "captured
+  here and dropped" from "never captured". The mode is reported to the hub as
+  `delivery.queueMode` and shown under a connection's delivery facts, because in
+  the default mode a collector restart loses whatever was not yet acknowledged.
+- Complete a one-time machine-data transition on the first `rigscope upgrade`
+  after this release: the previous design's durable collector queue files plus
+  the hub's telemetry rows, summaries, receipts, gaps, latest snapshots, series,
+  inventory and machine-derived alert history are discarded once, even data an
+  operator had previously opted into keeping. This is authorized specifically
+  for the RAM-first transition: the components now in place keep history and
+  the collector queue in RAM, so that on-disk copy is cold. It is recorded in a
+  version-independent `machine-data-transition.json` marker written only after
+  the activated release verifies healthy, so every subsequent upgrade preserves
+  durable history and queues the operator opts back into. Accounts, passwords,
+  sessions, collector enrollment and grants, settings, alert rules/jobs/webhook
+  settings, machine display names/tags (`machine_meta`), and recordings are
+  always preserved. The transition runs with all components stopped under the
+  installation's leases; it is reversible until it completes — the queue tree is
+  renamed aside rather than deleted, and a failed activation restores the
+  cleared rows from the pre-upgrade database copy even when the schema was
+  compatible — and a cleanup that cannot finish is reported as a visible warning
+  and retried by the next upgrade instead of failing an otherwise healthy one.
+  `rigscope system upgrade` performs the same transition.
+
 ## 0.2.0
 
 - Make telemetry history RAM-only by default. Live readings update immediately,

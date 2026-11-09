@@ -19,6 +19,7 @@ import { activatePackage, enableBootStartup, installAlias, serviceActive, servic
 import { diagnoseInstallation, formatDoctorReport } from './doctor';
 import { upgradeInstallation, rollbackInstallation } from './upgrade';
 import { emptyRuntimeState, readRuntimeState, runtimeVersion, writeRuntimeState } from './release-state';
+import { describeMachineDataReport, recordMachineDataTransition, type MachineDataReport } from './machine-transition';
 import { recoverAdminPassword } from '../operations/recovery';
 import { acquireProcessLease } from '../runtime/process-lease';
 import { runSystemCommand } from './system';
@@ -183,6 +184,12 @@ function announce(setup: ReturnType<typeof initialize>, dir: string): void {
   }
   console.log(`Configuration: ${join(dir, 'config.json')}`);
 }
+function printMachineDataOutcome(machineHistory: MachineDataReport): void {
+  const described = describeMachineDataReport(machineHistory);
+  console.log(described.summary);
+  if (described.warning !== null) printWarning(described.warning);
+}
+
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
   if (argv[0] === 'system') return runSystemCommand(argv.slice(1));
@@ -431,6 +438,11 @@ async function main(): Promise<number> {
           installedVersion = runtimeVersion(join(dir, 'runtime'));
           writeRuntimeState(dir, {...(readRuntimeState(dir) ?? emptyRuntimeState(dir)), currentVersion: installedVersion});
         }
+        // A completed install — fresh or reset — leaves no legacy machine data
+        // behind. Mark the one-time RAM-first transition complete so future
+        // upgrades preserve durable history and queues the operator opts into,
+        // rather than treating this installation as never-transitioned.
+        recordMachineDataTransition(dir, installedVersion);
         writeService(dir);
         alias = installAlias(dir, ROOT);
         const installedConfig = readSetup(dir)!;
@@ -571,6 +583,7 @@ async function main(): Promise<number> {
       if (report.schemaVersion !== null) console.log(`Database schema: ${report.schemaVersion}`);
       if (report.verification.health) console.log(`Health: ${report.verification.health.attempts} probe(s) in ${report.verification.health.elapsedMs}ms`);
       else console.log('Health: skipped because the service was inactive; start it explicitly.');
+      printMachineDataOutcome(report.machineHistory);
       return 0;
     }
     if (command === 'rollback') {

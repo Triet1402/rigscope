@@ -13,6 +13,8 @@ import { DatabaseSync } from "node:sqlite";
 import { createServer } from 'node:http';
 import { spawnSync } from 'node:child_process';
 import test from "node:test";
+import { openHubDatabase } from "../src/hub/storage/db";
+import { MACHINE_DATA_TRANSITION_FILE } from "../src/cli/machine-transition";
 import {
   DEFAULT_SYSTEM_ACCOUNTS,
   SystemError,
@@ -649,13 +651,25 @@ test("adoption is copy-only, refuses live owners, and leaves the user installati
   assert.match(hubEnv, /HUB_BROWSER_USERS="\[/);
   assert.match(hubEnv, /fixture-hash/);
   assert.equal(existsSync(collectorStatePath(paths)), true);
-  assert.equal(existsSync(join(paths.stateDir, "collector", "outbox", "abc", "outbox.sqlite")), true);
+  // A RAM delivery queue dies with the process it belonged to, and the adopted
+  // collector no longer reads a queue file: an inherited durable outbox would
+  // only import stale samples, so adoption deliberately leaves it behind.
+  assert.equal(existsSync(join(paths.stateDir, "collector", "outbox", "abc", "outbox.sqlite")), false,
+    "an inherited durable outbox must not be adopted");
+  assert.equal(existsSync(join(userState, "collector", "outbox", "abc", "outbox.sqlite")), true,
+    "adoption stays copy-only: the source installation is untouched");
   const state = JSON.parse(readFileSync(stateFilePath(paths), "utf8")) as {
     adoption: { source: string; files: Array<{ target: string }>; reversible: boolean } | null;
   };
   assert.equal(state.adoption?.reversible, true);
   assert.equal(state.adoption?.source, userState);
-  assert.ok((state.adoption?.files.length ?? 0) >= 4);
+  const adopted = state.adoption?.files.map((file) => file.target) ?? [];
+  assert.ok(adopted.includes(targetDatabase), "the hub database is adopted");
+  assert.ok(adopted.includes(collectorStatePath(paths)), "the collector identity is adopted");
+  assert.ok(
+    adopted.every((target) => !target.includes(join("collector", "outbox"))),
+    `no queue file may be adopted, got ${adopted.join(", ")}`,
+  );
   assert.ok(existsSync(join(home, ".config", "systemd", "user", "rigscope-hub.service")), "user units are not edited");
 });
 
@@ -819,6 +833,123 @@ test("a tampered release artifact is refused before activation", async () => {
     }),
     /artifact hash changed|artifact size changed/,
   );
+});
+
+/**
+ * The one-time machine-data transition on the system upgrade path. An install
+ * of this release already carries the marker, so a legacy installation is
+ * simulated by removing it; a real one simply never had the file.
+ */
+function systemMachineDataPathsOf(paths: SystemPaths): { database: string; queueTree: string } {
+  return { database: hubDatabasePath(paths), queueTree: join(paths.stateDir, "collector", "outbox") };
+}
+
+function seedSystemMachineData(paths: SystemPaths): { queueFile: string } {
+  const database = hubDatabasePath(paths);
+  const db = openHubDatabase(database);
+  try {
+    db.db.prepare("INSERT OR IGNORE INTO users (username, password_hash, scope_json, is_admin) VALUES ('owner','scrypt$fixture','*',1)").run();
+    db.db.prepare("INSERT OR IGNORE INTO machine_meta (machine_id, display_name, tags_json, updated_at_ms) VALUES ('machine-1','Workstation','[\"lab\"]',1)").run();
+    const series = Number(db.db.prepare("INSERT INTO series (machine_id, metric, resource_id) VALUES ('machine-1','cpu.usage','')").run().lastInsertRowid);
+    db.db.prepare('INSERT INTO points_raw (series_id, ts_ms, value) VALUES (?, ?, 1)').run(series, Date.now());
+    db.db.prepare(
+      'INSERT INTO machine_latest (machine_id, collector_id, run_id, boot_id, seq, captured_at_ms, received_at_ms, payload_json) ' +
+        "VALUES ('machine-1', 'collector-1', 'run-1', 'boot-1', 1, 1000, 1000, '{}')",
+    ).run();
+  } finally {
+    db.close();
+  }
+  chmodSync(database, 0o600);
+  const queueFile = join(paths.stateDir, "collector", "outbox", "hash-destination-1", "outbox.sqlite");
+  mkdirSync(join(queueFile, ".."), { recursive: true, mode: 0o700 });
+  writeFileSync(queueFile, "unacknowledged durable sample\n", { mode: 0o600 });
+  return { queueFile };
+}
+
+function systemTableCount(paths: SystemPaths, table: string): number {
+  const db = new DatabaseSync(hubDatabasePath(paths), { readOnly: true });
+  try {
+    return Number((db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n);
+  } finally {
+    db.close();
+  }
+}
+
+function systemStagedQueues(paths: SystemPaths): string[] {
+  const collectorDir = join(paths.stateDir, "collector");
+  return existsSync(collectorDir)
+    ? readdirSync(collectorDir).filter((name) => name.startsWith("outbox.pre-transition-"))
+    : [];
+}
+
+test('install records the one-time machine-data transition marker', async () => {
+  const root = freshRoot('transition-install-marker');
+  const { paths } = await installFixture({ root, role: "hub" });
+  const marker = join(paths.stateDir, MACHINE_DATA_TRANSITION_FILE);
+  assert.equal(existsSync(marker), true, "a fresh install has no legacy data: the transition is recorded complete");
+  assert.equal(statSync(marker).mode & 0o777, 0o600, "the marker is private even inside the 0755 state directory");
+});
+
+test('a legacy system upgrade performs the transition once and every later upgrade preserves durable data', async () => {
+  const root = freshRoot('transition-once');
+  const { paths, host } = await installFixture({ root, role: "hub" });
+  rmSync(join(paths.stateDir, MACHINE_DATA_TRANSITION_FILE), { force: true });
+  const queueFile = seedSystemMachineData(paths).queueFile;
+  host.active.add("rigscope-hub.service");
+  host.host.verifyHealth = async () => {};
+
+  // The plan for a legacy installation announces the transition and its guard.
+  const planned = await upgradeSystem({ apply: false, source: fixtureRelease(root, "2.0.0", 2), paths, host: host.host });
+  assert.ok((planned.plan?.notes ?? []).some((note) => /one-time RAM-first machine-data transition/.test(note)));
+  assert.ok((planned.plan?.notes ?? []).some((note) => /Later upgrades keep the marker/.test(note)));
+
+  const first = await upgradeSystem({ apply: true, source: fixtureRelease(root, "2.0.0", 2), paths, host: host.host });
+  assert.equal(first.machineHistory?.transitioned, true, "the first post-RAM-first system upgrade performs the one-time transition");
+  assert.equal(first.machineHistory?.warning, null);
+  assert.equal(first.machineHistory?.collectorQueuesRemoved, true);
+  assert.equal(existsSync(queueFile), false, "the pre-RAM-first durable queue tree is discarded");
+  assert.deepEqual(systemStagedQueues(paths), [], "success leaves no staged copy behind");
+  assert.equal(existsSync(join(paths.stateDir, MACHINE_DATA_TRANSITION_FILE)), true);
+  assert.equal(systemTableCount(paths, "points_raw"), 0);
+  assert.equal(systemTableCount(paths, "machine_latest"), 0);
+  assert.equal(systemTableCount(paths, "machine_meta"), 1, "machine names/tags survive the transition");
+  assert.equal(systemTableCount(paths, "users"), 1, "hub accounts survive the transition");
+
+  // Durable retention opted back in must survive every subsequent upgrade.
+  const second = seedSystemMachineData(paths).queueFile;
+  const later = await upgradeSystem({ apply: true, source: fixtureRelease(root, "3.0.0", 3), paths, host: host.host });
+  assert.equal(later.version, "3.0.0");
+  assert.equal(later.machineHistory?.transitioned, false, "subsequent system upgrades never repeat the transition");
+  assert.equal(later.machineHistory?.databaseRows, null);
+  assert.ok(systemTableCount(paths, "points_raw") >= 1, "telemetry written after the transition is preserved");
+  assert.equal(readFileSync(second, "utf8"), "unacknowledged durable sample\n", "durable queues opted into later are preserved");
+});
+
+test('a failed system activation restores the cleared database and staged queue and keeps the transition pending', async () => {
+  const root = freshRoot('transition-failed');
+  const { paths, host } = await installFixture({ root, role: "hub" });
+  rmSync(join(paths.stateDir, MACHINE_DATA_TRANSITION_FILE), { force: true });
+  const queueFile = seedSystemMachineData(paths).queueFile;
+  host.active.add("rigscope-hub.service");
+  const versions: Array<string | null> = [];
+  host.host.verifyHealth = async (_paths, state) => {
+    versions.push(state.currentVersion);
+    if (state.currentVersion === "2.0.0") throw new Error("fixture activation refusal");
+  };
+
+  await assert.rejects(
+    upgradeSystem({ apply: true, source: fixtureRelease(root, "2.0.0", 2), paths, host: host.host }),
+    /fixture activation refusal/,
+  );
+  assert.deepEqual(versions, ["2.0.0", "1.0.0"], "the former runtime was re-verified after recovery");
+  assert.equal(readSystemState(paths)?.currentVersion, "1.0.0");
+  assert.equal(host.active.has("rigscope-hub.service"), true, "the recovered hub runs again");
+  assert.ok(systemTableCount(paths, "points_raw") >= 1, "the cleared telemetry rows came back with the pre-upgrade copy");
+  assert.equal(systemTableCount(paths, "machine_latest"), 1);
+  assert.equal(systemTableCount(paths, "machine_meta"), 1);
+  assert.equal(readFileSync(queueFile, "utf8"), "unacknowledged durable sample\n", "the staged queue tree is renamed back intact");
+  assert.deepEqual(systemStagedQueues(paths), [], "recovery leaves no staged copy");
+  assert.equal(existsSync(join(paths.stateDir, MACHINE_DATA_TRANSITION_FILE)), false, "a failed activation does not consume the one-time transition");
 });
 
 test('system upgrade health failure restores paired data and verifies the former runtime', async () => {

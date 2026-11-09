@@ -1,7 +1,24 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
+import { parseQueueMode } from '../../collector/config';
 import { acquireProcessLease } from '../runtime/process-lease';
 import { collectorHasDestinations, componentEnabled, enabledComponents, hubEnvironment, readSetup, type Component } from './config';
+
+/**
+ * COLLECTOR_* keys are stripped from the supervisor environment, so an
+ * explicit queue mode must be re-injected into the collector child. Validate it
+ * with the collector's own parser: supported values (including padded input)
+ * are forwarded normalized, and an unsupported value fails here instead of
+ * being silently dropped in favour of the default.
+ */
+export function collectorQueueModeEnvironment(env: Readonly<Record<string, string | undefined>>): Record<string, string> {
+  const raw = env['COLLECTOR_QUEUE_MODE']?.trim();
+  if (raw === undefined || raw === '') return {};
+  const issues: string[] = [];
+  const queueMode = parseQueueMode(env, issues);
+  if (issues.length > 0) throw new Error(issues.join('\n'));
+  return { COLLECTOR_QUEUE_MODE: queueMode };
+}
 
 /** Supervisor lease for one component. The collector child owns its own lock. */
 export function componentLeasePath(dir: string, component: Component): string {
@@ -35,6 +52,11 @@ export async function runInstallation(root: string, dir: string, component?: Com
     console.error('No components are enabled. Run rigscope enable hub or rigscope enable collector.');
     return 0;
   }
+  // Validate before skipping, acquiring leases or spawning: an unsupported
+  // value must surface as an error, never silently become the memory default.
+  const collectorEnvironment = selected.includes('collector')
+    ? collectorQueueModeEnvironment(process.env)
+    : {};
   // An enabled but unconfigured collector must not enter systemd's restart
   // loop. Skip only the collector; a selected hub still runs normally.
   if (selected.includes('collector') && !collectorHasDestinations(dir)) {
@@ -76,7 +98,7 @@ export async function runInstallation(root: string, dir: string, component?: Com
     const child = spawn(process.execPath, [join(root, 'dist', `${role}.cjs`)], {cwd: root, stdio: 'inherit', env: {
       ...environment, NODE_ENV: 'production',
       ...(role === 'hub' ? hubEnvironment(dir, config!) : {COLLECTOR_MODE: 'real', COLLECTOR_STATE_FILE: join(dir, 'collector', 'state.json'),
-        COLLECTOR_HEALTH_FILE: join(dir, 'run', 'collector-health.json')}),
+        COLLECTOR_HEALTH_FILE: join(dir, 'run', 'collector-health.json'), ...collectorEnvironment}),
     }});
     children.add(child);
     child.once('error', () => { console.error(`${role} could not start.`); stop(1); });

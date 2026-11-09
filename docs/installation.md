@@ -156,7 +156,9 @@ tailscale serve --bg --tls-terminated-tcp=8081 \
 ```
 
 This keeps accounts, history and collector credentials. It updates the local
-collector's destination and moves its pending samples. Rigscope asks to stop
+collector's destination and moves its pending samples, which is only relevant in
+`COLLECTOR_QUEUE_MODE=durable`: the default RAM queue drains with the collector.
+Rigscope asks to stop
 running components during conversion and resumes them afterward. See [Access changes](operations.md#access-changes)
 for backup and queue checks.
 
@@ -290,8 +292,12 @@ npx --yes rigscope@latest install --boot
 ```
 
 Both paths stop the owned services and reset the pre-canonical configuration and
-history. Future upgrades that stay in the canonical format keep accounts, history,
-settings and collector identities.
+history. Upgrades that stay in the canonical format keep accounts, settings and
+collector identities; the first one after the RAM-first release additionally
+completes a one-time transition that discards machine-derived history and
+pre-RAM-first durable collector queues once. Later upgrades preserve durable
+history and queues. See
+[telemetry storage](telemetry-storage.md#the-one-time-machine-data-transition).
 
 | Alternative | Command |
 | --- | --- |

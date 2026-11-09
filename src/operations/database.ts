@@ -742,6 +742,96 @@ export function resetTelemetryHistory(options: ResetTelemetryOptions): ResetTele
   };
 }
 
+/**
+ * Machine-derived tables the one-time transition discards: telemetry rows, the
+ * summaries and rollups folded from them, deduplication receipts, gap records,
+ * the last-known live snapshot, captured inventory and the machine-derived
+ * alert history.
+ *
+ * Everything that describes the installation rather than the machines it
+ * watched is deliberately absent: users, sessions and audit, collector
+ * enrollment, grants and their audit, alert rules/jobs/webhook configuration,
+ * admin state, the schema ledger, recordings (explicit user output), and
+ * `machine_meta` — per-machine display names and tags are operator-visible
+ * presentation of the enrolled machines and are kept across the transition.
+ */
+const MACHINE_HISTORY_TABLES = [
+  "points_raw",
+  "points_10s",
+  "points_1m",
+  "points_1h",
+  "sample_receipts",
+  "gaps",
+  "machine_latest",
+  "inventory",
+  "alert_observed_resources",
+  "alert_machine_progress",
+  "alert_incidents",
+  "series",
+] as const;
+
+/**
+ * Discard machine-derived data from the hub database in one transaction. Used
+ * by the one-time machine-data transition of `rigscope upgrade`; subsequent
+ * upgrades never call it, so durable history an operator opts back into is
+ * preserved. Idempotent, and it never drops the database file.
+ *
+ * Opens the file directly, without the hub schema migrator: a transition must
+ * not migrate the database it is emptying (the upgrade's own runtime pairing
+ * stays authoritative), and the CLI performing it may be older than the staged
+ * release. Tables absent from an older shape — including every alert table on
+ * an installation that never ran alerting — are skipped, not an error.
+ *
+ * Refuses while a hub holds the database lock. Recovery of the cleared rows is
+ * the pre-upgrade backup the caller already recorded.
+ */
+export function clearMachineHistory(database: string): { deleted: Record<string, number>; integrity: string } {
+  const path = resolvePath(database, "database");
+  if (!existsSync(path)) return { deleted: {}, integrity: "absent" };
+  assertPrivateRegularFile(path, "database");
+  assertNoActiveHubLock(path);
+
+  const db = new DatabaseSync(path, { timeout: BUSY_TIMEOUT_MS });
+  const deleted: Record<string, number> = {};
+  try {
+    db.exec("PRAGMA busy_timeout = 5000");
+    const present = new Set(
+      (db
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+        .all() as Array<{ name: string }>).map((row) => row.name),
+    );
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      for (const table of MACHINE_HISTORY_TABLES) {
+        if (!present.has(table)) continue;
+        const result = db.prepare(`DELETE FROM ${table}`).run();
+        deleted[table] = Number(result.changes);
+      }
+      db.exec("COMMIT");
+    } catch (error) {
+      try {
+        db.exec("ROLLBACK");
+      } catch {
+        // Preserve the original failure.
+      }
+      throw error;
+    }
+    // Reclaim only when the database already carries an incremental free-page
+    // reserve, the same bound the hub's own reclaim uses; never rewrite the
+    // whole file mid-upgrade.
+    const autoVacuum = db.prepare("PRAGMA auto_vacuum").get() as Record<string, number> | undefined;
+    if (autoVacuum && Object.values(autoVacuum)[0] === 2) db.exec("PRAGMA incremental_vacuum(1024)");
+    try {
+      db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    } catch {
+      // A busy checkpoint must not fail a completed clear.
+    }
+  } finally {
+    db.close();
+  }
+  return { deleted, integrity: inspectDatabase(path).integrity };
+}
+
 /** Read the schema version without opening the migrator (used by the installer). */
 export function schemaVersionOf(database: string): number | null {
   if (!existsSync(database)) return null;

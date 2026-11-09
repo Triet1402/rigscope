@@ -19,6 +19,7 @@ import type { DestinationEndpoint } from '../collector/config';
 import { DestinationOutbox, outboxDirFor } from '../collector/destinations/outbox';
 import { OutboxBudget } from '../collector/destinations/budget';
 import { HubConnection, type SharedSampler } from '../collector/destinations/connection';
+import type { QueueMode } from '../collector/destinations/queue';
 import type { SharingInput } from '../collector/destinations/policy';
 import type {
   CollectionFailure,
@@ -158,6 +159,8 @@ type HarnessOptions = {
   budget?: OutboxBudget;
   backoff?: { baseMs?: number; maxMs?: number };
   stateDir?: string;
+  /** The durable suite is the default so existing assertions stay durable-specific. */
+  queueMode?: QueueMode;
 };
 
 type Harness = {
@@ -211,6 +214,7 @@ function makeHarness(t: TestContext, options: HarnessOptions = {}): Harness {
     endpoint,
     baseIntervalMs: options.baseIntervalMs ?? 1_000,
     stateDir,
+    queueMode: options.queueMode ?? 'durable',
     identity: { ...IDENTITY },
     budget: options.budget ?? new OutboxBudget(),
     allocateSequence: () => ++gapSequence,
