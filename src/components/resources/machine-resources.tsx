@@ -390,6 +390,22 @@ function GpuCard({card}: {card: GpuCardView}) {
               label="Power"
               value={card.powerWatts === null ? "Not reported" : formatPower(card.powerWatts)}
             />
+            <Fact
+              label="Junction"
+              value={
+                card.junctionTemperatureC === null
+                  ? "Not reported"
+                  : formatTemperature(card.junctionTemperatureC)
+              }
+            />
+            <Fact
+              label="VRAM temp"
+              value={
+                card.vramTemperatureC === null
+                  ? "Not reported"
+                  : formatTemperature(card.vramTemperatureC)
+              }
+            />
           </dl>
         </>
       ) : (

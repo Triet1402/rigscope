@@ -76,6 +76,8 @@ export const ALERT_METRICS = {
   "gpu.memory.used": {label: "GPU memory used", unit: "bytes", resource: "required"},
   "gpu.memory.total": {label: "GPU memory total", unit: "bytes", resource: "required"},
   "gpu.temperature": {label: "GPU temperature", unit: "celsius", resource: "required"},
+  "gpu.junction.temperature": {label: "GPU junction temperature", unit: "celsius", resource: "required"},
+  "gpu.vram.temperature": {label: "GPU VRAM temperature", unit: "celsius", resource: "required"},
   "gpu.power": {label: "GPU power", unit: "watts", resource: "required"},
   "io.pressure.some": {label: "I/O pressure (some)", unit: "percent", resource: "none"},
   "io.pressure.full": {label: "I/O pressure (full)", unit: "percent", resource: "none"},

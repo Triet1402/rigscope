@@ -123,6 +123,10 @@ export type GpuReading =
       memoryTotalBytes: number | null;
       temperatureC: number | null;
       powerWatts: number | null;
+      /** Hottest die hotspot (junction) in °C; read from GPU registers. */
+      junctionTemperatureC?: number | null;
+      /** Hottest VRAM source in °C; read from GPU registers. */
+      vramTemperatureC?: number | null;
     }
   | { id: string; status: "unavailable"; reason: string };
 
@@ -535,17 +539,27 @@ export function parseMetricsPayload(value: unknown): MetricsPayload {
       return {
         status: "ok",
         devices: uniqueIds(arr(x.devices, "gpus.devices", 0, MAX_GPUS).map((d) => resource(d, "gpu", (y, rid_) => {
-          keys(y, ["id", "status", "utilizationPercent", "memoryUsedBytes", "memoryTotalBytes", "temperatureC", "powerWatts"], "gpu");
+          keys(
+            y,
+            ["id", "status", "utilizationPercent", "memoryUsedBytes", "memoryTotalBytes", "temperatureC", "powerWatts"],
+            "gpu",
+            ["junctionTemperatureC", "vramTemperatureC"],
+          );
           const used = nullable(y.memoryUsedBytes, (v) => int(v, "memoryUsedBytes", 0, Number.MAX_SAFE_INTEGER));
           const total = nullable(y.memoryTotalBytes, (v) => int(v, "memoryTotalBytes", 0, Number.MAX_SAFE_INTEGER));
           if (used !== null && total !== null && used > total) throw new Error("invalid gpu: memoryUsedBytes exceeds total");
-          return {
+          const out: Extract<GpuReading, { status: "ok" }> = {
             id: rid_, status: "ok",
             utilizationPercent: nullable(y.utilizationPercent, (v) => num(v, "utilizationPercent", 0, 100)),
             memoryUsedBytes: used, memoryTotalBytes: total,
             temperatureC: nullable(y.temperatureC, (v) => num(v, "temperatureC", -50, 200)),
             powerWatts: nullable(y.powerWatts, (v) => num(v, "powerWatts", 0, 10_000)),
           };
+          const junctionTemperatureC = optionalNullable(y, "junctionTemperatureC", (v) => num(v, "junctionTemperatureC", -50, 200));
+          if (junctionTemperatureC !== undefined) out.junctionTemperatureC = junctionTemperatureC;
+          const vramTemperatureC = optionalNullable(y, "vramTemperatureC", (v) => num(v, "vramTemperatureC", -50, 200));
+          if (vramTemperatureC !== undefined) out.vramTemperatureC = vramTemperatureC;
+          return out;
         }))),
       };
     }),

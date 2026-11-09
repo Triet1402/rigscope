@@ -40,6 +40,8 @@ export const METRICS = {
   "gpu.memory.used": { unit: "bytes" },
   "gpu.memory.total": { unit: "bytes" },
   "gpu.temperature": { unit: "celsius" },
+  "gpu.junction.temperature": { unit: "celsius" },
+  "gpu.vram.temperature": { unit: "celsius" },
   "gpu.power": { unit: "watts" },
   "fs.used": { unit: "bytes" },
   "fs.total": { unit: "bytes" },
@@ -79,6 +81,8 @@ const GPU_METRICS = new Set<MetricName>([
   "gpu.memory.used",
   "gpu.memory.total",
   "gpu.temperature",
+  "gpu.junction.temperature",
+  "gpu.vram.temperature",
   "gpu.power",
 ]);
 const DISK_FAMILY_METRICS = new Set<MetricName>([
@@ -119,6 +123,16 @@ export function flattenMetrics(payload: MetricsPayload, known?: readonly KnownSe
   const points: FlatPoint[] = [];
   const push = (metric: MetricName, resourceId: string, value: number | null): void => {
     points.push({ metric, resourceId, value });
+  };
+  // Optional per-resource metric: an absent (undefined) value creates no
+  // series on first sight, a previously known series becomes null, and an
+  // explicit null is stored as null.
+  const pushOptional = (metric: MetricName, resourceId: string, value: number | null | undefined): void => {
+    if (value !== undefined) {
+      push(metric, resourceId, value);
+    } else if (known?.some((item) => item.metric === metric && item.resourceId === resourceId)) {
+      push(metric, resourceId, null);
+    }
   };
   const pushKnownNulls = (metrics: ReadonlySet<MetricName>): void => {
     if (!known) return;
@@ -172,6 +186,10 @@ export function flattenMetrics(payload: MetricsPayload, known?: readonly KnownSe
       if (gpu.status === "unavailable") {
         push("gpu.utilization", gpu.id, null);
         push("gpu.memory.used", gpu.id, null);
+        // Optional sensors get a null only when the series already exists, so
+        // an unavailable card does not invent junction/VRAM series.
+        pushOptional("gpu.junction.temperature", gpu.id, undefined);
+        pushOptional("gpu.vram.temperature", gpu.id, undefined);
         continue;
       }
       push("gpu.utilization", gpu.id, gpu.utilizationPercent);
@@ -179,6 +197,8 @@ export function flattenMetrics(payload: MetricsPayload, known?: readonly KnownSe
       push("gpu.memory.total", gpu.id, gpu.memoryTotalBytes);
       push("gpu.temperature", gpu.id, gpu.temperatureC);
       push("gpu.power", gpu.id, gpu.powerWatts);
+      pushOptional("gpu.junction.temperature", gpu.id, gpu.junctionTemperatureC);
+      pushOptional("gpu.vram.temperature", gpu.id, gpu.vramTemperatureC);
     }
   } else {
     // A collection-wide GPU failure: null every previously known GPU series.
@@ -198,11 +218,7 @@ export function flattenMetrics(payload: MetricsPayload, known?: readonly KnownSe
       push("fs.used", fs.id, fs.usedBytes);
       push("fs.total", fs.id, fs.totalBytes);
       push("fs.usage", fs.id, percentOf(fs.usedBytes, fs.totalBytes));
-      if (fs.inodesTotal !== undefined) {
-        push("fs.inodes.usage", fs.id, percentOf(fs.inodesUsed, fs.inodesTotal ?? 0));
-      } else if (known?.some((item) => item.metric === "fs.inodes.usage" && item.resourceId === fs.id)) {
-        push("fs.inodes.usage", fs.id, null);
-      }
+      pushOptional("fs.inodes.usage", fs.id, fs.inodesTotal === undefined ? undefined : percentOf(fs.inodesUsed, fs.inodesTotal ?? 0));
     }
     for (const disk of payload.disks.devices) {
       if (disk.status === "unavailable") {

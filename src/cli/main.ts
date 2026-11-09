@@ -23,6 +23,7 @@ import { describeMachineDataReport, recordMachineDataTransition, type MachineDat
 import { recoverAdminPassword } from '../operations/recovery';
 import { acquireProcessLease } from '../runtime/process-lease';
 import { runSystemCommand } from './system';
+import { runHardwareAccessCommand } from './hardware-access';
 import { selectInstallation, systemInstallationPresent } from './selection';
 import { collectorEnrolled, startInstallation } from './lifecycle';
 import { probeHealth, healthTarget } from './health';
@@ -52,6 +53,8 @@ Usage: rigscope <command> [options]
               Reset a managed user password; coordinate stopping the hub
   uninstall   Remove services, command and all saved data (default)
   system      Optional system installation (plan first; apply requires sudo)
+  gpu-temps   NVIDIA junction/VRAM sensor access: status|enable|disable (enable needs sudo)
+  cpu-power   CPU package power (RAPL) access: status|enable|disable (enable needs sudo)
   config      Show the private configuration path
 
 Options:
@@ -194,6 +197,10 @@ async function main(): Promise<number> {
   const argv = process.argv.slice(2);
   if (argv[0] === 'system') return runSystemCommand(argv.slice(1));
   if (argv[0] === 'help' && argv[1] === 'system') return runSystemCommand(['help']);
+  if (argv[0] === 'gpu-temps' || argv[0] === 'cpu-power') return runHardwareAccessCommand(argv);
+  if (argv[0] === 'help' && (argv[1] === 'gpu-temps' || argv[1] === 'cpu-power')) {
+    return runHardwareAccessCommand([argv[1], '--help']);
+  }
   const {values, positionals} = parseArgs({options: {
     'state-dir': {type: 'string'}, role: {type: 'string'}, port: {type: 'string'}, origin: {type: 'string'}, socket: {type: 'string'},
     'token-file': {type: 'string'}, from: {type: 'string'}, foreground: {type: 'boolean'}, enable: {type: 'boolean'}, replace: {type: 'boolean'},

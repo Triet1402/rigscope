@@ -164,6 +164,9 @@ export function createSyntheticMetricsSampler(
                 memoryTotalBytes: SYNTHETIC_GPU_MEMORY_BYTES,
                 temperatureC: Math.round(45 + 8 * memoryWave),
                 powerWatts: Math.round(90 + 30 * cpuWave),
+                // Register-read sensors run hotter than the reported core.
+                junctionTemperatureC: Math.round((57 + 10 * memoryWave + jitter()) * 10) / 10,
+                vramTemperatureC: Math.round((60 + 9 * memoryWave + jitter()) * 10) / 10,
               },
             ],
           },

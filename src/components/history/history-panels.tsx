@@ -273,9 +273,14 @@ export function buildHistoryPanels(props: BuildProps): PanelModel[] {
     });
   }
 
-  const gpuMetrics = ["gpu.utilization", "gpu.memory.used", "gpu.temperature", "gpu.power"].filter((metric) =>
-    selected.has(metric),
-  );
+  const gpuMetrics = [
+    "gpu.utilization",
+    "gpu.memory.used",
+    "gpu.temperature",
+    "gpu.junction.temperature",
+    "gpu.vram.temperature",
+    "gpu.power",
+  ].filter((metric) => selected.has(metric));
   if (gpuMetrics.length > 0) {
     const cards = gpuCards(machine, result.series);
     const visibleCards = cards.filter((card) => !hiddenCards.has(card.id));

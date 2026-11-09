@@ -98,6 +98,28 @@ export const ALERT_PRESETS = [
     description: "Suggests GPU temperature at or above 85 °C for 1 minute.",
   },
   {
+    id: "gpu-junction-hot",
+    label: "GPU junction hot",
+    ruleName: "GPU junction hot",
+    metric: "gpu.junction.temperature",
+    condition: "above",
+    threshold: 95,
+    durationMs: 60_000,
+    resourceKind: "gpu",
+    description: "Suggests GPU junction temperature at or above 95 °C for 1 minute.",
+  },
+  {
+    id: "gpu-vram-hot",
+    label: "GPU VRAM hot",
+    ruleName: "GPU VRAM hot",
+    metric: "gpu.vram.temperature",
+    condition: "above",
+    threshold: 95,
+    durationMs: 60_000,
+    resourceKind: "gpu",
+    description: "Suggests GPU VRAM temperature at or above 95 °C for 1 minute.",
+  },
+  {
     id: "cpu-hot",
     label: "CPU hot",
     ruleName: "CPU hot",
@@ -332,6 +354,13 @@ function optionalReading(value: unknown, key: string, label: string): AlertPrese
     : {kind: "ready"};
 }
 
+/** GPU temperature metrics share one evaluation path; only the field differs. */
+const GPU_TEMPERATURE_FIELDS: Partial<Record<AlertMetric, {field: string; label: string}>> = {
+  "gpu.temperature": {field: "temperatureC", label: "GPU temperature"},
+  "gpu.junction.temperature": {field: "junctionTemperatureC", label: "GPU junction temperature"},
+  "gpu.vram.temperature": {field: "vramTemperatureC", label: "GPU VRAM temperature"},
+};
+
 function evaluatePreset(
   preset: AlertPreset,
   machine: MachineState,
@@ -399,7 +428,9 @@ function evaluatePreset(
       }
       return {kind: "ready"};
     }
-    case "gpu.temperature": {
+    case "gpu.temperature":
+    case "gpu.junction.temperature":
+    case "gpu.vram.temperature": {
       const gpu = findGpu(payload, resourceId);
       if (gpu === undefined) {
         return unavailable("The latest sample does not include this GPU.");
@@ -407,7 +438,8 @@ function evaluatePreset(
       if (gpu.status !== "ok") {
         return unavailable("This GPU is unavailable in the latest sample.");
       }
-      return optionalReading(gpu, "temperatureC", "GPU temperature");
+      const field = GPU_TEMPERATURE_FIELDS[preset.metric]!;
+      return optionalReading(gpu, field.field, field.label);
     }
     case "disk.utilization": {
       const disk = findDisk(payload, resourceId);

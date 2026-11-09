@@ -163,6 +163,10 @@ export type GpuCardView = {
   memoryTotalBytes: number | null;
   temperatureC: number | null;
   powerWatts: number | null;
+  /** Hottest die hotspot (junction) in °C; register-read, absent when unsupported. */
+  junctionTemperatureC: number | null;
+  /** Hottest VRAM source in °C; register-read, absent when unsupported. */
+  vramTemperatureC: number | null;
   stale: boolean;
 };
 
@@ -440,6 +444,8 @@ function gpuCards(machine: MachineState, stale: boolean): GpuCardView[] {
         memoryTotalBytes: reading.memoryTotalBytes ?? gpu?.memoryTotalBytes ?? null,
         temperatureC: reading.temperatureC,
         powerWatts: reading.powerWatts,
+        junctionTemperatureC: reading.junctionTemperatureC ?? null,
+        vramTemperatureC: reading.vramTemperatureC ?? null,
       });
       continue;
     }
@@ -453,6 +459,8 @@ function gpuCards(machine: MachineState, stale: boolean): GpuCardView[] {
         memoryTotalBytes: gpu?.memoryTotalBytes ?? null,
         temperatureC: null,
         powerWatts: null,
+        junctionTemperatureC: null,
+        vramTemperatureC: null,
       });
       continue;
     }
@@ -466,6 +474,8 @@ function gpuCards(machine: MachineState, stale: boolean): GpuCardView[] {
         memoryTotalBytes: null,
         temperatureC: null,
         powerWatts: null,
+        junctionTemperatureC: null,
+        vramTemperatureC: null,
       });
       continue;
     }
@@ -478,6 +488,8 @@ function gpuCards(machine: MachineState, stale: boolean): GpuCardView[] {
       memoryTotalBytes: gpu?.memoryTotalBytes ?? null,
       temperatureC: null,
       powerWatts: null,
+      junctionTemperatureC: null,
+      vramTemperatureC: null,
     });
   }
   return cards;

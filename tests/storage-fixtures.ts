@@ -41,6 +41,8 @@ export type PayloadOptions = {
     memoryTotal?: number | null;
     temperature?: number | null;
     power?: number | null;
+    junction?: number | null;
+    vram?: number | null;
     unavailable?: boolean;
   }>;
   filesystems?: Array<{
@@ -127,6 +129,8 @@ export function makePayload(options: PayloadOptions = {}): MetricsPayload {
                 memoryTotalBytes: gpu.memoryTotal ?? null,
                 temperatureC: gpu.temperature ?? null,
                 powerWatts: gpu.power ?? null,
+                ...(gpu.junction === undefined ? {} : {junctionTemperatureC: gpu.junction}),
+                ...(gpu.vram === undefined ? {} : {vramTemperatureC: gpu.vram}),
               },
         ),
       };

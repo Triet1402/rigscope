@@ -15,6 +15,8 @@
 import { execFile as nodeExecFile } from 'node:child_process';
 
 import type { GpuReading } from '../../src/contracts';
+import type { GpuSensorMap, GpuSensorSource } from './gpu-temps';
+import { normalizeBusFunctionKey } from './gpu-temps';
 
 export type GpuAvailability = 'yes' | 'no' | 'unknown';
 
@@ -62,6 +64,11 @@ export type GpuPollerOptions = {
   monotonicMs?: () => number;
   /** Short diagnostic line sink. */
   onEvent?: (line: string) => void;
+  /**
+   * Optional junction/VRAM register temperature source. When provided, it is
+   * polled alongside `nvidia-smi` and merged into readings by PCI bus id.
+   */
+  sensorSource?: GpuSensorSource | null;
 };
 
 const DEFAULT_TIMEOUT_MS = 3_000;
@@ -200,12 +207,15 @@ export class GpuPoller {
   private readonly now: () => number;
   private readonly monotonicMs: () => number;
   private readonly onEvent?: (line: string) => void;
+  private readonly sensorSource: GpuSensorSource | null;
 
   private started = false;
   private timer: NodeJS.Timeout | null = null;
   private inflight: Promise<void> | null = null;
   private consecutiveFailures = 0;
   private gpuQueries = 0;
+  private lastDeviceCount = -1;
+  private settleTimeoutEmitted = false;
   private snapshot: GpuSnapshot | null = null;
   private info = new Map<string, GpuDeviceInfo>();
   private apps = new Map<number, number>();
@@ -230,6 +240,7 @@ export class GpuPoller {
     this.now = options.now ?? Date.now;
     this.monotonicMs = options.monotonicMs ?? (() => performance.now());
     this.onEvent = options.onEvent;
+    this.sensorSource = options.sensorSource ?? null;
   }
 
   /** Starts the low-frequency polling loop (immediately, then per cadence). */
@@ -314,19 +325,33 @@ export class GpuPoller {
 
   private async runCycle(): Promise<void> {
     try {
+      // Register temperatures are read in parallel with the expensive query.
+      // The early catch keeps the sensor promise owned even if the
+      // `nvidia-smi` exec below throws before it is awaited.
+      const sensorCycle = this.sensorSource !== null
+        ? this.sensorSource.pollOnce().catch(() => undefined)
+        : null;
       const stdout = await this.exec(GPU_QUERY);
       const rows = parseGpuCsv(stdout);
       this.applyRows(rows);
       this.gpuQueries += 1;
+      const wasAvailable = this.availability === 'yes';
       this.availability = 'yes';
       this.consecutiveFailures = 0;
-      this.snapshot = {atMonotonicMs: this.monotonicMs(), devices: this.toReadings(rows)};
-      this.emit(`gpu telemetry: ${rows.length} device(s)`);
+      const sensors = await this.settleSensorCycle(sensorCycle);
+      this.snapshot = {atMonotonicMs: this.monotonicMs(), devices: this.toReadings(rows, sensors)};
+      // Diagnostics only on state changes: this line would otherwise repeat
+      // every healthy cycle (two seconds by default).
+      if (!wasAvailable || rows.length !== this.lastDeviceCount) {
+        this.emit(`gpu telemetry: ${rows.length} device(s)`);
+      }
+      this.lastDeviceCount = rows.length;
       if (this.gpuQueries % 3 === 0) {
         await this.pollComputeApps();
       }
     } catch (error) {
       this.consecutiveFailures += 1;
+      this.lastDeviceCount = -1;
       if (isEnoent(error)) {
         this.availability = 'no';
         this.emit('gpu telemetry unavailable: nvidia-smi not found');
@@ -334,6 +359,39 @@ export class GpuPoller {
         this.emit(`gpu telemetry query failed: ${errorMessage(error)}`);
       }
     }
+  }
+
+  /**
+   * Awaits the in-flight sensor cycle within the same budget as an
+   * `nvidia-smi` invocation so a sensor promise that never settles or rejects
+   * cannot hold up the snapshot. The register reads themselves are synchronous
+   * sysfs reads on the event loop, so this budget cannot preempt a read that
+   * blocks: it only bounds waiting on the cycle's promise. Failures never
+   * invalidate the `nvidia-smi` readings; GpuTempsPoller reports its own
+   * diagnostics.
+   */
+  private async settleSensorCycle(cycle: Promise<void> | null): Promise<GpuSensorMap | null> {
+    if (cycle === null || this.sensorSource === null) return null;
+    let timer: NodeJS.Timeout | undefined;
+    const budget = new Promise<'timeout'>((resolve) => {
+      timer = setTimeout(() => resolve('timeout'), this.timeoutMs);
+      timer.unref?.();
+    });
+    const outcome = await Promise.race([
+      cycle.then(() => 'settled' as const, () => 'failed' as const),
+      budget,
+    ]);
+    clearTimeout(timer);
+    if (outcome === 'timeout') {
+      // Same once-per-state-change discipline as the diagnostics elsewhere.
+      if (!this.settleTimeoutEmitted) {
+        this.settleTimeoutEmitted = true;
+        this.emit('gpu register temps: cycle did not settle in time');
+      }
+    } else {
+      this.settleTimeoutEmitted = false;
+    }
+    return this.sensorSource.latest();
   }
 
   private async pollComputeApps(): Promise<void> {
@@ -401,16 +459,29 @@ export class GpuPoller {
     this.info = info;
   }
 
-  private toReadings(rows: ParsedGpuRow[]): GpuReading[] {
-    return rows.map((row) => ({
-      id: `gpu:${row.uuid}`,
-      status: 'ok' as const,
-      utilizationPercent: row.utilizationPercent,
-      memoryUsedBytes: row.memoryUsedBytes,
-      memoryTotalBytes: row.memoryTotalBytes,
-      temperatureC: row.temperatureC,
-      powerWatts: row.powerWatts,
-    }));
+  private toReadings(rows: ParsedGpuRow[], sensors: GpuSensorMap | null): GpuReading[] {
+    return rows.map((row) => {
+      const reading: Extract<GpuReading, {status: 'ok'}> = {
+        id: `gpu:${row.uuid}`,
+        status: 'ok' as const,
+        utilizationPercent: row.utilizationPercent,
+        memoryUsedBytes: row.memoryUsedBytes,
+        memoryTotalBytes: row.memoryTotalBytes,
+        temperatureC: row.temperatureC,
+        powerWatts: row.powerWatts,
+      };
+      const key = normalizeBusFunctionKey(row.pciBusId);
+      const sensor = sensors !== null && key !== null ? sensors.get(key) : undefined;
+      if (sensor !== undefined) {
+        if (sensor.junctionTemperatureC !== null) {
+          reading.junctionTemperatureC = sensor.junctionTemperatureC;
+        }
+        if (sensor.vramTemperatureC !== null) {
+          reading.vramTemperatureC = sensor.vramTemperatureC;
+        }
+      }
+      return reading;
+    });
   }
 
   private emit(line: string): void {

@@ -5,11 +5,12 @@ import { acquireProcessLease } from '../runtime/process-lease';
 import { collectorHasDestinations, componentEnabled, enabledComponents, hubEnvironment, readSetup, type Component } from './config';
 
 /**
- * COLLECTOR_* keys are stripped from the supervisor environment, so an
- * explicit queue mode must be re-injected into the collector child. Validate it
- * with the collector's own parser: supported values (including padded input)
- * are forwarded normalized, and an unsupported value fails here instead of
- * being silently dropped in favour of the default.
+ * COLLECTOR_* keys are stripped from the supervisor environment, so the
+ * explicit queue mode and GPU-temps kill switch must be re-injected into the
+ * collector child. Validate the queue mode with the collector's own parser:
+ * supported values (including padded input) are forwarded normalized, and an
+ * unsupported value fails here instead of being silently dropped in favour of
+ * the default.
  */
 export function collectorQueueModeEnvironment(env: Readonly<Record<string, string | undefined>>): Record<string, string> {
   const raw = env['COLLECTOR_QUEUE_MODE']?.trim();
@@ -18,6 +19,21 @@ export function collectorQueueModeEnvironment(env: Readonly<Record<string, strin
   const queueMode = parseQueueMode(env, issues);
   if (issues.length > 0) throw new Error(issues.join('\n'));
   return { COLLECTOR_QUEUE_MODE: queueMode };
+}
+
+/**
+ * COLLECTOR_* keys are stripped from the supervisor environment, so the queue
+ * mode and the GPU-temps kill switch must both be re-injected. Any
+ * `COLLECTOR_GPU_TEMPS` value other than an exact (trimmed, case-insensitive)
+ * `off` means enabled, matching the collector: omit the key and let it default
+ * on.
+ */
+export function collectorSupervisorEnvironment(env: Readonly<Record<string, string | undefined>>): Record<string, string> {
+  const gpuTemps = env['COLLECTOR_GPU_TEMPS']?.trim().toLowerCase();
+  return {
+    ...collectorQueueModeEnvironment(env),
+    ...(gpuTemps === 'off' ? {COLLECTOR_GPU_TEMPS: 'off'} : {}),
+  };
 }
 
 /** Supervisor lease for one component. The collector child owns its own lock. */
@@ -55,7 +71,7 @@ export async function runInstallation(root: string, dir: string, component?: Com
   // Validate before skipping, acquiring leases or spawning: an unsupported
   // value must surface as an error, never silently become the memory default.
   const collectorEnvironment = selected.includes('collector')
-    ? collectorQueueModeEnvironment(process.env)
+    ? collectorSupervisorEnvironment(process.env)
     : {};
   // An enabled but unconfigured collector must not enter systemd's restart
   // loop. Skip only the collector; a selected hub still runs normally.

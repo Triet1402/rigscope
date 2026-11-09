@@ -115,6 +115,54 @@ never persisted.
 Process CPU uses 100% per logical core. Machine CPU is normalized across all
 logical cores. See [Exports](exports.md) for CSV and JSON behavior.
 
+## GPU junction and VRAM temperatures
+
+On NVIDIA cards with GDDR6, GDDR6X or GDDR7 memory, Rigscope can also report
+the **junction** (hottest die hotspot) and **VRAM** (hottest memory source)
+temperatures. nvidia-smi does not expose these, so the collector reads them
+from the GPU's undocumented thermal registers, the same technique as
+[gddr6-core-junction-vram-temps](https://github.com/ThomasBaruzier/gddr6-core-junction-vram-temps)
+(with credits there for the register findings). Register reads go through each
+GPU's sysfs BAR0 file (`/sys/bus/pci/devices/<bdf>/resource0`), so no kernel
+`iomem=relaxed` flag, no native helper and no root daemon are needed. Readings
+join the dashboard, History charts (`Junction`, `VRAM temp`), CSV/JSON exports
+and alerts (`GPU junction hot`, `GPU VRAM hot`).
+
+The BAR0 file is root-owned by default. The fast path grants everything in
+one command (group, membership, and the persistent udev rule):
+
+```sh
+sudo rigscope gpu-temps enable      # also: rigscope gpu-temps status|disable
+```
+
+`status` needs no sudo and probes the registers for real; it prints the exact
+fix command when access is missing and exits with code 3 in that case.
+`enable` grants the sudo-invoking user and, when present, the
+`rigscope-collector` service account.
+
+The new group only reaches a user-scope collector after the login session is
+recreated (log out and back in, or reboot; restarting the unit is not enough
+because the systemd user manager keeps the old group list). Restart the
+collector afterwards and check for `gpu register temps: N device(s)` in
+`journalctl -u rigscope-collector` on a system-scope install, or the user
+journal (`rigscope logs collector --follow` or `journalctl --user`) on a
+user-scope install.
+
+A `rigscope try` trial is covered by the same user grant. Without access, or
+when the registers do not decode, the feature reports nothing: junction and
+VRAM show as *Not reported* and appear in nothing (the collector logs a single
+diagnostic line per state change). Set `COLLECTOR_GPU_TEMPS=off` in the
+collector environment to disable the reads entirely.
+
+Register maps are undocumented and card-specific. The decoder rejects zero,
+all-ones, poison and out-of-range words, and known GDDR7/Blackwell cards are
+selected by PCI device id, but a card whose registers follow a different map
+can still report nothing or an implausible value. Verify the readings on your
+hardware, and set `COLLECTOR_GPU_TEMPS=off` if they look wrong. Once the grant
+is in place, `gpu-temps status` reports an unsupported card as "nothing to
+enable"; without the grant it cannot distinguish that case from missing
+permission, so it asks for the grant.
+
 ## Users and administration
 
 Use **Administration** to manage users, machine access, names, tags, collector

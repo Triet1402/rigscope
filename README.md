@@ -41,6 +41,8 @@ The trial uses separate data and stops with Ctrl+C.
 | Stop or start the installation | `rigscope stop` / `rigscope start` |
 | Open the dashboard through Tailscale HTTPS | [Set up remote access](docs/installation.md#access-from-another-computer) |
 | Monitor another machine | [Add a collector](docs/installation.md#add-machines-and-hubs) |
+| Enable junction/VRAM GPU temperatures | `sudo rigscope gpu-temps enable` |
+| Enable CPU package power (RAPL) | `sudo rigscope cpu-power enable` |
 | Install a downloaded package | [Install from an archive](docs/installation.md#install-from-an-archive) |
 
 Each collector connects outbound to up to eight hubs. Each hub has its own users,
@@ -51,7 +53,10 @@ permissions, history and alerts. Collectors need no incoming ports.
 Rigscope is read-only: it does not kill processes, change priorities or control
 services on monitored machines. Missing sensor readings stay unavailable.
 NVIDIA and available AMD GPU counters are supported; Intel GPU readings are
-partial. See the [hardware notes](docs/installation.md#hardware).
+partial. On NVIDIA GDDR6/6X/7 cards Rigscope can additionally report junction
+and VRAM temperatures from GPU registers once the collector is granted BAR0
+read access ([GPU monitoring](docs/monitoring.md#gpu-junction-and-vram-temperatures)).
+See the [hardware notes](docs/installation.md#hardware).
 
 History is RAM-only by default: recent charts are bounded in memory and
 telemetry history disappears when the hub restarts. Users, credentials,

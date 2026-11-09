@@ -73,7 +73,8 @@ function metricControlLabel(metric: string, fallback: string): string {
     "cpu.pressure": "Pressure", "cpu.temperature": "Temperature", "cpu.power": "Package power",
     "memory.used": "Used bytes", "memory.usage": "Usage %", "swap.used": "Swap",
     "memory.pressure.some": "Pressure (some)", "memory.pressure.full": "Pressure (full)",
-    "gpu.utilization": "Utilization", "gpu.memory.used": "VRAM", "gpu.temperature": "Temperature", "gpu.power": "Power",
+    "gpu.utilization": "Utilization", "gpu.memory.used": "VRAM", "gpu.temperature": "Temperature",
+    "gpu.junction.temperature": "Junction", "gpu.vram.temperature": "VRAM temp", "gpu.power": "Power",
     "fs.used": "Space used", "fs.usage": "Capacity %", "fs.inodes.usage": "Inodes %",
     "net.rx": "Received", "net.tx": "Sent",
   };

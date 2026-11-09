@@ -1,0 +1,12 @@
+# Managed by Rigscope: read-only NVIDIA BAR0 access for the collector group.
+# `rigscope gpu-temps disable` only removes rule files carrying this marker.
+# Grants the Rigscope collector group read access to NVIDIA GPU BAR0 so the
+# collector can read junction and VRAM temperatures (docs/monitoring.md#gpu-junction-and-vram-temperatures).
+# Applies to PCI display functions (class 0x03xx) of vendor 0x10de only.
+# Install: copy to /etc/udev/rules.d/, then `udevadm control --reload` and
+# `udevadm trigger -s pci`, or restart the machine.
+
+ACTION=="add|change", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x03[0-9a-f][0-9a-f][0-9a-f][0-9a-f]", \
+  RUN+="/usr/bin/chgrp rigscope-gpu /sys%p/resource0", \
+  RUN+="/usr/bin/chmod 0440 /sys%p/resource0", \
+  OPTIONS+="watch"

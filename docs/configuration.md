@@ -77,6 +77,7 @@ hashes; it reads passwords from stdin. Keep hashes private.
 | `COLLECTOR_HUBS` | Explicit destinations as JSON: `{url,token,sharing?,intervalMs?}`, up to eight. Otherwise the collector uses saved enrollment. |
 | `COLLECTOR_HOSTNAME` | Display metadata; defaults to the OS hostname in real mode. |
 | `COLLECTOR_QUEUE_MODE` | Where unacknowledged samples wait: `memory` by default (RAM, no queue written to disk, lost on collector restart) or `durable` (a SQLite outbox per destination that survives a collector restart, at one database write per sample). Bounds are identical: 10 minutes and 64 MiB per destination. |
+| `COLLECTOR_GPU_TEMPS` | Set to `off` to disable NVIDIA junction/VRAM register reads entirely. Enabled by default; the readings themselves need BAR0 access, see [GPU monitoring](monitoring.md#gpu-junction-and-vram-temperatures). |
 
 ### Sharing settings
 

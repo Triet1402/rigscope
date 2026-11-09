@@ -14,6 +14,8 @@ The installed `rigscope system` command and `dist/system.cjs` use the same code.
 | Install or control services | [Component lifecycle](#system-component-lifecycle) |
 | Enroll with another hub | [Connect to a hub](#connecting-to-an-independent-hub) |
 | Grant package-energy access | [CPU package power](#cpu-package-power) |
+| Enable junction/VRAM GPU temperatures (any install) | `sudo rigscope gpu-temps enable` |
+| Enable CPU package power (any install) | `sudo rigscope cpu-power enable` |
 
 ### Scope and generated layout
 
@@ -184,6 +186,21 @@ node dist/system.cjs power status
 sudo node dist/system.cjs power grant --apply
 sudo node dist/system.cjs power revoke --apply
 ```
+
+`sudo rigscope cpu-power enable` grants OS-level access for either scope, and
+`rigscope cpu-power status` verifies it. It grants the invoking sudo user —
+which covers a user-scope install, where the collector runs as you — and, when
+a system-scope install provides the `rigscope-collector` account, the RAPL
+group is reserved for exactly that account and only the collector is granted.
+
+The convenience command does not update `rigscope system` state. On a
+system-scope install, prefer `sudo rigscope system power grant --apply`: it
+writes `/etc/sysusers.d/rigscope-rapl.conf` and records the grant, so
+`rigscope system power status` stays accurate. Revoke a system-managed grant
+with `sudo rigscope system power revoke --apply`; `rigscope cpu-power disable`
+refuses to remove it so that state stays consistent. On a user-scope install,
+`rigscope cpu-power disable` revokes the grant. On Intel and recent AMD CPUs
+the kernel exposes these package counters as `intel-rapl:N` devices.
 
 Mechanism:
 

@@ -160,6 +160,24 @@ export const HISTORY_METRICS: readonly HistoryMetricOption[] = [
     description: "Per-card temperature",
   },
   {
+    metric: "gpu.junction.temperature",
+    label: "GPU junction temperature",
+    shortLabel: "Junction",
+    unit: "celsius",
+    family: "gpus",
+    colorSlot: 3,
+    description: "Per-card hottest die hotspot, read from GPU registers",
+  },
+  {
+    metric: "gpu.vram.temperature",
+    label: "GPU VRAM temperature",
+    shortLabel: "VRAM temp",
+    unit: "celsius",
+    family: "gpus",
+    colorSlot: 3,
+    description: "Per-card hottest memory temperature, read from GPU registers",
+  },
+  {
     metric: "gpu.power",
     label: "GPU power",
     shortLabel: "Power",
@@ -306,7 +324,7 @@ export const HISTORY_METRIC_GROUPS: ReadonlyArray<{ id: string; label: string; m
   },
   {
     id: "gpu", label: "GPU",
-    metrics: ["gpu.utilization", "gpu.memory.used", "gpu.temperature", "gpu.power"],
+    metrics: ["gpu.utilization", "gpu.memory.used", "gpu.temperature", "gpu.junction.temperature", "gpu.vram.temperature", "gpu.power"],
   },
   {
     id: "disk", label: "Storage",

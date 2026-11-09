@@ -11,6 +11,7 @@ import { createSequenceAllocator } from './sampling/sequence';
 import { createMetricsSampler } from './sampling/metrics';
 import { createSyntheticMetricsSampler } from './sampling/synthetic';
 import { GpuPoller } from './sampling/gpu';
+import { GpuTempsPoller, gpuTempsEnabled } from './sampling/gpu-temps';
 import { ProcessScanner } from './processes/scan';
 import { DetailScheduler } from './processes/scheduler';
 import { acquireProcessLease } from '../src/runtime/process-lease';
@@ -31,7 +32,20 @@ export async function runCollectorLoop(config: CollectorConfig, identity: Collec
   const releaseLease = acquireProcessLease(join(stateDir, 'collector-runtime.lock'));
   const sequence = createSequenceAllocator();
   const budget = new OutboxBudget();
-  const gpu = mock ? null : new GpuPoller({ intervalMs: Math.max(2000, config.intervalMs) });
+  const logEvent = (line: string): void => {
+    console.log(`collector ${line}`);
+  };
+  // The register-temps poller owns no timer: GpuPoller drives it per cycle.
+  const gpuSensors = mock || !gpuTempsEnabled()
+    ? null
+    : new GpuTempsPoller({onEvent: logEvent});
+  const gpu = mock
+    ? null
+    : new GpuPoller({
+      intervalMs: Math.max(2000, config.intervalMs),
+      onEvent: logEvent,
+      sensorSource: gpuSensors,
+    });
   const sampler = mock ? createSyntheticMetricsSampler(identity, { sequence }) : createMetricsSampler(identity, { sequence, gpu });
   const connections: HubConnection[] = [];
   try {
@@ -41,7 +55,7 @@ export async function runCollectorLoop(config: CollectorConfig, identity: Collec
         budget, allocateSequence: () => sequence.next(), sampler,
         socketFactory: (url, options) => new WebSocket(url, { headers: options.headers,
           handshakeTimeout: options.handshakeTimeoutMs, maxPayload: options.maxPayloadBytes, perMessageDeflate: false }),
-        onEvent: line => console.log(`collector ${line}`),
+        onEvent: logEvent,
       }));
     }
   } catch (error) {

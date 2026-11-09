@@ -1,5 +1,26 @@
 # Release notes
 
+## 0.2.2
+
+- Add `rigscope gpu-temps` and `rigscope cpu-power` commands
+  (`status|enable|disable`): one sudo'd command installs the group, group
+  membership and persistent udev rule that make NVIDIA junction/VRAM registers
+  and CPU package-power (RAPL) counters readable by the unprivileged
+  collector. `status` needs no root and answers by actually reading the
+  sensors, printing the exact fix command when access is missing.
+- Add NVIDIA **junction and VRAM temperature** monitoring. The collector reads
+  the same undocumented thermal registers as
+  [gddr6-core-junction-vram-temps](https://github.com/ThomasBaruzier/gddr6-core-junction-vram-temps)
+  (GDDR6/GDDR6X therm+ADC, Blackwell thermal channels, GDDR7 DQR codes)
+  through each GPU's sysfs BAR0 file. Pure TypeScript: no native helper, no
+  NVML, no `/dev/mem` and no `iomem=relaxed`. Junction and VRAM join the GPU
+  cards, History (`Junction`, `VRAM temp`), CSV/JSON exports and the new
+  `GPU junction hot` / `GPU VRAM hot` alert presets. Reading BAR0 needs a
+  one-time group grant; see
+  [GPU monitoring](docs/monitoring.md#gpu-junction-and-vram-temperatures) and
+  `packaging/system/90-rigscope-gpu-temps.rules`. Disable with
+  `COLLECTOR_GPU_TEMPS=off`. Without the grant nothing changes.
+
 ## 0.2.1
 
 - Make the collector's delivery queue RAM-only by default, mirroring the hub's
