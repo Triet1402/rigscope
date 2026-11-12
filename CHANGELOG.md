@@ -1,5 +1,26 @@
 # Release notes
 
+## 0.2.6
+
+- Let a revoked collector be re-enrolled. Administration listed only active
+  machines as enrollment targets, and the hub refuses a new-machine grant for
+  a collector it already knows, so a revoked machine could not come back.
+  Revoked rows now offer **Re-enroll**, which creates a grant bound to that
+  machine and shows the matching `rigscope connect … --replace` command.
+- A collector whose credential the hub rejects (HTTP 401) now logs once how
+  to re-enroll and retries every five minutes instead of every few seconds.
+- `rigscope connect` restarts the collector it stopped when enrollment fails,
+  instead of leaving it stopped. Its errors now name the cause: an already
+  enrolled hub points to `--replace`, the eight-hub limit is reported on its
+  own, and a 403 lists the usual reasons.
+- The collector launcher enters every granted hardware group it is missing.
+  `sg` adds one group per call, so a user granted both CPU power and GPU
+  temperature access only received the first. Without `sg`, the warning now
+  names every group and says a reboot applies them: startup that continues
+  after logout keeps the user manager alive across logins.
+- The GPU register-temperature access warning points to
+  `rigscope gpu-temps status` instead of a source-tree file.
+
 ## 0.2.5
 
 Released 2026-11-12.

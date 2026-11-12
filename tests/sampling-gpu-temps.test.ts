@@ -205,8 +205,8 @@ test('GpuTempsPoller: latest() exposes readings and diagnostics log once per sta
   await poller.pollOnce();
   await poller.pollOnce();
   assert.deepEqual(events, [
-    'gpu register temps: GPU BAR0 mapping failed (check Python 3 and permissions); '
-      + 'install packaging/system/90-rigscope-gpu-temps.rules (see docs/monitoring.md)',
+    'gpu register temps: GPU BAR0 mapping failed (needs Python 3 and read access); '
+      + 'run rigscope gpu-temps status. If access was granted after this collector started, it applies after a reboot',
   ]);
 
   // Access granted: readings appear and the healthy line logs exactly once,

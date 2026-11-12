@@ -203,9 +203,37 @@ export function formatMachineLabel(machine: AdminMachine): string {
   return machine.machineId;
 }
 
+export type GrantMode = "new" | "replacement" | "reenroll";
+
+export type EnrollmentTarget = {
+  machineId: string;
+  collectorId: string;
+  /** A revoked mapping is re-enrolled; an active one is replaced. */
+  mode: Exclude<GrantMode, "new">;
+};
+
+/**
+ * Every registered mapping is a valid replacement-grant target. A revoked
+ * collector keeps its identity locally and the hub refuses to enroll a known
+ * collector id through a new-installation grant, so re-enrolling the revoked
+ * mapping is the only way that machine can come back. Active mappings are
+ * listed first.
+ */
+export function enrollmentTargets(
+  collectors: readonly { machineId: string; collectorId: string; revoked: boolean }[],
+): EnrollmentTarget[] {
+  return [...collectors]
+    .sort((a, b) => Number(a.revoked) - Number(b.revoked))
+    .map((row) => ({
+      machineId: row.machineId,
+      collectorId: row.collectorId,
+      mode: row.revoked ? "reenroll" : "replacement",
+    }));
+}
+
 /** Enrollment command contains the hub address, never the one-time secret. */
 export function grantCommand(
-  mode: "new" | "replacement",
+  mode: GrantMode,
   origin = "https://your-hub",
 ): { command: string; note: string } {
   const url = new URL(origin);
@@ -213,10 +241,13 @@ export function grantCommand(
     throw new Error("Invalid hub origin");
   }
   const address = url.origin.replace(/'/g, "%27");
+  const notes: Record<GrantMode, string> = {
+    new: "Paste the grant at the prompt, then run rigscope start.",
+    replacement: "Paste the grant at the prompt. The old credential stays active until replacement succeeds.",
+    reenroll: "Run this on the revoked machine and paste the grant at the prompt. It keeps its machine history.",
+  };
   return {
-    command: `rigscope connect '${address}'${mode === "replacement" ? " --replace" : ""}`,
-    note: mode === "replacement"
-      ? "Paste the grant at the prompt. The old credential stays active until replacement succeeds."
-      : "Paste the grant at the prompt, then run rigscope start.",
+    command: `rigscope connect '${address}'${mode === "new" ? "" : " --replace"}`,
+    note: notes[mode],
   };
 }

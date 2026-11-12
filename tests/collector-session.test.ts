@@ -405,6 +405,28 @@ test('a protocol-error close before welcome logs the incompatible-hub hint', (t)
   assert.equal(h.session.describeState().status, 'connecting');
 });
 
+test('a rejected credential (401) explains re-enrollment once and backs off for minutes', (t) => {
+  const h = makeHarness(t, { backoff: { baseMs: 1_000, maxMs: 30_000 } });
+  const first = h.socket();
+  first.emit('error', new Error('Unexpected server response: 401'));
+  first.emit('close', 1006, '');
+  const guidance = h.events.filter((line) => line.includes("rejected this collector's credential (401)"));
+  assert.equal(guidance.length, 1);
+  assert.match(guidance[0]!, /rigscope connect 'http:\/\/127\.0\.0\.1:8081' --replace/);
+  const delays = h.events.map((line) => /reconnecting in (\d+)ms/.exec(line)?.[1]).filter(Boolean).map(Number);
+  assert.equal(delays.length, 1, 'error and close fail the connection once');
+  assert.ok(delays[0]! >= 5 * 60_000, `expected a long backoff, got ${delays[0]}ms`);
+  assert.equal(h.session.describeState().reconnectScheduled, true, 'keeps retrying in case the hub accepts it again');
+});
+
+test('ordinary connection failures keep the short reconnect schedule', (t) => {
+  const h = makeHarness(t, { backoff: { baseMs: 1_000, maxMs: 30_000 } });
+  h.socket().emit('error', new Error('connect ECONNREFUSED 127.0.0.1:8081'));
+  assert.ok(!h.events.some((line) => line.includes('(401)')));
+  const delay = Number(/reconnecting in (\d+)ms/.exec(h.events.join('\n'))?.[1]);
+  assert.ok(delay < 60_000, `expected the normal backoff, got ${delay}ms`);
+});
+
 // ---------------------------------------------------------------------------
 // Canonical serialization
 // ---------------------------------------------------------------------------

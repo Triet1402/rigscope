@@ -23,26 +23,34 @@ export function commandOnPath(command: string, path = process.env.PATH): boolean
 }
 
 /** sg reads the current group database, unlike the long-lived systemd user
- * manager. Only enter a group the collector owner is already a member of;
- * no password, root process, or new login session is needed.
+ * manager. Only enter groups the collector owner is already a member of;
+ * no password, root process, or new login session is needed. sg adds one
+ * group per invocation, so several missing groups are entered by nesting.
  *
- * sg is a setuid helper from shadow-utils/util-linux and is not present on every
- * minimal distribution. A missing helper must degrade to a collector without
- * the granted groups, never stop the collector from starting: sensor data can
- * be absent, telemetry cannot.
+ * sg is a setuid helper from shadow-utils and is not present on every
+ * distribution. A missing helper must degrade to a collector without the
+ * granted groups, never stop the collector from starting: sensor data can
+ * be absent, telemetry cannot. The groups then apply once the user manager
+ * restarts. Startup kept running after logout keeps that manager alive, so
+ * a reboot is the dependable point.
  */
 export function collectorLaunchCommand(node: string, entry: string, user: string, effective: number[],
   groups: Group[], groupHelperAvailable = true): CollectorLaunch {
-  const missing = groups.find(group => group.members.includes(user) && !effective.includes(group.gid));
-  if (!missing) return {command: node, args: [entry]};
+  const missing = groups.filter(group => group.members.includes(user) && !effective.includes(group.gid));
+  if (missing.length === 0) return {command: node, args: [entry]};
   if (!groupHelperAvailable) {
+    const names = missing.map(group => group.name).join(', ');
     return {
       command: node,
       args: [entry],
-      warning: `group ${missing.name} is granted but sg(1) is not installed; hardware sensors stay unavailable until the next login`,
+      warning: `hardware access (${names}) is granted but sg(1) is not installed to apply it now; `
+        + 'CPU power and GPU register temperatures stay unavailable until the next reboot. '
+        + 'Install sg (the shadow-utils, shadow or login package) to apply it without rebooting',
     };
   }
-  return {command: 'sg', args: [missing.name, '-c', `exec ${quote(node)} ${quote(entry)}`]};
+  let command = `exec ${quote(node)} ${quote(entry)}`;
+  for (const group of missing.slice(1).reverse()) command = `exec sg ${quote(group.name)} -c ${quote(command)}`;
+  return {command: 'sg', args: [missing[0]!.name, '-c', command]};
 }
 
 export function collectorLaunch(node: string, entry: string): CollectorLaunch {

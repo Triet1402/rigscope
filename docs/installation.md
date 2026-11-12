@@ -220,9 +220,12 @@ Collectors connect outbound and need no incoming port or root access. Each can
 send to up to eight hubs. Sharing is separate for each hub; network addresses
 and full process arguments start disabled. See [Collection and sharing](monitoring.md#collection-and-sharing).
 
-Changing destinations asks to stop a running collector and resumes it afterward. To replace an
-existing machine credential, create a grant bound to that machine and use
-`connect --replace`. For unattended enrollment, use `--token-file` with an owned
+Changing destinations asks to stop a running collector and resumes it afterward, also when
+enrollment fails. To replace an existing machine credential, create a grant bound to that machine and use
+`connect --replace`. A revoked collector logs `hub rejected this collector's credential (401)`
+and retries every few minutes. To bring it back with its machine history, choose **Re-enroll** on the
+revoked row under Administration > Collectors, then run the shown `connect --replace` command on that
+machine. For unattended enrollment, use `--token-file` with an owned
 private file and delete it afterward; do not put the grant on the command line.
 
 ## Explicit foreground trial

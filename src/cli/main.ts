@@ -12,7 +12,7 @@ import {
 } from './config';
 import { resetInstallation } from './reset';
 import { uninstallInstallation } from './uninstall';
-import { prepareMutation } from './mutation';
+import { completeMutation, prepareMutation } from './mutation';
 import { printHelp, printSuccess, printWarning, printError, bold, colorize } from './output';
 import { combinedLeasePath, componentLeasePath, runInstallation } from './runtime';
 import { activatePackage, enableBootStartup, installAlias, serviceActive, serviceStatus, showLogs, stagePackage, startupStatus, systemctl, unitName, unitPath, writeService } from './services';
@@ -637,9 +637,7 @@ async function main(): Promise<number> {
 
     return 0;
   };
-  const result = await execute();
-  if (result === 0) await mutation?.resume();
-  return result;
+  return completeMutation(mutation, execute, command === 'connect');
 }
 main().then(code => { process.exitCode = code; }).catch((error: unknown) => {
   printError(`Rigscope: ${error instanceof Error ? error.message : 'Command failed.'}`);

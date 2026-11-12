@@ -6,7 +6,7 @@ import { COMPONENTS, type Component, readSetup, componentEnabled } from './confi
 import { serviceStatus, systemctl } from './services';
 import { runningOwnedComponents, stopOwnedRuntimes } from './reset';
 import { startInstallation } from './lifecycle';
-import { printWarning, printSuccess } from './output';
+import { printWarning, printSuccess, printError } from './output';
 
 /** Restore a trial/foreground runtime in the background when no service exists. */
 async function resumeComponent(dir: string, component: Component): Promise<'started' | 'already running'> {
@@ -92,4 +92,33 @@ export async function prepareMutation(dir: string, selected: Component[], option
       }
     },
   };
+}
+
+/**
+ * Run a prepared mutation and put back the components it stopped. Normally
+ * only success resumes them. With resumeOnFailure a failed command resumes
+ * them too, so use it only where a failure leaves saved settings untouched
+ * (connect: a rejected grant or refused enrollment changes nothing locally).
+ */
+export async function completeMutation(
+  mutation: {running: Component[]; resume(): Promise<void>} | undefined,
+  execute: () => Promise<number>,
+  resumeOnFailure: boolean,
+  report: (message: string) => void = printError,
+): Promise<number> {
+  let result: number;
+  try {
+    result = await execute();
+  } catch (error) {
+    if (!resumeOnFailure || !mutation?.running.length) throw error;
+    report(`Rigscope: ${error instanceof Error ? error.message : 'Command failed.'}`);
+    try {
+      await mutation.resume();
+    } catch (resumeError) {
+      report(`Rigscope: ${resumeError instanceof Error ? resumeError.message : 'Could not resume stopped components.'}`);
+    }
+    return 1;
+  }
+  if (result === 0) await mutation?.resume();
+  return result;
 }

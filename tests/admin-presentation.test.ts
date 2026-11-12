@@ -12,6 +12,7 @@ import {
   formatAdminTimestamp,
   formatAuditAction,
   formatMachineLabel,
+  enrollmentTargets,
   grantCommand,
   parseMachineMetaDraft,
   parseTagsInput,
@@ -160,6 +161,20 @@ describe("admin presentation helpers", () => {
     assert.match(replacement.note, /stays active until/);
     assert.throws(() => grantCommand("new", "https://user:secret@rig.example.com"));
     assert.doesNotMatch(replacement.command, /grant-secret/);
+  });
+
+  it("offers revoked machines for re-enrollment, after active replacements", () => {
+    const targets = enrollmentTargets([
+      { machineId: "m-revoked", collectorId: "c-1", revoked: true },
+      { machineId: "m-active", collectorId: "c-2", revoked: false },
+    ]);
+    assert.deepEqual(targets.map((target) => [target.machineId, target.mode]), [
+      ["m-active", "replacement"],
+      ["m-revoked", "reenroll"],
+    ]);
+    const reenroll = grantCommand("reenroll", "http://localhost:8081");
+    assert.equal(reenroll.command, "rigscope connect 'http://localhost:8081' --replace");
+    assert.match(reenroll.note, /revoked machine/);
   });
 
   it("formats audit actions, timestamps, and machine labels", () => {

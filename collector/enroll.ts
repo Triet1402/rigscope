@@ -9,8 +9,13 @@ export async function enrollCollector(path: string, connectUrl: string, enrollme
   if (!url || issues.length) throw new Error('invalid enrollment destination');
   if (!/^[\x21-\x7e]{1,256}$/.test(enrollmentToken)) throw new Error('invalid enrollment token');
   const state = updateInstallation(path);
-  if ((!replace && state.destinations.some(d => d.url === url.href)) ||
-    (!state.destinations.some(d => d.url === url.href) && state.destinations.length >= 8)) throw new Error('destination already enrolled or destination budget exhausted');
+  const enrolled = state.destinations.some(d => d.url === url.href);
+  // Checked before the request, so neither refusal consumes the grant.
+  if (enrolled && !replace) {
+    throw new Error('this collector is already enrolled at that hub. To re-enroll it (for example after it was revoked), '
+      + 'create a replacement or re-enrollment grant for this machine under Administration > Collectors, then run connect again with --replace');
+  }
+  if (!enrolled && state.destinations.length >= 8) throw new Error('destination budget exhausted (8 hubs); remove a destination before connecting another hub');
   // Save proof BEFORE the first request; a lost success response can then be
   // retried without letting a grant holder recover from collectorId alone.
   const prepared = updateInstallation(path, current => {
@@ -30,7 +35,14 @@ export async function enrollCollector(path: string, connectUrl: string, enrollme
       body: JSON.stringify({collectorId: state.collectorId, requestId: proof.requestId, recoverySecret: proof.recoverySecret}),
     });
   } catch { throw new ConfigError(['enrollment request failed; check destination and TLS trust']); }
-  if (response.status !== 201) { await response.body?.cancel(); throw new ConfigError([`enrollment rejected (${response.status}); check the grant and hub enrollment state`]); }
+  if (response.status !== 201) {
+    await response.body?.cancel();
+    // The hub deliberately answers every denial alike; list the usual causes.
+    throw new ConfigError([response.status === 403
+      ? 'enrollment rejected (403): the grant is unknown, expired or already used, or this collector is already registered at the hub '
+        + '(a machine the hub already knows, including a revoked one, needs a replacement or re-enrollment grant and --replace)'
+      : `enrollment rejected (${response.status}); check the grant and hub enrollment state`]);
+  }
   // A credential response must fit the small bounded contract.
   const reader = response.body?.getReader();
   if (!reader) throw new Error('missing enrollment response');

@@ -14,7 +14,9 @@ import type { AdminApi, CollectorRecord, EnrollmentGrant } from "@/admin/api";
 import {
   formatAdminTimestamp,
   formatMachineLabel,
+  enrollmentTargets,
   grantCommand,
+  type GrantMode,
   type AdminMachine,
 } from "@/admin/presentation";
 import { EmptyState, Panel } from "@/components/panel";
@@ -57,7 +59,7 @@ export function CollectorAdmin(props: {
   const [targetMachineId, setTargetMachineId] = useState("");
   const [ttlMs, setTtlMs] = useState<number>(15 * 60_000);
   const [grant, setGrant] = useState<
-    (EnrollmentGrant & { mode: "new" | "replacement" }) | null
+    (EnrollmentGrant & { mode: GrantMode }) | null
   >(null);
   const [grantError, setGrantError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -121,20 +123,21 @@ export function CollectorAdmin(props: {
 
   useEffect(() => {
     if (targetMachineId === "") return;
-    if (!collectors.some((row) => row.machineId === targetMachineId && !row.revoked)) {
+    if (!collectors.some((row) => row.machineId === targetMachineId)) {
       setTargetMachineId("");
     }
   }, [collectors, targetMachineId]);
 
-  const activeCollectors = collectors.filter((row) => !row.revoked);
-  const replacementMode = targetMachineId !== "";
+  const targets = enrollmentTargets(collectors);
+  const selectedTarget = targets.find((target) => target.machineId === targetMachineId);
+  const replacementMode = selectedTarget !== undefined;
   const createdCommand = grant ? grantCommand(grant.mode, window.location.origin) : null;
 
   const createGrant = async () => {
     if (creating) return;
     setGrantError(null);
     setCreating(true);
-    const mode = replacementMode ? "replacement" : "new";
+    const mode: GrantMode = selectedTarget?.mode ?? "new";
     try {
       const created = await api.createGrant(
         {
@@ -273,7 +276,7 @@ export function CollectorAdmin(props: {
               Registry
             </h3>
             <span className="tnum text-xs text-muted-foreground">
-              {activeCollectors.length} active / {collectors.length} total
+              {collectors.filter((row) => !row.revoked).length} active / {collectors.length} total
             </span>
           </div>
 
@@ -350,7 +353,22 @@ export function CollectorAdmin(props: {
                             Revoke
                           </button>
                         </div>
-                      ) : null}
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-1">
+                          <button
+                            type="button"
+                            className={ADMIN_BUTTON_QUIET}
+                            onClick={() => {
+                              setTargetMachineId(collector.machineId);
+                              setGrantError(null);
+                              requestAnimationFrame(() => createRef.current?.focus());
+                            }}
+                          >
+                            <KeyRound className="h-3.5 w-3.5" aria-hidden />
+                            Re-enroll
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {confirming ? (
@@ -361,7 +379,8 @@ export function CollectorAdmin(props: {
                         <p className="min-w-0 flex-1 text-xs text-foreground">
                           Revoke <strong className="font-medium">{collector.collectorId}</strong>{" "}
                           on <strong className="font-medium">{machineLabel(collector.machineId)}</strong>?
-                          This disconnects the collector and invalidates its credential.
+                          This disconnects the collector and invalidates its credential. To bring it
+                          back later, create a re-enrollment grant for this machine.
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           <button
@@ -416,9 +435,9 @@ export function CollectorAdmin(props: {
               className={ADMIN_INPUT}
             >
               <option value="">New machine</option>
-              {activeCollectors.map((collector) => (
-                <option key={collector.collectorId} value={collector.machineId}>
-                  Replacement · {machineLabel(collector.machineId)} · {collector.collectorId}
+              {targets.map((target) => (
+                <option key={target.collectorId} value={target.machineId}>
+                  {target.mode === "reenroll" ? "Re-enroll revoked" : "Replacement"} · {machineLabel(target.machineId)} · {target.collectorId}
                 </option>
               ))}
             </select>
@@ -457,7 +476,9 @@ export function CollectorAdmin(props: {
               <KeyRound className="h-3.5 w-3.5" aria-hidden />
               {creating
                 ? "Creating…"
-                : replacementMode
+                : selectedTarget?.mode === "reenroll"
+                  ? "Create re-enrollment grant"
+                  : replacementMode
                   ? "Create replacement grant"
                   : "Create connection grant"}
             </button>

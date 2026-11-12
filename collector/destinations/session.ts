@@ -116,6 +116,28 @@ const SOCKET_OPEN = 1;
 const HEALTHY_CONNECTION_RESET_MS = 30_000;
 
 const INCOMPATIBLE_HUB_LOG = 'hub sent an unrecognized welcome; the hub and collector builds must match';
+/**
+ * A 401 on the upgrade means the hub no longer accepts this credential: the
+ * collector was revoked or the hub lost its registration. Retrying every few
+ * seconds cannot fix that, so wait longer (a hub restored from backup may
+ * accept it again) and say once how to recover.
+ */
+const CREDENTIALS_REJECTED_RETRY_MS = 5 * 60_000;
+const CREDENTIALS_REJECTED = /\bUnexpected server response: 401\b/;
+
+function credentialsRejectedLog(url: string): string {
+  let hub = 'https://your-hub';
+  try {
+    const parsed = new URL(url);
+    parsed.protocol = parsed.protocol === 'wss:' ? 'https:' : 'http:';
+    hub = parsed.origin;
+  } catch {
+    // Keep the placeholder; the destination URL was validated at startup.
+  }
+  return 'hub rejected this collector\'s credential (401): it was revoked, or the hub no longer knows it. '
+    + 'In the hub, open Administration > Collectors and create a re-enrollment grant for this machine, '
+    + `then run here: rigscope connect '${hub}' --replace`;
+}
 
 export type DestinationSessionOptions = {
   /** Human label for logs, e.g. "hub0". */
@@ -261,6 +283,7 @@ export class DestinationSession {
   private stopping = false;
   private lastError: string | null = null;
   private reportedIncompatibleHub = false;
+  private reportedRejectedCredentials = false;
 
   /** min(hub window, local window); recomputed on each welcome. */
   private inFlightWindow = 1;
@@ -583,6 +606,7 @@ export class DestinationSession {
     }
     this.status = 'welcomed';
     this.welcomedAtMs = this.now();
+    this.reportedRejectedCredentials = false;
     this.inFlightWindow = Math.max(1, Math.min(welcome.maxInFlightBatches, this.maxLocalInFlightBatches));
     this.replayTokens = 1;
     this.lastTokenRefillMs = this.now();
@@ -691,7 +715,14 @@ export class DestinationSession {
     } else {
       this.attempts += 1;
     }
-    const delayMs = nextReconnectDelayMs(this.attempts, this.rand, this.backoff);
+    let delayMs = nextReconnectDelayMs(this.attempts, this.rand, this.backoff);
+    if (CREDENTIALS_REJECTED.test(reason)) {
+      delayMs = Math.max(delayMs, CREDENTIALS_REJECTED_RETRY_MS);
+      if (!this.reportedRejectedCredentials) {
+        this.reportedRejectedCredentials = true;
+        this.log(credentialsRejectedLog(this.url));
+      }
+    }
     this.log(`disconnected (${reason}); reconnecting in ${delayMs}ms (attempt ${this.attempts})`);
     this.scheduleReconnect(delayMs);
   }

@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { initialize, type Component } from '../src/cli/config';
-import { prepareMutation, type MutationDependencies } from '../src/cli/mutation';
+import { completeMutation, prepareMutation, type MutationDependencies } from '../src/cli/mutation';
 
 function fixture() {
   const dir = mkdtempSync(join(tmpdir(), 'rigscope-mutation-'));
@@ -73,5 +73,27 @@ test('owned foreground runtimes stop after approval and resume after success', a
     const mutation = await prepareMutation(f.dir, ['hub'], {yes: true}, f.deps);
     await mutation.resume();
     assert.deepEqual(f.events, ['stop foreground','start hub','start collector']);
+  } finally { f.clean(); }
+});
+
+test('a failed connect resumes the components it stopped; other failures do not', async () => {
+  const f = fixture();
+  try {
+    const reported: string[] = [];
+    const failing = async (): Promise<number> => { throw new Error('enrollment rejected'); };
+    const mutation = await prepareMutation(f.dir, ['hub'], {yes: true}, f.deps);
+    assert.equal(await completeMutation(mutation, failing, true, line => reported.push(line)), 1);
+    assert.deepEqual(f.events, ['stop hub', 'start hub']);
+    assert.deepEqual(reported, ['Rigscope: enrollment rejected']);
+
+    f.events.length = 0;
+    const other = await prepareMutation(f.dir, ['hub'], {yes: true}, f.deps);
+    await assert.rejects(completeMutation(other, failing, false), /enrollment rejected/);
+    assert.deepEqual(f.events, ['stop hub']);
+
+    f.events.length = 0;
+    const succeeded = await prepareMutation(f.dir, ['hub'], {yes: true}, f.deps);
+    assert.equal(await completeMutation(succeeded, async () => 0, true), 0);
+    assert.deepEqual(f.events, ['stop hub', 'start hub']);
   } finally { f.clean(); }
 });

@@ -154,9 +154,12 @@ The BAR0 file is root-owned by default. User-scope collector installation and
 upgrade automatically install the persistent udev rules and grant the account
 running the collector access. Setup asks for sudo when a grant needs repair.
 The collector launcher activates new group memberships using `sg`, without a
-logout or reboot. The helper runs with the collector's user privileges. When a
-minimal system does not provide `sg`, the collector still starts, but the new
-groups take effect only after the next login (or reboot).
+logout or reboot, entering every granted group it is missing. The helper runs
+with the collector's user privileges. When a system does not provide `sg`
+(shipped in the shadow-utils, shadow or login package), the collector still
+starts and logs one warning, but the new groups take effect only after a
+reboot: startup that continues after logout keeps the systemd user manager,
+and its old group list, alive across logins.
 
 The manual controls remain available for inspection and explicit changes:
 
