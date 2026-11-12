@@ -18,6 +18,10 @@ next-env.d.ts
 # Local npm packages
 /*.tgz
 
+# Local release archives from `npm run package:release`
+/*.tar.gz
+/*.tar.gz.manifest.json
+
 # Local design tooling
 .impeccable/
 

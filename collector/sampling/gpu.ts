@@ -9,6 +9,10 @@
  * disables normal cadence polling while still retrying rarely in case tooling
  * is installed later.
  *
+ * On hybrid laptops an optional runtime-PM gate keeps the poller from waking
+ * a powered-down discrete GPU, and pauses polling of an idle one so it can
+ * power down at all (see `runtime-pm.ts`).
+ *
  * Every value is field-level optional: `[N/A]`, `[Not Supported]`, `N/A` and
  * empty CSV cells become `null` rather than fabricated zeros.
  */
@@ -17,6 +21,7 @@ import { execFile as nodeExecFile } from 'node:child_process';
 import type { GpuReading } from '../../src/contracts';
 import type { GpuSensorMap, GpuSensorSource } from './gpu-temps';
 import { normalizeBusFunctionKey } from './gpu-temps';
+import type { RuntimePmGate } from './runtime-pm';
 
 export type GpuAvailability = 'yes' | 'no' | 'unknown';
 
@@ -69,7 +74,14 @@ export type GpuPollerOptions = {
    * polled alongside `nvidia-smi` and merged into readings by PCI bus id.
    */
   sensorSource?: GpuSensorSource | null;
+  /**
+   * Runtime-PM gate plus the sysfs addresses (`0000:01:00.0`) of the NVIDIA
+   * display devices it governs. Without it every cycle queries every GPU.
+   */
+  power?: {gate: RuntimePmGate; devices: () => string[]} | null;
 };
+
+type PowerPlan = {sampled: string[]; skipped: Map<string, string>};
 
 const DEFAULT_TIMEOUT_MS = 3_000;
 const MIN_POLL_INTERVAL_MS = 1_000;
@@ -208,6 +220,7 @@ export class GpuPoller {
   private readonly monotonicMs: () => number;
   private readonly onEvent?: (line: string) => void;
   private readonly sensorSource: GpuSensorSource | null;
+  private readonly power: {gate: RuntimePmGate; devices: () => string[]} | null;
 
   private started = false;
   private timer: NodeJS.Timeout | null = null;
@@ -241,6 +254,7 @@ export class GpuPoller {
     this.monotonicMs = options.monotonicMs ?? (() => performance.now());
     this.onEvent = options.onEvent;
     this.sensorSource = options.sensorSource ?? null;
+    this.power = options.power ?? null;
   }
 
   /** Starts the low-frequency polling loop (immediately, then per cadence). */
@@ -323,7 +337,52 @@ export class GpuPoller {
     return this.pollIntervalMs;
   }
 
+  /** Which NVIDIA devices may be queried this cycle; null means all. */
+  private powerPlan(): PowerPlan | null {
+    if (this.power === null) return null;
+    let addresses: string[];
+    try {
+      addresses = this.power.devices();
+    } catch {
+      return null;
+    }
+    if (addresses.length === 0) return null;
+    const plan: PowerPlan = {sampled: [], skipped: new Map()};
+    for (const address of addresses) {
+      const decision = this.power.gate.decide(address);
+      if (decision.sample) plan.sampled.push(address);
+      else plan.skipped.set(address, decision.reason);
+    }
+    return plan;
+  }
+
+  /** Readings for devices the gate kept asleep; ids match the inventory. */
+  private gatedReadings(skipped: Map<string, string>): GpuReading[] {
+    const byKey = new Map<string, GpuDeviceInfo>();
+    for (const info of this.info.values()) {
+      const key = normalizeBusFunctionKey(info.pciBusId);
+      if (key !== null) byKey.set(key, info);
+    }
+    return [...skipped].map(([address, reason]) => {
+      const info = byKey.get(normalizeBusFunctionKey(address) ?? '');
+      return {id: info !== undefined ? `gpu:${info.uuid}` : `pci:${address}`, status: 'unavailable' as const, reason};
+    });
+  }
+
   private async runCycle(): Promise<void> {
+    const plan = this.powerPlan();
+    if (plan !== null && plan.sampled.length === 0) {
+      // Nothing to query without waking a GPU. No process can hold memory on
+      // a suspended device, so the per-pid join is cleared too.
+      this.apps = new Map();
+      this.snapshot = {atMonotonicMs: this.monotonicMs(), devices: this.gatedReadings(plan.skipped)};
+      return;
+    }
+    // Restrict the query only when some devices must stay asleep; nvidia-smi
+    // expects its own 8-digit-domain bus id spelling.
+    const ids = plan !== null && plan.skipped.size > 0
+      ? plan.sampled.map(address => `0000${address}`.toUpperCase())
+      : null;
     try {
       // Register temperatures are read in parallel with the expensive query.
       // The early catch keeps the sensor promise owned even if the
@@ -331,15 +390,20 @@ export class GpuPoller {
       const sensorCycle = this.sensorSource !== null
         ? this.sensorSource.pollOnce().catch(() => undefined)
         : null;
-      const stdout = await this.exec(GPU_QUERY);
+      const stdout = await this.exec(GPU_QUERY, ids);
       const rows = parseGpuCsv(stdout);
-      this.applyRows(rows);
+      this.applyRows(rows, ids !== null);
       this.gpuQueries += 1;
       const wasAvailable = this.availability === 'yes';
       this.availability = 'yes';
       this.consecutiveFailures = 0;
       const sensors = await this.settleSensorCycle(sensorCycle);
-      this.snapshot = {atMonotonicMs: this.monotonicMs(), devices: this.toReadings(rows, sensors)};
+      const devices = this.toReadings(rows, sensors);
+      if (plan !== null) {
+        this.recordIdle(plan.sampled, rows);
+        devices.push(...this.gatedReadings(plan.skipped));
+      }
+      this.snapshot = {atMonotonicMs: this.monotonicMs(), devices};
       // Diagnostics only on state changes: this line would otherwise repeat
       // every healthy cycle (two seconds by default).
       if (!wasAvailable || rows.length !== this.lastDeviceCount) {
@@ -347,7 +411,7 @@ export class GpuPoller {
       }
       this.lastDeviceCount = rows.length;
       if (this.gpuQueries % 3 === 0) {
-        await this.pollComputeApps();
+        await this.pollComputeApps(ids);
       }
     } catch (error) {
       this.consecutiveFailures += 1;
@@ -394,9 +458,19 @@ export class GpuPoller {
     return this.sensorSource.latest();
   }
 
-  private async pollComputeApps(): Promise<void> {
+  /** An idle GPU is a candidate for a polling pause; a busy one is not. */
+  private recordIdle(addresses: string[], rows: ParsedGpuRow[]): void {
+    const byKey = new Map(rows.map(row => [normalizeBusFunctionKey(row.pciBusId), row]));
+    for (const address of addresses) {
+      const row = byKey.get(normalizeBusFunctionKey(address));
+      if (row === undefined) continue;
+      this.power!.gate.record(address, row.utilizationPercent === null || row.utilizationPercent === 0);
+    }
+  }
+
+  private async pollComputeApps(ids: string[] | null): Promise<void> {
     try {
-      const stdout = await this.exec(APP_QUERY);
+      const stdout = await this.exec(APP_QUERY, ids);
       const apps = new Map<number, number>();
       for (const app of parseComputeAppsCsv(stdout)) {
         apps.set(app.pid, (apps.get(app.pid) ?? 0) + app.usedBytes);
@@ -408,7 +482,7 @@ export class GpuPoller {
     }
   }
 
-  private exec(args: string): Promise<string> {
+  private exec(args: string, ids: string[] | null = null): Promise<string> {
     return new Promise<string>((resolve, reject) => {
       const startedAt = this.monotonicMs();
       this.stats.runs += 1;
@@ -426,7 +500,7 @@ export class GpuPoller {
       try {
         this.execFile(
           this.command,
-          [...args.split(' '), CSV_FORMAT],
+          [...args.split(' '), CSV_FORMAT, ...(ids === null ? [] : [`--id=${ids.join(',')}`])],
           {timeout: this.timeoutMs, maxBuffer: MAX_BUFFER_BYTES, encoding: 'utf8'},
           finish,
         );
@@ -446,8 +520,9 @@ export class GpuPoller {
     if (duration > this.stats.maxDurationMs) this.stats.maxDurationMs = duration;
   }
 
-  private applyRows(rows: ParsedGpuRow[]): void {
-    const info = new Map<string, GpuDeviceInfo>();
+  private applyRows(rows: ParsedGpuRow[], partial = false): void {
+    // A restricted query must not forget the devices it skipped.
+    const info = partial ? new Map(this.info) : new Map<string, GpuDeviceInfo>();
     for (const row of rows) {
       info.set(row.uuid, {
         uuid: row.uuid,

@@ -115,6 +115,27 @@ never persisted.
 Process CPU uses 100% per logical core. Machine CPU is normalized across all
 logical cores. See [Exports](exports.md) for CSV and JSON behavior.
 
+## Laptop discrete GPUs
+
+On hybrid laptops the discrete GPU powers down when it is idle (runtime D3).
+Each `nvidia-smi` query, and each read of amdgpu's busy, memory or hwmon files,
+wakes it up again. The collector therefore never samples a GPU whose kernel
+runtime-PM status is `suspended`; its readings show "GPU powered down" instead.
+
+Sampling at the normal cadence would also stop an awake, idle GPU from ever
+reaching that state. After a few idle samples, the collector pauses that GPU for
+about 20 seconds so the driver can power it down. If it powers down, sampling
+stays off until another program wakes it. If it stays awake, something else is
+holding it (an external display or a persistence daemon, for example), and the
+collector resumes with pauses backed off from 5 minutes up to an hour.
+
+This applies only to GPUs that are under runtime power management
+(`power/control` is `auto`) and are not the boot display adapter. It does not
+apply to NVIDIA GPUs whose driver reports Runtime D3 disabled. Desktops and
+dGPU-only setups keep full-rate telemetry. `power/control` is checked on every
+sample, so tools such as TLP that switch it when the charger is unplugged take
+effect immediately.
+
 ## GPU junction and VRAM temperatures
 
 On NVIDIA cards with GDDR6, GDDR6X or GDDR7 memory, Rigscope can also report
@@ -133,7 +154,9 @@ The BAR0 file is root-owned by default. User-scope collector installation and
 upgrade automatically install the persistent udev rules and grant the account
 running the collector access. Setup asks for sudo when a grant needs repair.
 The collector launcher activates new group memberships using `sg`, without a
-logout or reboot. The helper runs with the collector's user privileges.
+logout or reboot. The helper runs with the collector's user privileges. When a
+minimal system does not provide `sg`, the collector still starts, but the new
+groups take effect only after the next login (or reboot).
 
 The manual controls remain available for inspection and explicit changes:
 

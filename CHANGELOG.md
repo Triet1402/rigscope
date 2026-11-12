@@ -1,5 +1,25 @@
 # Release notes
 
+## 0.2.5
+
+Released 2026-11-12.
+
+- Start the collector even when `sg` is unavailable. 0.2.4 used the setuid
+  `sg` helper to enter newly granted hardware groups without a re-login; on
+  systems without that helper the collector failed to spawn and systemd
+  restarted it forever. The collector now starts without the missing groups,
+  logs one warning, and keeps telemetry running until the next login. A spawn
+  failure also reports its underlying error instead of only "collector could
+  not start", and a collector that never wrote a readiness marker is named as
+  such rather than surfacing a stale lock path.
+- Let laptop discrete GPUs power down. The collector polled `nvidia-smi`
+  every two seconds, which kept an NVIDIA dGPU from ever entering runtime D3
+  on battery (amdgpu DRM counter reads had the same effect). A GPU whose
+  runtime-PM status is suspended is now left alone and reported as powered
+  down, and an awake but idle offload GPU gets a short sampling pause so the
+  driver can suspend it. Desktops, the boot display adapter and NVIDIA GPUs
+  without Runtime D3 are unaffected.
+
 ## 0.2.4
 
 Released 2026-11-09.

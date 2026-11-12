@@ -11,7 +11,9 @@ import { createSequenceAllocator } from './sampling/sequence';
 import { createMetricsSampler } from './sampling/metrics';
 import { createSyntheticMetricsSampler } from './sampling/synthetic';
 import { GpuPoller } from './sampling/gpu';
-import { GpuTempsPoller, gpuTempsEnabled } from './sampling/gpu-temps';
+import { GpuTempsPoller, defaultReaders as pciReaders, discoverNvidiaDisplays, gpuTempsEnabled } from './sampling/gpu-temps';
+import { RuntimePmGate } from './sampling/runtime-pm';
+import { defaultReadTextFile } from './sampling/procfs';
 import { ProcessScanner } from './processes/scan';
 import { DetailScheduler } from './processes/scheduler';
 import { acquireProcessLease } from '../src/runtime/process-lease';
@@ -39,14 +41,18 @@ export async function runCollectorLoop(config: CollectorConfig, identity: Collec
   const gpuSensors = mock || !gpuTempsEnabled()
     ? null
     : new GpuTempsPoller({onEvent: logEvent});
+  // One gate for every reader of a GPU, so the NVIDIA poller, DRM counters and
+  // inventory agree on when an offload GPU must be left asleep.
+  const power = mock ? null : new RuntimePmGate({read: defaultReadTextFile, onEvent: logEvent});
   const gpu = mock
     ? null
     : new GpuPoller({
       intervalMs: Math.max(2000, config.intervalMs),
       onEvent: logEvent,
       sensorSource: gpuSensors,
+      power: {gate: power!, devices: () => discoverNvidiaDisplays(pciReaders).map(device => device.bdf)},
     });
-  const sampler = mock ? createSyntheticMetricsSampler(identity, { sequence }) : createMetricsSampler(identity, { sequence, gpu });
+  const sampler = mock ? createSyntheticMetricsSampler(identity, { sequence }) : createMetricsSampler(identity, { sequence, gpu, power });
   const connections: HubConnection[] = [];
   try {
     for (const [index, endpoint] of config.destinations.entries()) {

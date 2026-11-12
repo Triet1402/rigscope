@@ -21,6 +21,7 @@ import {
 } from '../../src/contracts';
 import type { GpuAvailability, GpuDeviceInfo } from './gpu';
 import { readSysfsGpu } from './sysfs-gpu';
+import type { RuntimePmGate } from './runtime-pm';
 import type { NetworkInterfacesReader } from './network';
 import { discoverInterfaces } from './network';
 import {
@@ -57,7 +58,12 @@ export type GpuInventorySource = {
   available(): GpuAvailability;
 } | null;
 
-export type BuildInventoryOptions = SelectFilesystemOptions;
+export type BuildInventoryOptions = SelectFilesystemOptions & {
+  /** Runtime-PM gate: a GPU it keeps asleep is described without reading it. */
+  power?: RuntimePmGate | null;
+  /** Previous inventory, reused for GPUs that cannot be read without waking them. */
+  previous?: Inventory | null;
+};
 
 const MAX_REASON = 256;
 const MAX_TEXT = 256;
@@ -154,6 +160,7 @@ function buildGpus(
   read: ReadTextFile,
   readdir: (path: string) => string[],
   gpu: GpuInventorySource,
+  options: Pick<BuildInventoryOptions, 'power' | 'previous'> = {},
 ): GpuInventory[] {
   const pciDevices = enumeratePciDisplayDevices(read, readdir);
   const nvidiaInfo = new Map<string, GpuDeviceInfo>();
@@ -180,6 +187,21 @@ function buildGpus(
         pciBusId: device.address,
         telemetry: 'supported',
         memoryTotalBytes: info.memoryTotalBytes,
+      };
+    } else if (options.power?.decide(device.address).sample === false) {
+      // Reading DRM counters would wake a powered-down GPU (amdgpu resumes the
+      // device for gpu_busy_percent/hwmon). Keep the last description, or call
+      // it supported until it is next awake to be read.
+      const previous = options.previous?.gpus.find(entry => entry.pciBusId === device.address);
+      entry = previous !== undefined && previous.telemetry === 'supported' ? {...previous} : {
+        id: `pci:${device.address}`,
+        name: capText(readTextOrNull(read, `/sys/bus/pci/devices/${device.address}/product_name`)?.trim()
+          || pciDeviceName(pciNames, device.vendorId, readTextOrNull(read, `/sys/bus/pci/devices/${device.address}/device`)?.trim() ?? '')
+          || fallbackGpuName(device.vendor, device.address)),
+        vendor: device.vendor,
+        pciBusId: device.address,
+        telemetry: 'supported',
+        memoryTotalBytes: null,
       };
     } else {
       const reading = readSysfsGpu({readFile: read, readdir}, device.address);
@@ -275,7 +297,7 @@ export function buildInventory(
     // keep the conservative defaults
   }
 
-  const gpus = buildGpus(read, readers.readdir, gpu);
+  const gpus = buildGpus(read, readers.readdir, gpu, options);
 
   let mounts: ReturnType<typeof readMountinfo> = null;
   try {

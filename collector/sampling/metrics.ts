@@ -24,6 +24,7 @@ import type {
   DisksMetric,
   DiskIoReading,
   FilesystemReading,
+  GpuReading,
   GpusMetric,
   InterfaceReading,
   Inventory,
@@ -34,6 +35,7 @@ import type {
 } from '../../src/contracts';
 import { MAX_COLLECTION_FAILURES } from '../../src/contracts';
 import type { GpuPoller } from './gpu';
+import type { RuntimePmGate } from './runtime-pm';
 import { createRaplPowerMeter, readCpuTemperature } from './hwmon';
 import { readPressure } from './pressure';
 import { readSysfsGpu } from './sysfs-gpu';
@@ -77,6 +79,8 @@ export type MetricsSamplerOptions = {
   now?: () => number;
   /** Monotonic clock for intervals; default `performance.now`. */
   monotonicMs?: () => number;
+  /** Runtime-PM gate shared with the GPU poller; keeps offload GPUs asleep. */
+  power?: RuntimePmGate | null;
   /** Cache age after which GPU readings are stale; default max(2×poll, 10s). */
   gpuStaleMs?: number;
 };
@@ -257,6 +261,7 @@ export function createMetricsSampler(
 ): MetricsSampler {
   const sequence = options.sequence;
   const gpu = options.gpu ?? null;
+  const power = options.power ?? null;
   const readers: InventoryReaders = {...defaultReaders, ...(options.readers ?? {})};
   const now = options.now ?? Date.now;
   const monotonicMs = options.monotonicMs ?? (() => performance.now());
@@ -275,7 +280,7 @@ export function createMetricsSampler(
   function refreshInventory(): Inventory {
     let inventory: Inventory;
     try {
-      inventory = buildInventory(readers, gpu as GpuInventorySource);
+      inventory = buildInventory(readers, gpu as GpuInventorySource, {power, previous: lastInventory});
     } catch {
       inventory = lastInventory ?? fallbackInventory(readers);
     }
@@ -457,10 +462,12 @@ export function createMetricsSampler(
         hasGpu ? 'no supported GPU telemetry (nvidia-smi not found)' : 'no GPUs detected',
       );
     }
-    if (availability === 'unknown') {
+    const snapshot = gpu.latest();
+    // A GPU asleep since startup has a snapshot (of powered-down devices)
+    // before nvidia-smi has ever been run.
+    if (availability === 'unknown' && snapshot === null) {
       return unavailable<GpusMetric>(sink, 'gpus', hasGpu ? 'gpu telemetry not ready' : 'no GPUs detected');
     }
-    const snapshot = gpu.latest();
     if (snapshot === null) {
       return unavailable<GpusMetric>(sink, 'gpus', hasGpu ? 'gpu telemetry not ready' : 'no GPUs detected');
     }
@@ -485,9 +492,14 @@ export function createMetricsSampler(
   function sampleGpus(sink: FailureSink): GpusMetric {
     const drm = (lastInventory?.gpus ?? []).filter(device => device.vendor === 'amd' || device.vendor === 'intel');
     if (drm.length === 0) return sampleNvidia(sink);
-    const devices = drm.map(device => {
-      const reading = readSysfsGpu(readers, device.pciBusId!);
+    const devices = drm.map((device): GpuReading => {
+      const address = device.pciBusId!;
+      const decision = power?.decide(address) ?? {sample: true};
+      // A sleeping GPU is not a collection failure.
+      if (!decision.sample) return {id: device.id, status: 'unavailable', reason: decision.reason};
+      const reading = readSysfsGpu(readers, address);
       if (reading.status === 'unavailable') sink.add('gpus', reading.id, reading.reason);
+      power?.record(address, reading.status === 'ok' && !(reading.utilizationPercent! > 0));
       return reading;
     });
     if (lastInventory?.gpus.some(device => device.vendor === 'nvidia')) {

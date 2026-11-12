@@ -247,6 +247,19 @@ function machineDataPaths(dir: string): MachineDataPaths {
   return { database: databasePath(dir), queueTree: join(dir, 'collector', 'outbox') };
 }
 
+/** Read one readiness file, naming the missing path so a collector that never
+ * started is not reported as an unexplained ENOENT. */
+function readReadinessFile(path: string, label: string): string {
+  try {
+    return readPrivate(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(`${label} is missing (${path}); the collector is not running`);
+    }
+    throw error;
+  }
+}
+
 function collectorStateCheck(dir: string): void {
   const path = join(dir, 'collector', 'state.json');
   let raw: string;
@@ -378,10 +391,12 @@ export async function verifyRunningInstallation(options: {
     collectorStateCheck(options.dir);
     if (status.active) {
       let problem = 'collector has not sampled';
+      const healthPath = join(options.dir, 'run', 'collector-health.json');
+      const lockPath = join(options.dir, 'collector', 'collector-runtime.lock');
       while (Date.now() < deadline) {
         try {
-          const marker = JSON.parse(readPrivate(join(options.dir, 'run', 'collector-health.json')));
-          const owner = JSON.parse(readPrivate(join(options.dir, 'collector', 'collector-runtime.lock')));
+          const marker = JSON.parse(readReadinessFile(healthPath, 'collector readiness marker'));
+          const owner = JSON.parse(readReadinessFile(lockPath, 'collector runtime lock'));
           if (marker.version !== options.expectedVersion) throw new Error('collector version does not match the activated release');
           if (marker.pid !== owner.pid || !Number.isSafeInteger(marker.pid)) throw new Error('collector readiness belongs to another process');
           process.kill(marker.pid, 0);

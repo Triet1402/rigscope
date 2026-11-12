@@ -113,15 +113,39 @@ export async function runInstallation(root: string, dir: string, component?: Com
   process.on('SIGINT', signal);
   function launch(role: Component) {
     const entry = join(root, 'dist', `${role}.cjs`);
-    const launch = role === 'collector' ? collectorLaunch(process.execPath, entry) : {command: process.execPath, args: [entry]};
-    const child = spawn(launch.command, launch.args, {cwd: root, stdio: 'inherit', env: {
+    const plan = role === 'collector' ? collectorLaunch(process.execPath, entry) : {command: process.execPath, args: [entry]};
+    if (plan.warning) console.warn(`${role}: ${plan.warning}`);
+    spawnRole(role, entry, plan, true);
+  }
+  /**
+   * Start one component. If the collector's group-refresh helper cannot be
+   * spawned, retry once without it: losing hardware sensors is acceptable,
+   * losing telemetry is not. The 'error' event precedes 'close', so the
+   * failed attempt's close handler must ignore the retry.
+   */
+  function spawnRole(role: Component, entry: string, plan: {command: string; args: string[]}, allowFallback: boolean) {
+    const child = spawn(plan.command, plan.args, {cwd: root, stdio: 'inherit', env: {
       ...environment, NODE_ENV: 'production',
       ...(role === 'hub' ? hubEnvironment(dir, config!) : {COLLECTOR_MODE: 'real', COLLECTOR_STATE_FILE: join(dir, 'collector', 'state.json'),
         COLLECTOR_HEALTH_FILE: join(dir, 'run', 'collector-health.json'), ...collectorEnvironment}),
     }});
     children.add(child);
-    child.once('error', () => { console.error(`${role} could not start.`); stop(1); });
+    let replaced = false;
+    // A spawn failure (missing executable, inaccessible working directory) has
+    // no child output, so the code and message are the only actionable signal.
+    child.once('error', error => {
+      if (allowFallback && role === 'collector' && plan.command !== process.execPath) {
+        replaced = true;
+        children.delete(child);
+        console.warn(`collector could not start through ${plan.command}: ${error.message}; starting without hardware group refresh`);
+        spawnRole(role, entry, {command: process.execPath, args: [entry]}, false);
+        return;
+      }
+      console.error(`${role} could not start: ${error.message}`);
+      stop(1);
+    });
     child.once('close', code => {
+      if (replaced) return;
       children.delete(child);
       if (!stopping) stop(code || 1);
       if (children.size === 0) resolveDone(exitCode);
