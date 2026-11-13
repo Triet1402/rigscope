@@ -5,7 +5,7 @@ import { coreHeatmapBuckets } from "@/history/core-heatmap";
 import { gapBands, seriesStats, timeTicks } from "@/history/chart";
 import { formatDateTime, formatMetricValue, formatTimeTick } from "@/history/presentation";
 import { inspectionPoint, inspectionTimeAtPointer } from "@/history/inspection";
-import type { HistoryGap } from "@/hub/storage/history-query";
+import type { HistoryGap } from "@/history/contract";
 import type { ChartSeries } from "./history-chart";
 import { useChartInspection } from "./chart-inspection";
 

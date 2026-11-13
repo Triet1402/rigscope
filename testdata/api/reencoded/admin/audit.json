@@ -1,0 +1,16 @@
+{
+  "events": [
+    {
+      "actor": "fixture-admin",
+      "action": "user.delete",
+      "target": "fixture-viewer",
+      "at": "2026-11-12T10:11:05.144Z"
+    },
+    {
+      "actor": "fixture-admin",
+      "action": "user.create",
+      "target": "fixture-viewer",
+      "at": "2026-11-12T10:11:05.142Z"
+    }
+  ]
+}

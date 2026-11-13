@@ -23,6 +23,7 @@ import { useLive } from "@/live/live-provider";
 import { ADMIN_BUTTON_PRIMARY, ADMIN_BUTTON_SECONDARY } from "./admin-ui";
 import { AuditLog } from "./audit-log";
 import { CollectorAdmin } from "./collector-admin";
+import { HubSettingsPanel } from "./hub-settings";
 import { MachineMetadata } from "./machine-metadata";
 import { UserDirectory } from "./user-directory";
 
@@ -218,6 +219,9 @@ export function AdministrationView() {
               onAuditChange={onAuditChange}
               onSessionLost={onSessionLost}
             />
+          </div>
+          <div id="settings" className="min-w-0 scroll-mt-6 xl:col-span-12">
+            <HubSettingsPanel api={api} sessionKey={sessionKey} onSessionLost={onSessionLost} />
           </div>
           <div className="min-w-0 xl:col-span-12">
             <AuditLog api={api} revision={auditRevision} onSessionLost={onSessionLost} />

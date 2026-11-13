@@ -1,8 +1,11 @@
 node_modules/
+# Linked node_modules directories are symlinks, which the directory pattern
+# misses.
+/node_modules
+/website/node_modules
 .next/
 .next-dev/
 out/
-dist/
 *.tsbuildinfo
 next-env.d.ts
 
@@ -15,12 +18,12 @@ next-env.d.ts
 # Local collaboration instructions
 /AGENTS.md
 
-# Local npm packages
-/*.tgz
-
-# Local release archives from `npm run package:release`
+# Local release archives from scripts/release/build.sh
+/build/
 /*.tar.gz
+/*.tgz
 /*.tar.gz.manifest.json
+/dist/
 
 # Local design tooling
 .impeccable/
@@ -29,3 +32,10 @@ next-env.d.ts
 # Keep the report, measurement JSON, index, chart and manifest versioned.
 /docs/stress-*/*.log
 /docs/stress-*/*.resources.json
+# Copied static UI export embedded by internal/hub/webui. The placeholder
+# keeps `//go:embed all:dist` compiling before `npm run build:ui` has run.
+# The generated files are not committed; re-include the package directory and
+# its placeholder.
+!/internal/hub/webui/dist/
+/internal/hub/webui/dist/*
+!/internal/hub/webui/dist/.keep

@@ -1,0 +1,94 @@
+{
+  "generatedAt": "2026-11-12T10:11:06.070Z",
+  "canAdmin": true,
+  "rules": [
+    {
+      "id": "fixture-rule-1",
+      "name": "Fixture CPU high",
+      "machineId": "fixture-machine-1",
+      "metric": "cpu.usage",
+      "resourceId": "",
+      "condition": "above",
+      "threshold": 90,
+      "durationMs": 60000,
+      "enabled": true,
+      "maintenanceUntil": null,
+      "state": "firing",
+      "pendingSince": null,
+      "activeIncidentId": "fixture-incident-1",
+      "lastValue": 93.5,
+      "lastObservedAt": "2026-11-12T08:09:58.000Z",
+      "createdAt": "2026-11-12T08:09:00.000Z",
+      "updatedAt": "2026-11-12T08:09:58.000Z"
+    }
+  ],
+  "incidents": [
+    {
+      "id": "fixture-incident-1",
+      "ruleId": "fixture-rule-1",
+      "ruleName": "Fixture CPU high",
+      "machineId": "fixture-machine-1",
+      "metric": "cpu.usage",
+      "resourceId": "",
+      "condition": "above",
+      "status": "open",
+      "startedAt": "2026-11-12T08:09:58.000Z",
+      "resolvedAt": null,
+      "startedValue": 93.1,
+      "resolvedValue": null,
+      "lastObservedAt": "2026-11-12T08:09:58.000Z",
+      "message": "Fixture CPU high: cpu.usage 93.5%"
+    }
+  ],
+  "notifications": {
+    "pending": 0,
+    "delivered": 1,
+    "failed": 0,
+    "recent": [
+      {
+        "id": "fixture-notification-1",
+        "ruleId": "fixture-rule-1",
+        "incidentId": "fixture-incident-1",
+        "event": "fired",
+        "status": "delivered",
+        "attempts": 1,
+        "maxAttempts": 8,
+        "nextAttemptAt": null,
+        "lastAttemptAt": "2026-11-12T08:09:59.000Z",
+        "lastError": null,
+        "createdAt": "2026-11-12T08:09:58.000Z",
+        "deliveredAt": "2026-11-12T08:09:59.000Z"
+      }
+    ],
+    "lastDeliveryAt": "2026-11-12T08:09:59.000Z",
+    "lastError": null,
+    "delivery": "at-least-once"
+  },
+  "webhook": {
+    "channel": "webhook",
+    "configured": true,
+    "enabled": true,
+    "transport": "loopback-http",
+    "lastTestAt": "2026-11-12T08:10:00.000Z",
+    "lastTestOk": true,
+    "lastError": null,
+    "delivery": "at-least-once"
+  },
+  "limits": {
+    "maxRules": 200,
+    "maxIncidents": 1000,
+    "maxJobs": 1000,
+    "maxRuleName": 128,
+    "maxMachineId": 128,
+    "maxResourceId": 256,
+    "maxDurationMs": 86400000,
+    "maxThreshold": 10000000000000,
+    "maxWebhookUrl": 2048,
+    "maxWebhookHeaders": 16,
+    "maxWebhookHeaderKey": 128,
+    "maxWebhookHeaderValue": 1024,
+    "maxWebhookSecret": 256,
+    "maxListLimit": 500
+  },
+  "deliveryDisclosure": "Webhook delivery is at-least-once. After a network ambiguity the receiver may see the same deterministic job id more than once; retain it as an idempotency key."
+}

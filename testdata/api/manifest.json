@@ -1,0 +1,459 @@
+[
+  {
+    "path": "admin/audit.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "AuditEventList",
+    "shape": "json"
+  },
+  {
+    "path": "admin/collector-grants.json",
+    "status": 201,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "GrantResponse",
+    "shape": "json"
+  },
+  {
+    "path": "admin/collectors-revoke.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "OKResponse",
+    "shape": "json"
+  },
+  {
+    "path": "admin/collectors.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "CollectorList",
+    "shape": "json"
+  },
+  {
+    "path": "admin/users-delete.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "OKResponse",
+    "shape": "json"
+  },
+  {
+    "path": "admin/users-upsert.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "OKResponse",
+    "shape": "json"
+  },
+  {
+    "path": "admin/users.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "AdminUserList",
+    "shape": "json"
+  },
+  {
+    "path": "alerts/list-active.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "AlertListResponse",
+    "shape": "json"
+  },
+  {
+    "path": "alerts/list.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "AlertListResponse",
+    "shape": "json"
+  },
+  {
+    "path": "alerts/rule-create.json",
+    "status": 201,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "AlertRuleResponse",
+    "shape": "json"
+  },
+  {
+    "path": "alerts/rule-delete.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "OKResponse",
+    "shape": "json"
+  },
+  {
+    "path": "alerts/rule-update.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "AlertRuleResponse",
+    "shape": "json"
+  },
+  {
+    "path": "alerts/webhook-configured.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "AlertWebhookResponse",
+    "shape": "json"
+  },
+  {
+    "path": "alerts/webhook-test.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "AlertWebhookTestResponse",
+    "shape": "json"
+  },
+  {
+    "path": "alerts/webhook.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "AlertWebhookResponse",
+    "shape": "json"
+  },
+  {
+    "path": "auth/login-invalid.json",
+    "status": 401,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "APIError",
+    "shape": "json"
+  },
+  {
+    "path": "auth/login.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "SessionResponse",
+    "shape": "json"
+  },
+  {
+    "path": "auth/logout.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "OKResponse",
+    "shape": "json"
+  },
+  {
+    "path": "auth/session-unauthorized.json",
+    "status": 401,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "APIError",
+    "shape": "json"
+  },
+  {
+    "path": "auth/session.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "SessionResponse",
+    "shape": "json"
+  },
+  {
+    "path": "enrollment/enroll.json",
+    "status": 201,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "connection": "close"
+    },
+    "validator": "EnrollmentIdentity",
+    "shape": "json"
+  },
+  {
+    "path": "errors/unauthorized.json",
+    "status": 401,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "APIError",
+    "shape": "json"
+  },
+  {
+    "path": "health/get.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "HealthResponse",
+    "shape": "json"
+  },
+  {
+    "path": "history/invalid-query.json",
+    "status": 400,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "APIError",
+    "shape": "json"
+  },
+  {
+    "path": "history/metrics.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "MetricCatalogResponse",
+    "shape": "json"
+  },
+  {
+    "path": "history/query-unavailable.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "HistoryResult",
+    "shape": "json"
+  },
+  {
+    "path": "history/query.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "HistoryResult",
+    "shape": "json"
+  },
+  {
+    "path": "history/status-persistent.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "HistoryStatus",
+    "shape": "json"
+  },
+  {
+    "path": "history/status.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "HistoryStatus",
+    "shape": "json"
+  },
+  {
+    "path": "live/raw-reset.sse",
+    "status": 200,
+    "headers": {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache, no-store, no-transform",
+      "connection": "keep-alive",
+      "x-accel-buffering": "no"
+    },
+    "validator": "HubSnapshot",
+    "shape": "sse-raw"
+  },
+  {
+    "path": "live/raw-snapshot.sse",
+    "status": 200,
+    "headers": {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache, no-store, no-transform",
+      "connection": "keep-alive",
+      "x-accel-buffering": "no"
+    },
+    "validator": "HubSnapshot",
+    "shape": "sse-raw"
+  },
+  {
+    "path": "live/raw-update.sse",
+    "status": 200,
+    "headers": {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache, no-store, no-transform",
+      "connection": "keep-alive",
+      "x-accel-buffering": "no"
+    },
+    "validator": "HubSnapshot",
+    "shape": "sse-raw"
+  },
+  {
+    "path": "live/reset.json",
+    "status": 200,
+    "headers": {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache, no-store, no-transform",
+      "connection": "keep-alive",
+      "x-accel-buffering": "no"
+    },
+    "validator": "HubSnapshot",
+    "shape": "sse-envelope"
+  },
+  {
+    "path": "live/snapshot.json",
+    "status": 200,
+    "headers": {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache, no-store, no-transform",
+      "connection": "keep-alive",
+      "x-accel-buffering": "no"
+    },
+    "validator": "HubSnapshot",
+    "shape": "sse-envelope"
+  },
+  {
+    "path": "live/update.json",
+    "status": 200,
+    "headers": {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache, no-store, no-transform",
+      "connection": "keep-alive",
+      "x-accel-buffering": "no"
+    },
+    "validator": "HubSnapshot",
+    "shape": "sse-envelope"
+  },
+  {
+    "path": "machines/meta.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "MachineMeta",
+    "shape": "json"
+  },
+  {
+    "path": "processes/acquire.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "ProcessAcquireResponse",
+    "shape": "json"
+  },
+  {
+    "path": "processes/budget-error.json",
+    "status": 429,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "APIError",
+    "shape": "json"
+  },
+  {
+    "path": "processes/read-with-processes.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "ProcessReadResponse",
+    "shape": "json"
+  },
+  {
+    "path": "processes/read.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "ProcessReadResponse",
+    "shape": "json"
+  },
+  {
+    "path": "processes/release.json",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "connection": "keep-alive"
+    },
+    "validator": "OKResponse",
+    "shape": "json"
+  }
+]

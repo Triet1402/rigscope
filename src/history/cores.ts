@@ -1,7 +1,7 @@
 /** Per-core History selection, bounded by the collector's 1024-core contract. */
 
 import { MAX_CORES, type MachineState } from "../contracts";
-import type { HistorySeries } from "../hub/storage/history-query";
+import type { HistorySeries } from "./contract";
 
 export const MAX_VISIBLE_CORES = MAX_CORES;
 /** Larger selections use a heatmap instead of overlapping line series. */

@@ -1,0 +1,21 @@
+# Managed by rigscope. Do not edit; run "rigscope install" to rewrite.
+# Component: collector; scope: user
+[Unit]
+Description=Rigscope collector
+Documentation=https://rigscope.dev/docs
+After=network.target
+
+[Service]
+Type=simple
+ExecStart="/home/alice/.local/bin/rigscope" collector --config "/home/alice/.config/rigscope/config.json"
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+KillMode=control-group
+TimeoutStopSec=10s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rigscope-collector
+
+[Install]
+WantedBy=default.target

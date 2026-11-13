@@ -11,8 +11,8 @@ import type {
   HistoryResult,
   HistorySeries,
   HistoryQuery,
-} from "../hub/storage/history-query";
-import type { MetricUnit } from "../hub/storage/series";
+  MetricUnit,
+} from "./contract";
 
 export type RangeId = "10m" | "1h" | "6h" | "24h" | "7d";
 

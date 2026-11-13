@@ -1,0 +1,2355 @@
+{
+  "type": "inventory",
+  "capturedAt": "2026-11-12T10:00:00.000Z",
+  "inventory": {
+    "os": {
+      "platform": "linux",
+      "release": "6.0",
+      "distro": null,
+      "arch": "amd64"
+    },
+    "cpu": {
+      "model": "Max CPU",
+      "logicalCores": 1024
+    },
+    "memory": {
+      "totalBytes": 9007199254740991,
+      "swapTotalBytes": 0
+    },
+    "gpus": [
+      {
+        "id": "gpu:GPU-0",
+        "name": "GPU",
+        "vendor": "nvidia",
+        "pciBusId": "0000:01:00.0",
+        "telemetry": "supported",
+        "memoryTotalBytes": null
+      },
+      {
+        "id": "gpu:GPU-1",
+        "name": "GPU",
+        "vendor": "nvidia",
+        "pciBusId": "0000:02:00.0",
+        "telemetry": "supported",
+        "memoryTotalBytes": null
+      },
+      {
+        "id": "gpu:GPU-2",
+        "name": "GPU",
+        "vendor": "nvidia",
+        "pciBusId": "0000:03:00.0",
+        "telemetry": "supported",
+        "memoryTotalBytes": null
+      },
+      {
+        "id": "gpu:GPU-3",
+        "name": "GPU",
+        "vendor": "nvidia",
+        "pciBusId": "0000:04:00.0",
+        "telemetry": "supported",
+        "memoryTotalBytes": null
+      },
+      {
+        "id": "gpu:GPU-4",
+        "name": "GPU",
+        "vendor": "nvidia",
+        "pciBusId": "0000:05:00.0",
+        "telemetry": "supported",
+        "memoryTotalBytes": null
+      },
+      {
+        "id": "gpu:GPU-5",
+        "name": "GPU",
+        "vendor": "nvidia",
+        "pciBusId": "0000:06:00.0",
+        "telemetry": "supported",
+        "memoryTotalBytes": null
+      },
+      {
+        "id": "gpu:GPU-6",
+        "name": "GPU",
+        "vendor": "nvidia",
+        "pciBusId": "0000:07:00.0",
+        "telemetry": "supported",
+        "memoryTotalBytes": null
+      },
+      {
+        "id": "gpu:GPU-7",
+        "name": "GPU",
+        "vendor": "nvidia",
+        "pciBusId": "0000:08:00.0",
+        "telemetry": "supported",
+        "memoryTotalBytes": null
+      },
+      {
+        "id": "gpu:GPU-8",
+        "name": "GPU",
+        "vendor": "nvidia",
+        "pciBusId": "0000:09:00.0",
+        "telemetry": "supported",
+        "memoryTotalBytes": null
+      },
+      {
+        "id": "gpu:GPU-9",
+        "name": "GPU",
+        "vendor": "nvidia",
+        "pciBusId": "0000:0a:00.0",
+        "telemetry": "supported",
+        "memoryTotalBytes": null
+      },
+      {
+        "id": "gpu:GPU-10",
+        "name": "GPU",
+        "vendor": "nvidia",
+        "pciBusId": "0000:0b:00.0",
+        "telemetry": "supported",
+        "memoryTotalBytes": null
+      },
+      {
+        "id": "gpu:GPU-11",
+        "name": "GPU",
+        "vendor": "nvidia",
+        "pciBusId": "0000:0c:00.0",
+        "telemetry": "supported",
+        "memoryTotalBytes": null
+      },
+      {
+        "id": "gpu:GPU-12",
+        "name": "GPU",
+        "vendor": "nvidia",
+        "pciBusId": "0000:0d:00.0",
+        "telemetry": "supported",
+        "memoryTotalBytes": null
+      },
+      {
+        "id": "gpu:GPU-13",
+        "name": "GPU",
+        "vendor": "nvidia",
+        "pciBusId": "0000:0e:00.0",
+        "telemetry": "supported",
+        "memoryTotalBytes": null
+      },
+      {
+        "id": "gpu:GPU-14",
+        "name": "GPU",
+        "vendor": "nvidia",
+        "pciBusId": "0000:0f:00.0",
+        "telemetry": "supported",
+        "memoryTotalBytes": null
+      },
+      {
+        "id": "gpu:GPU-15",
+        "name": "GPU",
+        "vendor": "nvidia",
+        "pciBusId": "0000:10:00.0",
+        "telemetry": "supported",
+        "memoryTotalBytes": null
+      }
+    ],
+    "filesystems": [
+      {
+        "id": "fs:/mnt/0",
+        "mountPoint": "/mnt/0",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/1",
+        "mountPoint": "/mnt/1",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/2",
+        "mountPoint": "/mnt/2",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/3",
+        "mountPoint": "/mnt/3",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/4",
+        "mountPoint": "/mnt/4",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/5",
+        "mountPoint": "/mnt/5",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/6",
+        "mountPoint": "/mnt/6",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/7",
+        "mountPoint": "/mnt/7",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/8",
+        "mountPoint": "/mnt/8",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/9",
+        "mountPoint": "/mnt/9",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/10",
+        "mountPoint": "/mnt/10",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/11",
+        "mountPoint": "/mnt/11",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/12",
+        "mountPoint": "/mnt/12",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/13",
+        "mountPoint": "/mnt/13",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/14",
+        "mountPoint": "/mnt/14",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/15",
+        "mountPoint": "/mnt/15",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/16",
+        "mountPoint": "/mnt/16",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/17",
+        "mountPoint": "/mnt/17",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/18",
+        "mountPoint": "/mnt/18",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/19",
+        "mountPoint": "/mnt/19",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/20",
+        "mountPoint": "/mnt/20",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/21",
+        "mountPoint": "/mnt/21",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/22",
+        "mountPoint": "/mnt/22",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/23",
+        "mountPoint": "/mnt/23",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/24",
+        "mountPoint": "/mnt/24",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/25",
+        "mountPoint": "/mnt/25",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/26",
+        "mountPoint": "/mnt/26",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/27",
+        "mountPoint": "/mnt/27",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/28",
+        "mountPoint": "/mnt/28",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/29",
+        "mountPoint": "/mnt/29",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/30",
+        "mountPoint": "/mnt/30",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/31",
+        "mountPoint": "/mnt/31",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/32",
+        "mountPoint": "/mnt/32",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/33",
+        "mountPoint": "/mnt/33",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/34",
+        "mountPoint": "/mnt/34",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/35",
+        "mountPoint": "/mnt/35",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/36",
+        "mountPoint": "/mnt/36",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/37",
+        "mountPoint": "/mnt/37",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/38",
+        "mountPoint": "/mnt/38",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/39",
+        "mountPoint": "/mnt/39",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/40",
+        "mountPoint": "/mnt/40",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/41",
+        "mountPoint": "/mnt/41",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/42",
+        "mountPoint": "/mnt/42",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/43",
+        "mountPoint": "/mnt/43",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/44",
+        "mountPoint": "/mnt/44",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/45",
+        "mountPoint": "/mnt/45",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/46",
+        "mountPoint": "/mnt/46",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/47",
+        "mountPoint": "/mnt/47",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/48",
+        "mountPoint": "/mnt/48",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/49",
+        "mountPoint": "/mnt/49",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/50",
+        "mountPoint": "/mnt/50",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/51",
+        "mountPoint": "/mnt/51",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/52",
+        "mountPoint": "/mnt/52",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/53",
+        "mountPoint": "/mnt/53",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/54",
+        "mountPoint": "/mnt/54",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/55",
+        "mountPoint": "/mnt/55",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/56",
+        "mountPoint": "/mnt/56",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/57",
+        "mountPoint": "/mnt/57",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/58",
+        "mountPoint": "/mnt/58",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/59",
+        "mountPoint": "/mnt/59",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/60",
+        "mountPoint": "/mnt/60",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/61",
+        "mountPoint": "/mnt/61",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/62",
+        "mountPoint": "/mnt/62",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      },
+      {
+        "id": "fs:/mnt/63",
+        "mountPoint": "/mnt/63",
+        "device": "/dev/sda",
+        "fsType": "ext4",
+        "totalBytes": 1000
+      }
+    ],
+    "disks": [
+      {
+        "id": "disk:d0",
+        "name": "d0",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d1",
+        "name": "d1",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d2",
+        "name": "d2",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d3",
+        "name": "d3",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d4",
+        "name": "d4",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d5",
+        "name": "d5",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d6",
+        "name": "d6",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d7",
+        "name": "d7",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d8",
+        "name": "d8",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d9",
+        "name": "d9",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d10",
+        "name": "d10",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d11",
+        "name": "d11",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d12",
+        "name": "d12",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d13",
+        "name": "d13",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d14",
+        "name": "d14",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d15",
+        "name": "d15",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d16",
+        "name": "d16",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d17",
+        "name": "d17",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d18",
+        "name": "d18",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d19",
+        "name": "d19",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d20",
+        "name": "d20",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d21",
+        "name": "d21",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d22",
+        "name": "d22",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d23",
+        "name": "d23",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d24",
+        "name": "d24",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d25",
+        "name": "d25",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d26",
+        "name": "d26",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d27",
+        "name": "d27",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d28",
+        "name": "d28",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d29",
+        "name": "d29",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d30",
+        "name": "d30",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d31",
+        "name": "d31",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d32",
+        "name": "d32",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d33",
+        "name": "d33",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d34",
+        "name": "d34",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d35",
+        "name": "d35",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d36",
+        "name": "d36",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d37",
+        "name": "d37",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d38",
+        "name": "d38",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d39",
+        "name": "d39",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d40",
+        "name": "d40",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d41",
+        "name": "d41",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d42",
+        "name": "d42",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d43",
+        "name": "d43",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d44",
+        "name": "d44",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d45",
+        "name": "d45",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d46",
+        "name": "d46",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d47",
+        "name": "d47",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d48",
+        "name": "d48",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d49",
+        "name": "d49",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d50",
+        "name": "d50",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d51",
+        "name": "d51",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d52",
+        "name": "d52",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d53",
+        "name": "d53",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d54",
+        "name": "d54",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d55",
+        "name": "d55",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d56",
+        "name": "d56",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d57",
+        "name": "d57",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d58",
+        "name": "d58",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d59",
+        "name": "d59",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d60",
+        "name": "d60",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d61",
+        "name": "d61",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d62",
+        "name": "d62",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      },
+      {
+        "id": "disk:d63",
+        "name": "d63",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      }
+    ],
+    "network": [
+      {
+        "id": "net:n0",
+        "name": "n0",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:0::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:0::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n1",
+        "name": "n1",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:1::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:1::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n2",
+        "name": "n2",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:2::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:2::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n3",
+        "name": "n3",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:3::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:3::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n4",
+        "name": "n4",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:4::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:4::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n5",
+        "name": "n5",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:5::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:5::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n6",
+        "name": "n6",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:6::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:6::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n7",
+        "name": "n7",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:7::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:7::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n8",
+        "name": "n8",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:8::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:8::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n9",
+        "name": "n9",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:9::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:9::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n10",
+        "name": "n10",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:a::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:a::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n11",
+        "name": "n11",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:b::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:b::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n12",
+        "name": "n12",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:c::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:c::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n13",
+        "name": "n13",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:d::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:d::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n14",
+        "name": "n14",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:e::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:e::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n15",
+        "name": "n15",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:f::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:f::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n16",
+        "name": "n16",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:10::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:10::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n17",
+        "name": "n17",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:11::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:11::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n18",
+        "name": "n18",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:12::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:12::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n19",
+        "name": "n19",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:13::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:13::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n20",
+        "name": "n20",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:14::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:14::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n21",
+        "name": "n21",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:15::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:15::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n22",
+        "name": "n22",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:16::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:16::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n23",
+        "name": "n23",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:17::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:17::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n24",
+        "name": "n24",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:18::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:18::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n25",
+        "name": "n25",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:19::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:19::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n26",
+        "name": "n26",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:1a::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:1a::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n27",
+        "name": "n27",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:1b::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:1b::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n28",
+        "name": "n28",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:1c::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:1c::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n29",
+        "name": "n29",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:1d::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:1d::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n30",
+        "name": "n30",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:1e::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:1e::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n31",
+        "name": "n31",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:1f::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:1f::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n32",
+        "name": "n32",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:20::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:20::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n33",
+        "name": "n33",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:21::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:21::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n34",
+        "name": "n34",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:22::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:22::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n35",
+        "name": "n35",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:23::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:23::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n36",
+        "name": "n36",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:24::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:24::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n37",
+        "name": "n37",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:25::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:25::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n38",
+        "name": "n38",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:26::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:26::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n39",
+        "name": "n39",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:27::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:27::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n40",
+        "name": "n40",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:28::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:28::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n41",
+        "name": "n41",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:29::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:29::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n42",
+        "name": "n42",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:2a::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:2a::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n43",
+        "name": "n43",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:2b::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:2b::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n44",
+        "name": "n44",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:2c::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:2c::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n45",
+        "name": "n45",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:2d::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:2d::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n46",
+        "name": "n46",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:2e::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:2e::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n47",
+        "name": "n47",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:2f::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:2f::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n48",
+        "name": "n48",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:30::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:30::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n49",
+        "name": "n49",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:31::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:31::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n50",
+        "name": "n50",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:32::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:32::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n51",
+        "name": "n51",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:33::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:33::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n52",
+        "name": "n52",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:34::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:34::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n53",
+        "name": "n53",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:35::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:35::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n54",
+        "name": "n54",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:36::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:36::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n55",
+        "name": "n55",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:37::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:37::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n56",
+        "name": "n56",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:38::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:38::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n57",
+        "name": "n57",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:39::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:39::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n58",
+        "name": "n58",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:3a::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:3a::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n59",
+        "name": "n59",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:3b::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:3b::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n60",
+        "name": "n60",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:3c::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:3c::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n61",
+        "name": "n61",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:3d::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:3d::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n62",
+        "name": "n62",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:3e::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:3e::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      },
+      {
+        "id": "net:n63",
+        "name": "n63",
+        "mac": null,
+        "addresses": [
+          {
+            "family": "ipv6",
+            "address": "2001:db8:3f::1",
+            "prefix": 64
+          },
+          {
+            "family": "ipv6",
+            "address": "2001:db8:3f::2",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": null
+      }
+    ],
+    "capabilities": {
+      "cpu": {
+        "status": "supported"
+      },
+      "memory": {
+        "status": "supported"
+      },
+      "swap": {
+        "status": "supported"
+      },
+      "gpus": {
+        "status": "supported"
+      },
+      "disks": {
+        "status": "supported"
+      },
+      "network": {
+        "status": "supported"
+      },
+      "processes": {
+        "status": "supported"
+      }
+    }
+  }
+}

@@ -24,7 +24,7 @@ Use the [sensor reference](/docs/bottlenecks/) for units and sources. Unreadable
 
 Select the machine and time range in History. Hover over a chart to inspect a recorded bucket; its time marker follows across charts in the same view. With a chart focused, use Left/Right to move between readings, Home/End for the first or last reading, and Escape to dismiss the marker.
 
-By default, raw samples are retained for 48 hours, one-minute summaries for 30 days, and one-hour summaries for 400 days. Summaries retain minimum and maximum values. Older data is less granular, and bounded queries may return partial results, which the UI marks.
+History defaults to bounded RAM storage and is lost when the hub restarts. Run `rigscope configure --telemetry-mode persistent` to retain history on disk. The command previews the change and asks before restarting running services. Existing RAM history is not copied to disk and is lost on restart. In persistent mode, the one-second ring covers the last 15 minutes in memory, ten-second summaries are kept for 2 hours, one-minute summaries for 30 days, and one-hour summaries for 400 days. RAM mode uses the same maximum ages, subject to its memory budget and the lifetime of the hub process. Summaries retain minimum, maximum, and average values. Older data is less granular, and bounded queries may return partial results, which the UI marks.
 
 Process details are fetched while viewers request them and are never persisted. You can use History to identify when machine usage changed, but it cannot reconstruct a process list from yesterday. Export current process data or loaded historical readings when you need a separate record; see [exports](/docs/exports/).
 

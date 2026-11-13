@@ -1,0 +1,16 @@
+{
+  "collectors": [
+    {
+      "collectorId": "fixture-collector-1",
+      "machineId": "fixture-machine-1",
+      "revoked": false,
+      "updatedAt": "2026-11-12T10:11:00.803Z"
+    },
+    {
+      "collectorId": "fixture-collector-processes",
+      "machineId": "fixture-processes-machine",
+      "revoked": false,
+      "updatedAt": "2026-11-12T10:11:00.803Z"
+    }
+  ]
+}

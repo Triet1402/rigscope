@@ -8,7 +8,7 @@ import { SseClient } from "./support/sse";
 import { parseSnapshot, rawCollector } from "./support/wire";
 import { bindCollectorSession, wsTerminate, wsUpgrade } from "./support/ws";
 
-test("packaged hub: exact health shape, UI route, Next delegation, and collector endpoint HTTP access", async (t) => {
+test("packaged hub: exact health shape, UI route, and collector endpoint HTTP access", async (t) => {
   const hub = await startHub(t, { collectors: [credential("c-primary", "m-primary", demoToken("primary"))] });
 
   // Health: exact endpoint contract.
@@ -30,9 +30,9 @@ test("packaged hub: exact health shape, UI route, Next delegation, and collector
   assert.match(ui.headers.get("content-type") ?? "", /text\/html/, "UI must be served as HTML");
   assert.match(uiText, /<!DOCTYPE|<html/i, "UI route returns an HTML document");
 
-  // Unknown HTTP requests delegate to Next.js (Next's own 404).
+  // Unknown paths fall through to the embedded export's 404.
   const missing = await fetch(`${hub.baseUrl}/__no_such_route_integration__`, { headers: hub.browserHeaders, signal: AbortSignal.timeout(10_000) });
-  assert.equal(missing.status, 404, `unknown route must 404 via Next delegation (got ${missing.status})`);
+  assert.equal(missing.status, 404, `unknown route must 404 (got ${missing.status})`);
 
   // Health stays consistent after UI traffic.
   await expectHealth(hub);
@@ -77,7 +77,7 @@ test("collector endpoint auth: bearer header required, browser Origin upgrades r
   }
   wsTerminate(conn.ws);
 
-  // A hub started without HUB_COLLECTORS keeps UI/health/SSE but rejects every collector.
+  // A hub started without configured collectors keeps UI/health/SSE but rejects every collector.
   const openHub = await startHub(t); // no credentials configured
   const openHealth = await expectHealth(openHub);
   assert.equal(openHealth.status, "ok");
@@ -94,43 +94,39 @@ test("collector endpoint auth: bearer header required, browser Origin upgrades r
 
 test("hub config validation: duplicate identities/tokens, missing fields, non-loopback host all fail startup nonzero", async (t) => {
   const base = (c: string, m: string, k: string): CredentialConfig => credential(c, m, k);
-  const cases: { name: string; env: Record<string, string | undefined> }[] = [
-    {
-      name: "development session lifetime override in production",
-      env: { HUB_DEV_SESSION_TTL_MS: "3000" },
-    },
+  const cases: { name: string; spec: Parameters<typeof spawnStartupCandidate>[1] }[] = [
     {
       name: "malformed browser user configuration",
-      env: { HUB_BROWSER_USERS: "not-json" },
+      spec: { browserUsers: "not-json" },
     },
     {
       name: "plaintext browser password is not a password hash",
-      env: { HUB_BROWSER_USERS: JSON.stringify([{ username: "demo", passwordHash: "demo-password-local", machineIds: "*" }]) },
+      spec: { browserUsers: JSON.stringify([{ username: "demo", passwordHash: "demo-password-local", machineIds: "*" }]) },
     },
     {
       name: "duplicate token across identities",
-      env: { HUB_COLLECTORS: JSON.stringify([base("c-1", "m-1", "demo-token-dup"), base("c-2", "m-2", "demo-token-dup")]) },
+      spec: { collectors: [base("c-1", "m-1", "demo-token-dup"), base("c-2", "m-2", "demo-token-dup")] },
     },
     {
       name: "duplicate collectorId",
-      env: { HUB_COLLECTORS: JSON.stringify([base("c-1", "m-1", "t-1"), base("c-1", "m-2", "t-2")]) },
+      spec: { collectors: [base("c-1", "m-1", "t-1"), base("c-1", "m-2", "t-2")] },
     },
     {
       name: "duplicate machineId",
-      env: { HUB_COLLECTORS: JSON.stringify([base("c-1", "m-1", "t-1"), base("c-2", "m-1", "t-2")]) },
+      spec: { collectors: [base("c-1", "m-1", "t-1"), base("c-2", "m-1", "t-2")] },
     },
     {
       name: "credential missing token field",
-      env: { HUB_COLLECTORS: JSON.stringify([{ collectorId: "c-1", machineId: "m-1" }]) },
+      spec: { collectors: [{ collectorId: "c-1", machineId: "m-1" } as unknown as CredentialConfig] },
     },
     {
-      name: "non-loopback HUB_HOST",
-      env: { HUB_HOST: "0.0.0.0", HUB_COLLECTORS: JSON.stringify([base("c-nonloop", "m-nonloop", "t-nonloop")]) },
+      name: "non-loopback host",
+      spec: { host: "0.0.0.0", collectors: [base("c-nonloop", "m-nonloop", "t-nonloop")] },
     },
   ];
 
-  for (const { name, env } of cases) {
-    const child = spawnStartupCandidate(t, env);
+  for (const { name, spec } of cases) {
+    const child = spawnStartupCandidate(t, spec);
     const info = await within(child.exit, 5000, `${name}: invalid configuration startup`);
     assert.ok(
       info.code !== null || info.signal !== null,
@@ -145,7 +141,7 @@ test("hub config validation: duplicate identities/tokens, missing fields, non-lo
   // More than fifty configured machines still boots; the cap is a byte/work
   // budget, not a product machine count.
   const many = spawnStartupCandidate(t, {
-    HUB_COLLECTORS: JSON.stringify(Array.from({ length: 75 }, (_, i) => base(`c-many-${i}`, `m-many-${i}`, `t-many-${i}`))),
+    collectors: Array.from({ length: 75 }, (_, i) => base(`c-many-${i}`, `m-many-${i}`, `t-many-${i}`)),
   });
   await many.waitForLine(listenMatch, HUB_BOOT_MS, "listening line with more than 50 configured machines");
   await many.stop();

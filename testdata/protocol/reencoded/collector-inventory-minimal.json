@@ -1,0 +1,48 @@
+{
+  "type": "inventory",
+  "capturedAt": "2026-11-12T10:00:00.000Z",
+  "inventory": {
+    "os": {
+      "platform": "linux",
+      "release": "",
+      "distro": null,
+      "arch": "aarch64"
+    },
+    "cpu": {
+      "model": null,
+      "logicalCores": 0
+    },
+    "memory": {
+      "totalBytes": null,
+      "swapTotalBytes": null
+    },
+    "gpus": [],
+    "filesystems": [],
+    "disks": [],
+    "network": [],
+    "capabilities": {
+      "cpu": {
+        "status": "unsupported",
+        "reason": "not collected"
+      },
+      "memory": {
+        "status": "unsupported"
+      },
+      "swap": {
+        "status": "unsupported"
+      },
+      "gpus": {
+        "status": "unsupported"
+      },
+      "disks": {
+        "status": "unsupported"
+      },
+      "network": {
+        "status": "unsupported"
+      },
+      "processes": {
+        "status": "withheld"
+      }
+    }
+  }
+}

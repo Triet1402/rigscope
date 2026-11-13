@@ -7,8 +7,7 @@
  * recorded gap interval breaks every series that spans it.
  */
 
-import type { HistoryGap } from "../hub/storage/history-query";
-import type { MetricUnit } from "../hub/storage/series";
+import type { HistoryGap, MetricUnit } from "./contract";
 
 export type HistoryPoint = { t: number; min: number | null; max: number | null; avg: number | null };
 

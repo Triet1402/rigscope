@@ -1,0 +1,2 @@
+Placeholder so //go:embed all:dist compiles before the UI export is copied in.
+Run `npm run build:ui` and then `go generate ./internal/hub/webui`.

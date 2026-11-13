@@ -1,0 +1,11 @@
+{
+  "type": "hello",
+  "collectorId": "collector-a",
+  "runId": "run-1",
+  "bootId": "boot-123",
+  "hostname": 7,
+  "capabilities": [
+    "metrics"
+  ],
+  "expectedIntervalMs": 5000
+}

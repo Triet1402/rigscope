@@ -1,0 +1,40 @@
+{
+  "type": "samples",
+  "mode": "live",
+  "records": [
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 1,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "unavailable",
+          "reason": "procfs unavailable"
+        },
+        "memory": {
+          "status": "unavailable",
+          "reason": "permission denied"
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "unavailable",
+          "reason": "no GPUs detected"
+        },
+        "disks": {
+          "status": "unavailable",
+          "reason": "statfs failed"
+        },
+        "network": {
+          "status": "unavailable",
+          "reason": "no interfaces"
+        }
+      }
+    }
+  ]
+}

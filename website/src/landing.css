@@ -323,6 +323,22 @@ body {
   color: var(--danger);
 }
 
+.install-alternative {
+  max-width: 56rem;
+  margin: 2px 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  text-align: center;
+  text-wrap: pretty;
+}
+
+.install-alternative code {
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
 .benefits {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -585,6 +601,22 @@ body {
 .home-details a, .prose a, .reading-nav a { color: #81b9fc; text-underline-offset: 4px; }
 .home-details a:hover, .prose a:hover, .reading-nav a:hover { color: var(--foreground); }
 .home-details a:focus-visible, .prose a:focus-visible, .reading-nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+
+.quickstart, .footprint { margin-top: 44px; }
+.quickstart > p, .footprint > p, .quickstart-steps p { color: var(--muted-foreground); line-height: 1.75; }
+.quickstart > p, .footprint > p { max-width: 72ch; }
+.quickstart h2, .footprint h2 { margin: 0 0 12px; font-size: clamp(1.5rem, 2.4vw, 2rem); letter-spacing: -0.02em; }
+.quickstart-steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 56px; margin: 28px 0 0; padding: 0; list-style: none; }
+.quickstart-steps h3 { margin: 0 0 10px; font-size: 1.125rem; line-height: 1.35; }
+.quickstart-steps p { margin: 0 0 12px; }
+.quickstart-steps p:last-child { margin-bottom: 0; }
+.quickstart-steps pre { max-width: 100%; margin: 0 0 12px; padding: 14px 18px; overflow-x: auto; border-radius: 8px; background: var(--card); color: var(--foreground); font-family: var(--font-mono); font-size: 0.8125rem; line-height: 1.6; }
+.quickstart-steps pre code { font-family: inherit; white-space: pre; }
+.quickstart-steps pre:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.quickstart-steps p code { font-family: var(--font-mono); color: var(--foreground); font-size: 0.875em; }
+.footprint ul { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 28px; margin: 20px 0; padding: 0; list-style: none; }
+.footprint li { padding: 16px 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--muted-foreground); line-height: 1.55; }
+.footprint strong { color: var(--foreground); }
 .reading-layout { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: clamp(32px, 5vw, 80px); width: min(100%, 78rem); margin: 48px auto 80px; flex: 1; }
 .reading-nav { font-size: 0.9375rem; line-height: 1.5; }
 .reading-nav nav + nav { margin-top: 32px; }
@@ -612,6 +644,7 @@ body {
 .prose td { color: var(--muted-foreground); }
 @media (max-width: 760px) {
   .feature-details { grid-template-columns: minmax(0, 1fr); }
+  .quickstart-steps, .footprint ul { grid-template-columns: minmax(0, 1fr); }
   .home-details { margin-top: 48px; }
   .reading-layout { grid-template-columns: minmax(0, 1fr); margin-top: 24px; gap: 32px; }
   .reading-nav nav + nav { display: none; }
@@ -631,3 +664,11 @@ body {
 .landing-home .requirements { margin-top: 6px; font-size: 0.8125rem; }
 .landing-home .benefits { order: 2; margin-block: 28px 0; }
 .landing-home .home-details { margin-top: 48px; }
+
+/* Keep both installation scopes visible, with their own copy feedback. */
+.install-options { width: min(100%, 760px); margin-top: 14px; }
+.install-option + .install-option { margin-top: 10px; }
+.install-label { margin: 0 0 6px; color: var(--muted-foreground); font-size: 0.8125rem; }
+.landing-home .install-option .install { width: 100%; margin-top: 0; }
+.install-option .copy-status:empty { display: none; }
+.install-option .copy-status { margin-top: 6px; min-height: 0; }

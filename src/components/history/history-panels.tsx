@@ -11,7 +11,7 @@
 
 import { Panel } from "@/components/panel";
 import type { MachineState } from "@/contracts";
-import type { HistoryResult, HistorySeries } from "@/hub/storage/history-query";
+import type { HistoryResult, HistorySeries } from "@/history/contract";
 import {
   gpuCards,
   metricOption,

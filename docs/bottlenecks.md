@@ -26,9 +26,9 @@ wall power.
 CPU temperature supports known CPU hwmon drivers, including `coretemp` and
 `k10temp`. CPU package power uses the Linux powercap `intel-rapl:N` interface,
 including compatible AMD implementations. Many systems restrict `energy_uj` to
-root. The collector remains unprivileged. The optional
-[system installer](system-installation.md#cpu-package-power) grants its dedicated account persistent
-read-only package-counter access; ordinary user installation leaves permissions
+root. The collector remains unprivileged. A system installation grants its
+dedicated collector account persistent read-only package-counter access through
+the `rigscope-rapl` group and udev rule; a user installation leaves permissions
 under the operator's control.
 
 Counter resets invalidate the affected derived reading until a valid interval is

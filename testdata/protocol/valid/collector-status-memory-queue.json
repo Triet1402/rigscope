@@ -1,0 +1,15 @@
+{
+  "type": "status",
+  "capturedAt": "2026-11-12T10:00:00.000Z",
+  "delivery": {
+    "pendingRecords": 3,
+    "pendingBytes": 4096,
+    "oldestPendingCapturedAt": null,
+    "inFlightRecords": 0,
+    "droppedRecords": 0,
+    "replaying": false,
+    "lastAckAt": "2026-11-12T10:00:00.000Z",
+    "queueMode": "memory"
+  },
+  "failures": []
+}

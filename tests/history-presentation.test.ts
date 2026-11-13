@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { MachineState } from "../src/contracts";
-import type { HistoryGap, HistoryResult, HistorySeries } from "../src/hub/storage/history-query";
+import type { HistoryGap, HistoryResult, HistorySeries } from "../src/history/contract";
 import {
   buildYDomain,
   continuityStepMs,

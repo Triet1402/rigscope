@@ -1,0 +1,11 @@
+{
+  "type": "ack",
+  "accepted": [],
+  "rejected": [
+    {
+      "runId": "run-1",
+      "sequence": 1,
+      "reason": "\udc00"
+    }
+  ]
+}

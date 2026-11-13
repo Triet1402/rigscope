@@ -1,0 +1,1318 @@
+{
+  "type": "samples",
+  "mode": "live",
+  "records": [
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 0,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 1,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 2,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 3,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 4,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 5,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 6,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 7,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 8,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 9,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 10,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 11,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 12,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 13,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 14,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 15,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 16,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 17,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 18,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 19,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 20,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 21,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 22,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 23,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 24,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 25,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 26,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 27,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 28,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 29,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 30,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    },
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 31,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    }
+  ]
+}

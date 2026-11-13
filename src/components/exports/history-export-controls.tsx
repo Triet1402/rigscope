@@ -9,7 +9,7 @@ import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
 
 import type { MachineState } from "@/contracts";
-import type { HistoryResult } from "@/hub/storage/history-query";
+import type { HistoryResult } from "@/history/contract";
 import type { RangeId } from "@/history/presentation";
 import { CSV_MIME, JSON_MIME, downloadFile } from "@/exports/csv";
 import {

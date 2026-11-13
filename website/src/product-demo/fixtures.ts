@@ -1,8 +1,9 @@
-import {createSyntheticMetricsSampler} from '../../../collector/sampling/synthetic';
-import {flattenMetrics, METRICS} from '../../../src/hub/storage/series';
+import {createSyntheticMetricsSampler} from './synthetic';
+import {flattenMetrics} from './flatten';
 import type {MachineState, DetailResult, ProcessRow} from '../../../src/contracts';
-import type {HistoryResult, HistorySeries} from '../../../src/hub/storage/history-query';
+import type {HistoryResult, HistorySeries} from '../../../src/history/contract';
 import {rangePreset, type RangeId} from '../../../src/history/presentation';
+import {metricOption} from '../../../src/history/metrics';
 
 const GiB = 1024 ** 3;
 export const MACHINE_IDS = ['workstation', 'build-server'] as const;
@@ -12,7 +13,7 @@ export function makeMachines(now: number): MachineState[] {
   return MACHINE_IDS.map((id, index) => {
     const sampler = createSyntheticMetricsSampler(
       {collectorId:`demo-${id}`, runId:'synthetic-run', bootId:'synthetic-boot'},
-      {now:() => now, rand:() => 0.5, sequence:{next:() => Math.floor(now / 5000), current:() => Math.floor(now / 5000)}},
+      {now:() => now, rand:() => 0.5, sequence:{next:() => Math.floor(now / 5000)}},
     );
     const inventory = sampler.inventory();
     const metrics = sampler.next();
@@ -61,7 +62,7 @@ export function makeHistory(machineId: string, metricsKey: string, range: RangeI
       const key = `${point.metric}\0${point.resourceId}`;
       let item = series.get(key);
       if (!item) {
-        item = {metric:point.metric, resourceId:point.resourceId, unit:METRICS[point.metric].unit, points:[]};
+        item = {metric:point.metric, resourceId:point.resourceId, unit:metricOption(point.metric)?.unit ?? 'percent', points:[]};
         series.set(key, item);
       }
       item.points.push({t, avg:point.value, min:point.value, max:point.value});

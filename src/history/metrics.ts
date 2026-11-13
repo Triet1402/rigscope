@@ -9,15 +9,14 @@
  */
 
 import type { MachineState } from "../contracts";
-import type { HistorySeries } from "../hub/storage/history-query";
-import type { MetricUnit } from "../hub/storage/series";
+import type { HistorySeries, MetricUnit } from "./contract";
 
 export type MetricFamily = "cpu" | "memory" | "swap" | "gpus" | "disks" | "network";
 
 /**
  * Storage units this build can present. `milliseconds` arrives with the
  * bottleneck history contract; keeping it local means the UI still type-checks
- * against a hub/storage build that has not added the unit yet.
+ * against a newer hub build that has not added the unit yet.
  */
 export type HistoryMetricUnit = MetricUnit | "milliseconds";
 

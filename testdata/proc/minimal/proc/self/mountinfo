@@ -1,0 +1,5 @@
+1 0 0:1 / /tmp rw - tmpfs tmpfs rw
+2 0 259:2 / / rw,relatime - ext4 /dev/nvme0n1p2 rw
+3 0 8:17 / /srv/fixture rw,noatime - ext4 /dev/sdb1 rw
+4 0 7:0 / /snap/core ro - squashfs /dev/loop0 ro
+5 0 0:99 / /var/lib/docker/overlay2 rw - overlay overlay rw

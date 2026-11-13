@@ -33,6 +33,7 @@ import {
   type ScalarFieldView,
 } from "@/live/presentation";
 import { useLive } from "@/live/live-provider";
+import { machineViewHref } from "@/live/machine-selection";
 import { cpuChartPath } from "@/live/history";
 import type { SampleHistoryPoint } from "@/live/types";
 import { useNow } from "@/live/use-now";
@@ -269,7 +270,7 @@ function MachineRow({ state, now, held, points }: { state: MachineState; now: nu
     <tr className="transition-colors hover:bg-card-strong/60">
       <td className="border-b border-border py-2.5 pr-4">
         <Link
-          href={`/machines/${encodeURIComponent(state.machineId)}`}
+          href={machineViewHref(state.machineId, "overview")}
           className="inline-flex min-w-0 flex-col rounded-sm transition-colors hover:underline"
         >
           <MachineIdentity state={state} />
@@ -344,7 +345,7 @@ function MachineCard({ state, now, held, points }: { state: MachineState; now: n
   return (
     <li>
       <Link
-        href={`/machines/${encodeURIComponent(state.machineId)}`}
+        href={machineViewHref(state.machineId, "overview")}
         className="block rounded-xl border border-border bg-card p-4 transition-colors hover:border-muted-foreground/40"
       >
         <div className="flex items-center justify-between gap-3">

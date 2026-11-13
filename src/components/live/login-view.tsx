@@ -1,5 +1,7 @@
 "use client";
 
+import { SourceLink } from "@/components/source-link";
+
 /**
  * The /login surface. A small standalone card (no app shell) with a labeled
  * form. Outcomes follow the backend agreement exactly: 401 maps to a plain
@@ -147,6 +149,7 @@ export function LoginView() {
               </button>
             </form>
           )}
+          <footer className="mt-5 text-center"><SourceLink /></footer>
         </div>
       </div>
     </main>

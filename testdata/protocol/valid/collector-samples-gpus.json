@@ -1,0 +1,75 @@
+{
+  "type": "samples",
+  "mode": "live",
+  "records": [
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 1,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": [
+            {
+              "id": "gpu:GPU-4ace4b62-1111",
+              "status": "ok",
+              "utilizationPercent": 55,
+              "memoryUsedBytes": 1000000000,
+              "memoryTotalBytes": 8000000000,
+              "temperatureC": 65,
+              "powerWatts": 120.5,
+              "junctionTemperatureC": 70.5,
+              "vramTemperatureC": 60.5
+            },
+            {
+              "id": "gpu:GPU-4ace4b62-2222",
+              "status": "ok",
+              "utilizationPercent": null,
+              "memoryUsedBytes": null,
+              "memoryTotalBytes": null,
+              "temperatureC": null,
+              "powerWatts": null,
+              "junctionTemperatureC": null,
+              "vramTemperatureC": null
+            },
+            {
+              "id": "gpu:0000:01:00.0",
+              "status": "unavailable",
+              "reason": "management adapter"
+            }
+          ]
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    }
+  ]
+}

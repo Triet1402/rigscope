@@ -1,0 +1,4 @@
+{
+  "error": "Process viewer budget exhausted. Close another Processes view and retry.",
+  "code": "process-viewer-budget"
+}

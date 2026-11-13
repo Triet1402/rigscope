@@ -64,6 +64,46 @@ const MAX_TS = 64;
 const MIN_EPOCH = Date.parse("2000-01-01T00:00:00Z");
 const MAX_EPOCH = Date.parse("2200-01-01T00:00:00Z");
 
+/**
+ * The one timestamp grammar shared with the Go protocol package:
+ * `YYYY-MM-DDTHH:MM:SS(.fraction of 1-9 digits)?(Z|±HH:MM)`, with valid
+ * calendar and clock ranges and an offset within ±23:59. Fraction digits
+ * beyond milliseconds are truncated, so ordering uses millisecond precision.
+ */
+const TIMESTAMP_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})$/;
+
+/** Parses a wire timestamp to epoch milliseconds, or null when invalid. */
+function timestampMillis(value: string): number | null {
+  const match = TIMESTAMP_PATTERN.exec(value);
+  if (match === null) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const fraction = match[7] ?? "";
+  const zone = match[8];
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) return null;
+  if (hour > 23 || minute > 59 || second > 59) return null;
+  const millis = fraction.length === 0 ? 0 : Number(`${fraction}000`.slice(0, 3));
+  let offsetMinutes = 0;
+  if (zone !== "Z") {
+    const offsetHour = Number(zone.slice(1, 3));
+    const offsetMinute = Number(zone.slice(4, 6));
+    if (offsetHour > 23 || offsetMinute > 59) return null;
+    offsetMinutes = (offsetHour * 60 + offsetMinute) * (zone[0] === "-" ? -1 : 1);
+  }
+  return Date.UTC(year, month - 1, day, hour, minute, second, millis) - offsetMinutes * 60_000;
+}
+
+/** Length of a Gregorian month. */
+function daysInMonth(year: number, month: number): number {
+  if (month === 2) return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28;
+  return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31;
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -327,6 +367,11 @@ export type HelloMessage = {
   hostname: string;
   capabilities: CapabilityName[];
   expectedIntervalMs: number;
+  /**
+   * Optional wire protocol version. Absent for collectors that predate
+   * versioning; when present it must be a positive integer.
+   */
+  protocol?: number;
 };
 export type SamplesMessage = { type: "samples"; mode: "live" | "replay"; records: TelemetryRecord[] };
 export type InventoryMessage = { type: "inventory"; capturedAt: string; inventory: Inventory };
@@ -362,6 +407,11 @@ export type WelcomeMessage = {
   delivery: "durable" | "memory";
   /** Maximum unacknowledged samples messages the collector may have outstanding. */
   maxInFlightBatches: number;
+  /**
+   * Optional wire protocol version the hub accepted. Absent for hubs that
+   * predate versioning; when present it must be a positive integer.
+   */
+  protocol?: number;
 };
 export type AckMessage = {
   type: "ack";
@@ -389,15 +439,17 @@ export function parseCollectorMessage(value: unknown): CollectorMessage {
   const o = obj(value, "collector message");
   switch (o.type) {
     case "hello": {
-      keys(o, ["type", "collectorId", "runId", "bootId", "hostname", "capabilities", "expectedIntervalMs"], "hello");
+      keys(o, ["type", "collectorId", "runId", "bootId", "hostname", "capabilities", "expectedIntervalMs"], "hello", ["protocol"]);
       const caps = arr(o.capabilities, "hello.capabilities", 1, CAPABILITY_NAMES.length).map((c) => oneOf(c, CAPABILITY_NAMES, "hello.capabilities"));
       if (new Set(caps).size !== caps.length || !caps.includes("metrics")) throw new Error("invalid hello: capabilities must be unique and include metrics");
-      return {
+      const hello: HelloMessage = {
         type: "hello",
         collectorId: id(o.collectorId, "collectorId"), runId: id(o.runId, "runId"),
         bootId: text(o.bootId, "bootId", 0, MAX_ID), hostname: text(o.hostname, "hostname", 0, MAX_HOSTNAME),
         capabilities: caps, expectedIntervalMs: int(o.expectedIntervalMs, "expectedIntervalMs", MIN_EXPECTED_INTERVAL_MS, MAX_EXPECTED_INTERVAL_MS),
       };
+      if (hasOwn(o, "protocol")) hello.protocol = int(o.protocol, "protocol", 1, Number.MAX_SAFE_INTEGER);
+      return hello;
     }
     case "samples": {
       keys(o, ["type", "mode", "records"], "samples");
@@ -443,17 +495,19 @@ export function parseHubMessage(value: unknown): HubMessage {
   const o = obj(value, "hub message");
   switch (o.type) {
     case "welcome": {
-      keys(o, ["type", "hubRunId", "machineId", "delivery", "maxInFlightBatches"], "welcome");
+      keys(o, ["type", "hubRunId", "machineId", "delivery", "maxInFlightBatches"], "welcome", ["protocol"]);
       if (o.delivery !== "durable" && o.delivery !== "memory") {
         throw new Error(`invalid welcome: unexpected delivery ${desc(o.delivery)}`);
       }
-      return {
+      const welcome: WelcomeMessage = {
         type: "welcome",
         hubRunId: id(o.hubRunId, "hubRunId"),
         machineId: id(o.machineId, "machineId"),
         delivery: o.delivery,
         maxInFlightBatches: int(o.maxInFlightBatches, "maxInFlightBatches", 1, MAX_IN_FLIGHT_BATCHES),
       };
+      if (hasOwn(o, "protocol")) welcome.protocol = int(o.protocol, "protocol", 1, Number.MAX_SAFE_INTEGER);
+      return welcome;
     }
     case "ack": {
       keys(o, ["type", "accepted", "rejected"], "ack", ["retryAfterMs"]);
@@ -498,7 +552,11 @@ export function parseTelemetryRecord(value: unknown, what = "record"): Telemetry
     keys(p, ["fromCapturedAt", "toCapturedAt", "droppedRecords", "reason"], "gap payload");
     const from = ts(p.fromCapturedAt, "fromCapturedAt");
     const to = ts(p.toCapturedAt, "toCapturedAt");
-    if (Date.parse(from) > Date.parse(to)) throw new Error("invalid gap: fromCapturedAt after toCapturedAt");
+    const fromMillis = timestampMillis(from);
+    const toMillis = timestampMillis(to);
+    if (fromMillis === null || toMillis === null || fromMillis > toMillis) {
+      throw new Error("invalid gap: fromCapturedAt after toCapturedAt");
+    }
     return {
       ...env, kind: "gap",
       payload: { fromCapturedAt: from, toCapturedAt: to, droppedRecords: int(p.droppedRecords, "droppedRecords", 1, Number.MAX_SAFE_INTEGER), reason: oneOf(p.reason, GAP_REASONS, "gap.reason") },
@@ -847,8 +905,20 @@ function oneOf<T extends string>(v: unknown, options: readonly T[], what: string
 
 function text(v: unknown, field: string, min: number, max: number): string {
   if (typeof v !== "string") throw new Error(`invalid ${field}: expected string, got ${desc(v)}`);
+  if (!isWellFormed(v)) throw new Error(`invalid ${field}: string contains an unpaired UTF-16 surrogate`);
   if (v.length < min || v.length > max) throw new Error(`invalid ${field}: length ${v.length} outside ${min}..${max}`);
   return v;
+}
+
+/**
+ * A protocol string must be a well-formed Unicode scalar sequence. Node has
+ * String.prototype.isWellFormed; the regex fallback rejects an unpaired high or
+ * low surrogate for older engines.
+ */
+function isWellFormed(value: string): boolean {
+  const candidate = value as string & { isWellFormed?: () => boolean };
+  if (typeof candidate.isWellFormed === "function") return candidate.isWellFormed();
+  return /^(?:[\u0000-\uD7FF\uE000-\uFFFF]|[\uD800-\uDBFF][\uDC00-\uDFFF])*$/.test(value);
 }
 
 function id(v: unknown, field: string): string {
@@ -873,8 +943,10 @@ function num(v: unknown, field: string, min: number, max: number): number {
 
 function ts(v: unknown, field: string): string {
   const t = text(v, field, 1, MAX_TS);
-  const epoch = Date.parse(t);
-  if (!Number.isFinite(epoch) || epoch < MIN_EPOCH || epoch > MAX_EPOCH) throw new Error(`invalid ${field}: not a parseable timestamp`);
+  const epoch = timestampMillis(t);
+  if (epoch === null || epoch < MIN_EPOCH || epoch > MAX_EPOCH) {
+    throw new Error(`invalid ${field}: not a parseable timestamp`);
+  }
   return t;
 }
 

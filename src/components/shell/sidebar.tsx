@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SourceLink } from "@/components/source-link";
 import { usePathname } from "next/navigation";
 import { Bell, Cable, History, LayoutDashboard, List, Server, Settings } from "lucide-react";
 
@@ -97,7 +98,7 @@ export function Sidebar({ machineId, machineView, expanded = false }: { machineI
           ))}
         </div>
       </nav>
-      <footer className="shrink-0 border-t border-border p-3"><SidebarLiveStatus /></footer>
+      <footer className="shrink-0 border-t border-border p-3"><SidebarLiveStatus /><div className="mt-2"><SourceLink /></div></footer>
     </aside>
   );
 }

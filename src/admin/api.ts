@@ -7,6 +7,11 @@
  * Origin header; no secret ever enters a URL, history entry or storage.
  */
 
+import type { HubSettings } from "@/contracts/api.generated";
+import { validateHubSettings } from "@/contracts/api.validators.generated";
+
+export type { HubSettings };
+
 export type AdminScope = "*" | string[];
 
 export type AdminUserRecord = {
@@ -151,6 +156,20 @@ export function createAdminApi(options: { fetchImpl?: typeof fetch } = {}) {
       });
     },
 
+    /** Deletes a revoked collector and everything stored for its machine. */
+    async removeCollector(
+      collectorId: string,
+      csrfToken: string,
+      signal?: AbortSignal,
+    ): Promise<void> {
+      await call("/api/admin/collectors", {
+        method: "POST",
+        body: { action: "remove", collectorId },
+        csrfToken,
+        signal,
+      });
+    },
+
     async createGrant(
       input: { replaceMachineId?: string; ttlMs?: number },
       csrfToken: string,
@@ -162,6 +181,16 @@ export function createAdminApi(options: { fetchImpl?: typeof fetch } = {}) {
       );
       if (typeof data?.token !== "string" || typeof data.expiresAt !== "string") throw unexpected();
       return { token: data.token, expiresAt: data.expiresAt };
+    },
+
+    /** Reads the running hub's settings summary. Strictly validated. */
+    async getSettings(signal?: AbortSignal): Promise<HubSettings> {
+      const data = await call<unknown>("/api/admin/settings", { signal });
+      try {
+        return validateHubSettings(data);
+      } catch {
+        throw unexpected();
+      }
     },
 
     async saveMachineMeta(

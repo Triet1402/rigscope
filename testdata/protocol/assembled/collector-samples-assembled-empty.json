@@ -1,0 +1,44 @@
+{
+  "type": "samples",
+  "mode": "live",
+  "records": [
+    {
+      "collectorId": "collector-assembled",
+      "runId": "run-empty",
+      "bootId": "boot-assembled",
+      "sequence": 1,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 1,
+          "perCore": []
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 1,
+          "totalBytes": 2
+        },
+        "swap": {
+          "status": "ok",
+          "usedBytes": 1,
+          "totalBytes": 2
+        },
+        "gpus": {
+          "status": "unavailable",
+          "reason": "no GPUs detected"
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    }
+  ]
+}

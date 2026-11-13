@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { HistoryResult } from "@/hub/storage/history-query";
+import type { HistoryResult } from "@/history/contract";
 import { historyRequestUrl, parseHistoryResult, refreshIntervalMs, type RangeId } from "@/history/presentation";
 
 type HistoryErrorKind =

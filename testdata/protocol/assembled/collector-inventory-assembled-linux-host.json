@@ -1,0 +1,155 @@
+{
+  "type": "inventory",
+  "capturedAt": "2026-11-12T10:00:01.000Z",
+  "inventory": {
+    "os": {
+      "platform": "linux",
+      "release": "fixture-kernel",
+      "distro": "Ubuntu 26.10",
+      "arch": "amd64"
+    },
+    "cpu": {
+      "model": "AMD EPYC 7402P 24-Core Processor",
+      "logicalCores": 48
+    },
+    "memory": {
+      "totalBytes": 130351206400,
+      "swapTotalBytes": 8589930496
+    },
+    "gpus": [
+      {
+        "id": "pci:0000:02:00.0",
+        "name": "AMD display adapter",
+        "vendor": "amd",
+        "pciBusId": "0000:02:00.0",
+        "telemetry": "unsupported",
+        "memoryTotalBytes": null,
+        "reason": "GPU detected, but no readable DRM/sysfs counters; driver support or permissions may limit telemetry"
+      },
+      {
+        "id": "gpu:GPU-aaaaaaaa-1111",
+        "name": "NVIDIA GeForce RTX 3090",
+        "vendor": "nvidia",
+        "pciBusId": "0000:03:00.0",
+        "telemetry": "supported",
+        "memoryTotalBytes": 25769803776
+      }
+    ],
+    "filesystems": [
+      {
+        "id": "fs:/",
+        "mountPoint": "/",
+        "device": "/dev/nvme0n1p2",
+        "fsType": "ext4",
+        "totalBytes": 4096000
+      },
+      {
+        "id": "fs:/boot/efi",
+        "mountPoint": "/boot/efi",
+        "device": "/dev/nvme0n1p1",
+        "fsType": "vfat",
+        "totalBytes": 4096000
+      },
+      {
+        "id": "fs:/srv/storage",
+        "mountPoint": "/srv/storage",
+        "device": "/dev/sdb2",
+        "fsType": "btrfs",
+        "totalBytes": 4096000
+      }
+    ],
+    "disks": [
+      {
+        "id": "disk:nvme0n1",
+        "name": "nvme0n1",
+        "model": "Samsung SSD 990 PRO 2TB",
+        "rotational": false,
+        "sizeBytes": 2000398934016
+      },
+      {
+        "id": "disk:sda",
+        "name": "sda",
+        "model": "ST10000NM001G-2M",
+        "rotational": true,
+        "sizeBytes": 10000831348736
+      },
+      {
+        "id": "disk:sdb",
+        "name": "sdb",
+        "model": "TOSHIBA MG06ACA1",
+        "rotational": true,
+        "sizeBytes": 10000831348736
+      }
+    ],
+    "network": [
+      {
+        "id": "net:eno1np0",
+        "name": "eno1np0",
+        "mac": "02:00:00:00:01:01",
+        "addresses": [],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": 1000
+      },
+      {
+        "id": "net:eno2np1",
+        "name": "eno2np1",
+        "mac": "02:00:00:00:01:02",
+        "addresses": [],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": 10000
+      },
+      {
+        "id": "net:enx020000000103",
+        "name": "enx020000000103",
+        "mac": "02:00:00:00:01:03",
+        "addresses": [],
+        "virtual": false,
+        "state": "down",
+        "speedMbps": null
+      },
+      {
+        "id": "net:lo",
+        "name": "lo",
+        "mac": "00:00:00:00:00:00",
+        "addresses": [],
+        "virtual": true,
+        "state": "unknown",
+        "speedMbps": null
+      },
+      {
+        "id": "net:tailscale0",
+        "name": "tailscale0",
+        "mac": null,
+        "addresses": [],
+        "virtual": true,
+        "state": "unknown",
+        "speedMbps": null
+      }
+    ],
+    "capabilities": {
+      "cpu": {
+        "status": "supported"
+      },
+      "memory": {
+        "status": "supported"
+      },
+      "swap": {
+        "status": "supported"
+      },
+      "gpus": {
+        "status": "supported"
+      },
+      "disks": {
+        "status": "supported"
+      },
+      "network": {
+        "status": "supported"
+      },
+      "processes": {
+        "status": "supported"
+      }
+    }
+  }
+}

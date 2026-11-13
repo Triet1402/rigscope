@@ -1,4 +1,4 @@
-import type { HistorySeries } from "../hub/storage/history-query";
+import type { HistorySeries } from "./contract";
 
 /** Fixed time bins preserve the hottest recorded value; empty bins stay empty. */
 export function coreHeatmapBuckets(points: HistorySeries["points"], fromMs: number, toMs: number, columns = 120): Array<number | null> {

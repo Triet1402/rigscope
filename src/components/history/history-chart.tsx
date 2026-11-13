@@ -25,7 +25,7 @@ import {
   formatTimeTick,
 } from "@/history/presentation";
 import { metricUnitLabel } from "@/history/metrics";
-import type { HistoryGap, HistorySeries } from "@/hub/storage/history-query";
+import type { HistoryGap, HistorySeries } from "@/history/contract";
 import { inspectionPoint, inspectionTimeAtPointer } from "@/history/inspection";
 import { ChartInspectionTooltip, useChartInspection } from "./chart-inspection";
 

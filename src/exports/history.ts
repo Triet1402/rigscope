@@ -10,7 +10,7 @@
  */
 
 import type { MachineState } from "../contracts";
-import type { HistoryGap, HistoryResult, HistorySeries } from "../hub/storage/history-query";
+import type { HistoryGap, HistoryResult, HistorySeries } from "../history/contract";
 import { gapBands, seriesStats } from "../history/chart";
 import { gpuCards, metricOption, metricUnitLabel, resourceLabel } from "../history/metrics";
 import { rangePreset, type RangeId } from "../history/presentation";

@@ -1,0 +1,38 @@
+{
+  "machineId": "fixture-processes-machine",
+  "fromMs": 1794478205310,
+  "toMs": 1794478265310,
+  "stepMs": 1000,
+  "tier": "1s",
+  "series": [
+    {
+      "metric": "cpu.usage",
+      "resourceId": "",
+      "unit": "percent",
+      "points": [
+        {
+          "t": 1794478235000,
+          "min": null,
+          "max": null,
+          "avg": null
+        },
+        {
+          "t": 1794478256000,
+          "min": 7.5,
+          "max": 7.5,
+          "avg": 7.5
+        }
+      ]
+    }
+  ],
+  "gaps": [
+    {
+      "fromMs": 1794478235310,
+      "toMs": 1794478256310,
+      "kind": "missing",
+      "reason": "expected interval missed"
+    }
+  ],
+  "truncated": false,
+  "elapsedMs": 0
+}

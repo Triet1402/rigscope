@@ -1,0 +1,12 @@
+{
+  "status": {
+    "channel": "webhook",
+    "configured": true,
+    "enabled": true,
+    "transport": "loopback-http",
+    "lastTestAt": null,
+    "lastTestOk": null,
+    "lastError": null,
+    "delivery": "at-least-once"
+  }
+}

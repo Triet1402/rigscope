@@ -6,7 +6,7 @@ import {HistoryView} from '../../../src/components/history/history-view';
 import {ProcessesView} from '../../../src/components/processes/processes-view';
 import {AppShell} from '../../../src/components/shell/app-shell';
 import {Panel} from '../../../src/components/panel';
-import {METRICS} from '../../../src/hub/storage/series';
+import {HISTORY_METRICS} from '../../../src/history/metrics';
 import {DemoLiveProvider} from './live';
 import DemoLink, {usePathname} from './navigation';
 
@@ -15,7 +15,7 @@ import DemoLink, {usePathname} from './navigation';
 window.fetch = async (input) => {
   const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.href);
   return url.pathname === '/api/history/metrics'
-    ? Response.json({metrics:METRICS})
+    ? Response.json({metrics:Object.fromEntries(HISTORY_METRICS.map(metric => [metric.metric, {unit:metric.unit}]))})
     : Response.json({error:'This action is unavailable in the synthetic demo.'}, {status:403});
 };
 

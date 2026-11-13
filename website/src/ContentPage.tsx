@@ -34,7 +34,7 @@ export function ContentPage({title, html, section, pages, headings, path}: Conte
           <article className="prose"><h1>{title}</h1><div dangerouslySetInnerHTML={{__html: html}} /></article>
         </main>
       </div>
-      <footer className="site-footer"><p>Rigscope — Your machines, in view.</p><nav className="footer-links" aria-label="Footer"><a href="/docs/installation/">Install Rigscope</a><a href="/docs/">Documentation</a><a href="/guides/">Guides</a><a href="https://github.com/Triet1402/rigscope">Source on GitHub</a></nav></footer>
+      <footer className="site-footer"><p>Rigscope — Your machines, in view.</p><nav className="footer-links" aria-label="Footer"><a href="/docs/installation/">Install Rigscope</a><a href="/docs/">Documentation</a><a href="/guides/">Guides</a><a href="https://github.com/Triet1402/rigscope">Source on GitHub</a><a href="https://github.com/Triet1402/rigscope/blob/main/LICENSE">AGPLv3 license</a></nav></footer>
     </div>
   </div>;
 }

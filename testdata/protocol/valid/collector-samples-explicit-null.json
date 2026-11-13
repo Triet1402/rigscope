@@ -1,0 +1,92 @@
+{
+  "type": "samples",
+  "mode": "live",
+  "records": [
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 1,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 0,
+          "perCore": [
+            null
+          ],
+          "temperatureC": null,
+          "powerWatts": null,
+          "iowaitPercent": null,
+          "pressureSomePercent": null
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 0,
+          "totalBytes": 0,
+          "pressureSomePercent": null,
+          "pressureFullPercent": null
+        },
+        "swap": {
+          "status": "ok",
+          "usedBytes": 0,
+          "totalBytes": 0
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": [
+            {
+              "id": "gpu:GPU-4ace4b62-2222",
+              "status": "ok",
+              "utilizationPercent": null,
+              "memoryUsedBytes": null,
+              "memoryTotalBytes": null,
+              "temperatureC": null,
+              "powerWatts": null,
+              "junctionTemperatureC": null,
+              "vramTemperatureC": null
+            }
+          ]
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [
+            {
+              "id": "fs:/",
+              "status": "ok",
+              "usedBytes": 0,
+              "totalBytes": 0,
+              "inodesUsed": null,
+              "inodesTotal": null
+            }
+          ],
+          "devices": [
+            {
+              "id": "disk:sda",
+              "status": "ok",
+              "readBytesPerSec": 0,
+              "writeBytesPerSec": 0,
+              "readLatencyMs": null,
+              "writeLatencyMs": null,
+              "ioUtilizationPercent": null
+            }
+          ],
+          "pressureSomePercent": null,
+          "pressureFullPercent": null
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": [
+            {
+              "id": "net:lo",
+              "status": "ok",
+              "rxBytesPerSec": 0,
+              "txBytesPerSec": 0
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

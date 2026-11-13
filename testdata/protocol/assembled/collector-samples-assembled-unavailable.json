@@ -1,0 +1,40 @@
+{
+  "type": "samples",
+  "mode": "live",
+  "records": [
+    {
+      "collectorId": "collector-assembled",
+      "runId": "run-unavailable",
+      "bootId": "boot-assembled",
+      "sequence": 1,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "unavailable",
+          "reason": "cpu counters unavailable"
+        },
+        "memory": {
+          "status": "unavailable",
+          "reason": "memory counters unavailable"
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "swap counters unavailable"
+        },
+        "gpus": {
+          "status": "unavailable",
+          "reason": "no GPUs detected"
+        },
+        "disks": {
+          "status": "unavailable",
+          "reason": "disk discovery unavailable"
+        },
+        "network": {
+          "status": "unavailable",
+          "reason": "network counters unavailable"
+        }
+      }
+    }
+  ]
+}

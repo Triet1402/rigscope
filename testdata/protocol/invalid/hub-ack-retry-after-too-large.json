@@ -1,0 +1,6 @@
+{
+  "type": "ack",
+  "accepted": [],
+  "rejected": [],
+  "retryAfterMs": 600001
+}

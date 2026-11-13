@@ -1,0 +1,21 @@
+# Managed by rigscope. Do not edit; run "rigscope install" to rewrite.
+# Component: hub; scope: user
+[Unit]
+Description=Rigscope hub
+Documentation=https://rigscope.dev/docs
+After=network.target
+
+[Service]
+Type=simple
+ExecStart="/home/alice/.local/bin/rigscope" hub --config "/home/alice/.config/rigscope/config.json"
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+KillMode=control-group
+TimeoutStopSec=15s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rigscope-hub
+
+[Install]
+WantedBy=default.target

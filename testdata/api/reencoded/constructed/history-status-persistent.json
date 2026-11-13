@@ -1,0 +1,38 @@
+{
+  "mode": "persistent",
+  "persistentHistory": true,
+  "availableFromMs": 1794470876011,
+  "availableToMs": 1794470880145,
+  "memory": null,
+  "persistence": {
+    "enabled": true,
+    "storageTier": "summary",
+    "flushIntervalMs": 5000,
+    "queuedRecords": 0,
+    "queuedBatches": 0,
+    "lastFlushMs": 1794470876011,
+    "lastFlushDurationMs": 12,
+    "writeFailures": 0,
+    "lastWriteError": null,
+    "dbBytes": 49152,
+    "dbWalBytes": 0,
+    "dbBytesLimit": 1073741824,
+    "tiers": [
+      {
+        "tier": "raw",
+        "stepMs": 1000,
+        "retentionMs": 172800000,
+        "bytes": 65536
+      },
+      {
+        "tier": "10s",
+        "stepMs": 10000,
+        "retentionMs": 7200000,
+        "bytes": 32768
+      }
+    ]
+  },
+  "gaps": 0,
+  "acceptedRecords": 12,
+  "generatedAt": "2026-11-12T08:10:00.000Z"
+}

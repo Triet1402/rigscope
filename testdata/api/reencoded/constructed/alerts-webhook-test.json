@@ -1,0 +1,18 @@
+{
+  "result": {
+    "ok": true,
+    "status": 204,
+    "error": null,
+    "testedAt": "2026-11-12T08:10:00.000Z"
+  },
+  "status": {
+    "channel": "webhook",
+    "configured": true,
+    "enabled": true,
+    "transport": "loopback-http",
+    "lastTestAt": "2026-11-12T08:10:00.000Z",
+    "lastTestOk": true,
+    "lastError": null,
+    "delivery": "at-least-once"
+  }
+}

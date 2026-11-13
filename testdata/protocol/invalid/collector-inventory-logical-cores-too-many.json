@@ -1,0 +1,127 @@
+{
+  "type": "inventory",
+  "capturedAt": "2026-11-12T10:00:00.000Z",
+  "inventory": {
+    "os": {
+      "platform": "linux",
+      "release": "6.11.0-arch1-1",
+      "distro": "Arch Linux",
+      "arch": "x86_64"
+    },
+    "cpu": {
+      "model": "AMD Ryzen 9 7950X",
+      "logicalCores": 1025
+    },
+    "memory": {
+      "totalBytes": 67108864000,
+      "swapTotalBytes": 8589934592
+    },
+    "gpus": [
+      {
+        "id": "gpu:GPU-4ace4b62-1111",
+        "name": "NVIDIA GeForce RTX 4090",
+        "vendor": "nvidia",
+        "pciBusId": "0000:01:00.0",
+        "telemetry": "supported",
+        "memoryTotalBytes": 25757220864
+      },
+      {
+        "id": "gpu:0000:02:00.0",
+        "name": "ASPEED Graphics",
+        "vendor": "aspeed",
+        "pciBusId": null,
+        "telemetry": "unsupported",
+        "memoryTotalBytes": null,
+        "reason": "management adapter"
+      }
+    ],
+    "filesystems": [
+      {
+        "id": "fs:/",
+        "mountPoint": "/",
+        "device": "/dev/nvme0n1p2",
+        "fsType": "ext4",
+        "totalBytes": 1000204886016
+      },
+      {
+        "id": "fs:/boot",
+        "mountPoint": "/boot",
+        "device": "UUID=1234",
+        "fsType": "vfat",
+        "totalBytes": null
+      }
+    ],
+    "disks": [
+      {
+        "id": "disk:nvme0n1",
+        "name": "nvme0n1",
+        "model": "Samsung SSD 990 PRO 1TB",
+        "rotational": false,
+        "sizeBytes": 1000204886016
+      },
+      {
+        "id": "disk:sda",
+        "name": "sda",
+        "model": null,
+        "rotational": null,
+        "sizeBytes": null
+      }
+    ],
+    "network": [
+      {
+        "id": "net:eth0",
+        "name": "eth0",
+        "mac": "aa:bb:cc:dd:ee:ff",
+        "addresses": [
+          {
+            "family": "ipv4",
+            "address": "192.168.1.10",
+            "prefix": 24
+          },
+          {
+            "family": "ipv6",
+            "address": "fe80::1",
+            "prefix": 64
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": 1000
+      },
+      {
+        "id": "net:lo",
+        "name": "lo",
+        "mac": null,
+        "addresses": [],
+        "virtual": true,
+        "state": "unknown",
+        "speedMbps": null
+      }
+    ],
+    "capabilities": {
+      "cpu": {
+        "status": "supported"
+      },
+      "memory": {
+        "status": "supported"
+      },
+      "swap": {
+        "status": "supported"
+      },
+      "gpus": {
+        "status": "supported"
+      },
+      "disks": {
+        "status": "supported"
+      },
+      "network": {
+        "status": "supported",
+        "reason": "reduced by sharing policy"
+      },
+      "processes": {
+        "status": "withheld",
+        "reason": "local sharing policy"
+      }
+    }
+  }
+}

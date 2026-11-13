@@ -150,15 +150,26 @@ describe("admin presentation helpers", () => {
     assert.deepEqual(toggleScopeSelection(["a", "b"], "a"), ["b"]);
   });
 
-  it("builds enrollment commands for the current hub without a secret argument", () => {
-    const created = grantCommand("new", "https://rig.example.com:8443");
-    assert.equal(created.command, "rigscope connect 'https://rig.example.com:8443'");
-    assert.doesNotMatch(created.command, /--replace|TOKEN|grant-secret/);
-    assert.match(created.note, /prompt/);
+  it("builds one complete enrollment command with the grant in it", () => {
+    const created = grantCommand("new", "https://rig.example.com:8443", "abc_DEF-123");
+    assert.equal(
+      created.command,
+      "curl -fsSL https://rigscope.dev/install.sh | sh -s -- --role collector --hub 'https://rig.example.com:8443' --token 'abc_DEF-123'",
+    );
+    assert.equal(
+      grantCommand("replacement", "https://rig.example.com", "it's").command,
+      "rigscope collector enroll --hub-url 'https://rig.example.com' --grant 'it'\\''s'",
+    );
+    assert.doesNotMatch(created.command, /rigscope connect|--replace|grant-secret/);
+    assert.match(created.note, /new machine/);
+    assert.doesNotMatch(created.note, /paste at the prompt/);
 
     const replacement = grantCommand("replacement");
-    assert.match(replacement.command, /--replace$/);
-    assert.match(replacement.note, /stays active until/);
+    assert.equal(
+      replacement.command,
+      "rigscope collector enroll --hub-url 'https://your-hub' --grant '<grant>'",
+    );
+    assert.match(replacement.note, /keeps working until/);
     assert.throws(() => grantCommand("new", "https://user:secret@rig.example.com"));
     assert.doesNotMatch(replacement.command, /grant-secret/);
   });
@@ -173,7 +184,10 @@ describe("admin presentation helpers", () => {
       ["m-revoked", "reenroll"],
     ]);
     const reenroll = grantCommand("reenroll", "http://localhost:8081");
-    assert.equal(reenroll.command, "rigscope connect 'http://localhost:8081' --replace");
+    assert.equal(
+      reenroll.command,
+      "rigscope collector enroll --hub-url 'http://localhost:8081' --grant '<grant>'",
+    );
     assert.match(reenroll.note, /revoked machine/);
   });
 
@@ -278,13 +292,20 @@ describe("admin API client", () => {
       collectorId: "collector-1",
     });
 
+    await api.removeCollector("collector-1", "csrf");
+    assert.equal(calls[4]!.url, "/api/admin/collectors");
+    assert.deepEqual(JSON.parse(String(calls[4]!.init.body)), {
+      action: "remove",
+      collectorId: "collector-1",
+    });
+
     await api.saveMachineMeta(
       "machine with space",
       { displayName: "Desk", tags: ["prod"] },
       "csrf",
     );
-    assert.equal(calls[4]!.url, "/api/machines/meta?machineId=machine%20with%20space");
-    assert.deepEqual(JSON.parse(String(calls[4]!.init.body)), {
+    assert.equal(calls[5]!.url, "/api/machines/meta?machineId=machine%20with%20space");
+    assert.deepEqual(JSON.parse(String(calls[5]!.init.body)), {
       displayName: "Desk",
       tags: ["prod"],
     });

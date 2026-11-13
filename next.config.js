@@ -11,28 +11,14 @@ if (!Number.isInteger(workers) || workers < 1 || workers > 64) {
 
 /** @param {string} phase @returns {import("next").NextConfig} */
 const nextConfig = (phase) => ({
-  // Keep dev writes separate from the packaged hub's production artifact.
-  // Use a small static-generation worker pool for this six-page scaffold.
+  // Production is a static export: the Go hub embeds `out/` and serves it
+  // itself, so Next is build-time only. `next dev` is only for UI-only
+  // iteration against no hub (its /api requests have nothing behind them).
+  ...(phase === PHASE_DEVELOPMENT_SERVER ? {} : { output: "export" }),
+  // Keep dev writes separate from the production export the hub embeds.
   distDir: phase === PHASE_DEVELOPMENT_SERVER ? ".next-dev" : ".next",
+  // A small static-generation worker pool for this page set.
   experimental: { cpus: workers },
-  // Remote development goes through an outer TLS terminator and a Unix
-  // socket, so the browser's Origin hostname is the configured public origin,
-  // not localhost. Keep an explicit hostname allowlist for /_next assets and
-  // HMR (Next also adds the createNextApp hostname). Configuring this list
-  // makes Next's dev guard block unlisted origins instead of only warning.
-  // The hub validates the full exact origin before delegation.
-  allowedDevOrigins: phase === PHASE_DEVELOPMENT_SERVER ? publicDevOrigin() : undefined,
 });
-
-function publicDevOrigin() {
-  const value = process.env.HUB_PUBLIC_ORIGIN;
-  if (value === undefined || value === "") return undefined;
-  try {
-    const origin = new URL(value);
-    return origin.protocol === "https:" ? [origin.hostname] : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 module.exports = nextConfig;

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { CONNECT_PATH, credential, demoToken } from "./support/config";
 import { startCollector, startHub } from "./support/fixtures";
+import { failOnExit } from "./support/process";
 import { closedLoopbackPort } from "./support/http";
 import { SseClient } from "./support/sse";
 import { HubSnapshotShape, parseSnapshot, waitMachineState } from "./support/wire";
@@ -18,13 +19,13 @@ test("two collectors map to separate machines on one hub", async (t) => {
   const live = new SseClient(hub.liveUrl, hub.browserHeaders);
   await live.next(); // initial snapshot
 
-  startCollector(t, {
+  const alpha = startCollector(t, {
     collectorId: "c-alpha",
     hostname: "demo-alpha",
     hubs: [{ url: hub.collectorWsUrl, token: alphaToken }],
     intervalMs: 200,
   });
-  startCollector(t, {
+  const beta = startCollector(t, {
     collectorId: "c-beta",
     hostname: "demo-beta",
     hubs: [{ url: hub.collectorWsUrl, token: betaToken }],
@@ -33,16 +34,20 @@ test("two collectors map to separate machines on one hub", async (t) => {
 
   const end = Date.now() + 30_000;
   let snapshot: HubSnapshotShape | null = null;
-  while (Date.now() < end && snapshot === null) {
-    const remaining = end - Date.now();
-    if (remaining <= 0) break;
-    const event = await live.next(remaining);
-    if (event.event !== "snapshot" && event.event !== "update") continue;
-    const candidate = parseSnapshot(event.data, `${event.event} (two collectors)`);
-    if (candidate.machines.length === 2 && candidate.machines.every((m) => m.connected && m.metrics !== undefined)) {
-      snapshot = candidate;
+  const waitForBoth = (async (): Promise<HubSnapshotShape> => {
+    while (Date.now() < end) {
+      const remaining = end - Date.now();
+      if (remaining <= 0) break;
+      const event = await live.next(remaining);
+      if (event.event !== "snapshot" && event.event !== "update") continue;
+      const candidate = parseSnapshot(event.data, `${event.event} (two collectors)`);
+      if (candidate.machines.length === 2 && candidate.machines.every((m) => m.connected && m.metrics !== undefined)) {
+        return candidate;
+      }
     }
-  }
+    throw new Error("both machines must reach connected + metrics state");
+  })();
+  snapshot = await failOnExit([alpha, beta], waitForBoth, "two collectors reaching one hub");
   assert.ok(snapshot, "both machines must reach connected + metrics state");
   if (snapshot !== null) {
     const machineIds = new Set(snapshot.machines.map((m) => m.machineId));
@@ -67,79 +72,53 @@ test("two collectors map to separate machines on one hub", async (t) => {
   live.close();
 });
 
-test("one collector delivers to two hubs with independent tokens and machine mappings", async (t) => {
-  const tokenA = demoToken("hub-a");
-  const tokenB = demoToken("hub-b");
-  const hubA = await startHub(t, { collectors: [credential("c-multi", "m-a", tokenA)] });
-  const hubB = await startHub(t, { collectors: [credential("c-multi", "m-b", tokenB)] });
-
-  const liveA = new SseClient(hubA.liveUrl, hubA.browserHeaders);
-  const liveB = new SseClient(hubB.liveUrl, hubB.browserHeaders);
-  await Promise.all([liveA.next(), liveB.next()]); // initial snapshots
-
+/**
+ * The 1.0 single-destination variant of offline isolation: the hub is absent
+ * when the collector starts, appears, goes away, and returns. One process owns
+ * the whole lifecycle, so a sequence that resumes above the pre-outage value
+ * proves the collector kept sampling rather than restarting.
+ */
+test("a single destination recovers after the hub is unavailable and later returns", async (t) => {
+  const port = await closedLoopbackPort();
+  const token = demoToken("recover");
+  const cred = credential("c-recover", "m-recover", token);
   const collector = startCollector(t, {
-    collectorId: "c-multi",
-    hostname: "demo-multihub",
-    hubs: [
-      { url: hubA.collectorWsUrl, token: tokenA },
-      { url: hubB.collectorWsUrl, token: tokenB },
-    ],
+    collectorId: cred.collectorId,
+    hostname: "demo-recover",
+    hubs: [{ url: `ws://127.0.0.1:${port}${CONNECT_PATH}`, token }],
     intervalMs: 200,
   });
+  // No hub exists yet: the collector must keep retrying instead of exiting.
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  assert.equal(collector.proc.exitCode, null, `collector keeps retrying an unavailable hub. ${collector.dump()}`);
 
-  const [foundA, foundB] = await Promise.all([
-    waitMachineState(liveA, 30_000, { machineId: "m-a", collectorId: "c-multi", withMetrics: true }),
-    waitMachineState(liveB, 30_000, { machineId: "m-b", collectorId: "c-multi", withMetrics: true }),
-  ]);
-  const machineA = foundA.snapshot.machines.find((m) => m.machineId === "m-a");
-  const machineB = foundB.snapshot.machines.find((m) => m.machineId === "m-b");
-  assert.ok(machineA !== undefined && machineA.metrics !== undefined, "hub A saw the collector");
-  assert.ok(machineB !== undefined && machineB.metrics !== undefined, "hub B saw the collector");
-  if (machineA !== undefined && machineA.metrics !== undefined) {
-    assert.ok(machineA.metrics!.sequence >= 1, "hub A received samples");
-  }
-  if (machineB !== undefined && machineB.metrics !== undefined) {
-    assert.ok(machineB.metrics!.sequence >= 1, "hub B received samples");
-  }
-
-  // One sampling process fans out to two destinations with independent
-  // credentials; tokens are never shared across hubs, and each hub maps the
-  // collector to its own machine.
-  const exit = await collector.stop("SIGTERM");
-  assert.equal(exit.code, 0, `collector SIGTERM stays clean after multi-hub delivery (code ${exit.code}). ${collector.dump()}`);
-  liveA.close();
-  liveB.close();
-});
-
-test("offline destination never blocks healthy delivery", async (t) => {
-  const token = demoToken("healthy");
-  const hub = await startHub(t, { collectors: [credential("c-healthy", "m-healthy", token)] });
-  const closed = await closedLoopbackPort();
-
-  const live = new SseClient(hub.liveUrl, hub.browserHeaders);
-  await live.next(); // initial snapshot
-
-  const collector = startCollector(t, {
-    collectorId: "c-healthy",
-    hostname: "demo-healthy",
-    hubs: [
-      { url: hub.collectorWsUrl, token },
-      { url: `ws://127.0.0.1:${closed}${CONNECT_PATH}`, token: demoToken("dead") }, // unreachable
-    ],
-    intervalMs: 200,
-  });
-
-  const initial = await waitMachineState(live, 5000, { machineId: "m-healthy", withMetrics: true });
+  const first = await startHub(t, { port, collectors: [cred] });
+  const live = new SseClient(first.liveUrl, first.browserHeaders);
+  t.after(() => live.close());
+  const initial = await failOnExit(collector, waitMachineState(live, 15_000, {
+    machineId: cred.machineId, collectorId: cred.collectorId, withMetrics: true,
+  }), "delivery after the hub appears");
   const firstSequence = initial.snapshot.machines[0].metrics!.sequence;
-  // Observe continued delivery instead of sleeping and merely checking that
-  // the process is alive. A stalled healthy destination must fail this test.
-  for (;;) {
-    const event = await live.next(5000);
-    const snapshot = parseSnapshot(event.data, "continued healthy delivery");
-    if ((snapshot.machines[0].metrics?.sequence ?? 0) >= firstSequence + 3) break;
+  let advanced = firstSequence;
+  const advanceDeadline = Date.now() + 10_000;
+  while (advanced < firstSequence + 3) {
+    const event = await failOnExit(collector, live.next(Math.max(1, advanceDeadline - Date.now())), "advancing delivery");
+    const snapshot = parseSnapshot(event.data, "pre-outage delivery");
+    advanced = Math.max(advanced, snapshot.machines.find(m => m.machineId === cred.machineId)?.metrics?.sequence ?? advanced);
   }
-  assert.equal(collector.proc.exitCode, null, "collector must keep running while a destination is unreachable");
+
+  assert.equal((await first.stop()).code, 0);
+  assert.equal(collector.proc.exitCode, null, `collector survives the hub going away. ${collector.dump()}`);
+
+  const second = await startHub(t, { port, collectors: [cred] });
+  const resumedLive = new SseClient(second.liveUrl, second.browserHeaders);
+  t.after(() => resumedLive.close());
+  const resumed = await failOnExit(collector, waitMachineState(resumedLive, 20_000, {
+    machineId: cred.machineId, collectorId: cred.collectorId, withMetrics: true,
+  }), "delivery after the hub returns");
+  const resumedMetrics = resumed.snapshot.machines.find(m => m.machineId === cred.machineId)!.metrics!;
+  assert.ok(resumedMetrics.sequence > advanced,
+    `delivery resumes with advancing sequences (resumed ${resumedMetrics.sequence}, pre-outage ${advanced})`);
   const exit = await collector.stop("SIGTERM");
-  assert.equal(exit.code, 0, `collector SIGTERM with a failed destination exits zero (code ${exit.code}). ${collector.dump()}`);
-  live.close();
+  assert.equal(exit.code, 0, `clean shutdown after recovery (code ${exit.code}). ${collector.dump()}`);
 });

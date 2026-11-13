@@ -12,8 +12,7 @@ try {
     import {makeMachines, makeHistory, makeProcesses} from './src/product-demo/fixtures';
     import {parseHubSnapshot, parseCollectorMessage} from '../src/contracts';
     import {parseHistoryResult} from '../src/history/presentation';
-    import {HISTORY_METRICS} from '../src/history/metrics';
-    import {METRICS} from '../src/hub/storage/series';
+    import {HISTORY_METRICS, metricOption} from '../src/history/metrics';
     const now = Date.parse('2026-11-06T12:00:00Z');
     const machines = makeMachines(now);
     const snapshot = parseHubSnapshot({hubRunId:'synthetic-demo', machines});
@@ -27,7 +26,7 @@ try {
       assert.ok(parseHistoryResult(history), 'Product history parser accepts synthetic history');
       assert.ok(history.series.some(s => s.metric === 'cpu.core'));
       for (const series of history.series) {
-        assert.equal(series.unit, METRICS[series.metric].unit);
+        assert.equal(series.unit, metricOption(series.metric)?.unit);
         assert.equal(series.points.length, 121);
         assert.equal(series.points.at(-1).t, now);
       }

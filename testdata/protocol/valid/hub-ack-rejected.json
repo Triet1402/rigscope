@@ -1,0 +1,22 @@
+{
+  "type": "ack",
+  "accepted": [
+    {
+      "runId": "run-1",
+      "sequence": 1
+    }
+  ],
+  "rejected": [
+    {
+      "runId": "run-1",
+      "sequence": 2,
+      "reason": "invalid metrics payload"
+    },
+    {
+      "runId": "run-1",
+      "sequence": 3,
+      "reason": "unsupported protocol version"
+    }
+  ],
+  "retryAfterMs": 5000
+}

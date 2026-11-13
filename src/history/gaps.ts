@@ -10,7 +10,7 @@
  * Browser-safe: no DOM and no Node APIs.
  */
 
-import type { HistoryGap } from "../hub/storage/history-query";
+import type { HistoryGap } from "./contract";
 
 export type ConnectionPoint = {
   connected: boolean;

@@ -1,0 +1,88 @@
+{
+  "type": "inventory",
+  "capturedAt": "2023-11-14T22:13:20.000Z",
+  "inventory": {
+    "os": {
+      "platform": "synthetic",
+      "release": "synthetic-0",
+      "distro": "Synthetic Linux",
+      "arch": "synthetic"
+    },
+    "cpu": {
+      "model": "synthetic 8-core processor",
+      "logicalCores": 8
+    },
+    "memory": {
+      "totalBytes": 34359738368,
+      "swapTotalBytes": 8589934592
+    },
+    "gpus": [
+      {
+        "id": "gpu:SYNTHETIC-0",
+        "name": "synthetic GPU",
+        "vendor": "other",
+        "pciBusId": null,
+        "telemetry": "supported",
+        "memoryTotalBytes": 8589934592
+      }
+    ],
+    "filesystems": [
+      {
+        "id": "fs:/",
+        "mountPoint": "/",
+        "device": "synthetic",
+        "fsType": "syntheticfs",
+        "totalBytes": 536870912000
+      }
+    ],
+    "disks": [
+      {
+        "id": "disk:synthetic0",
+        "name": "synthetic0",
+        "model": "synthetic disk",
+        "rotational": false,
+        "sizeBytes": 536870912000
+      }
+    ],
+    "network": [
+      {
+        "id": "net:synthetic0",
+        "name": "synthetic0",
+        "mac": "00:00:00:00:00:01",
+        "addresses": [
+          {
+            "family": "ipv4",
+            "address": "192.0.2.10",
+            "prefix": 24
+          }
+        ],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": 1000
+      }
+    ],
+    "capabilities": {
+      "cpu": {
+        "status": "supported"
+      },
+      "memory": {
+        "status": "supported"
+      },
+      "swap": {
+        "status": "supported"
+      },
+      "gpus": {
+        "status": "supported"
+      },
+      "disks": {
+        "status": "supported"
+      },
+      "network": {
+        "status": "supported"
+      },
+      "processes": {
+        "status": "supported"
+      }
+    }
+  }
+}

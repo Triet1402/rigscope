@@ -22,6 +22,7 @@ import {
   useAccessGate,
 } from "@/components/live/stream-banners";
 import { ageSince, formatAge, formatBytes, formatIntervalMs } from "@/live/presentation";
+import { machineViewHref } from "@/live/machine-selection";
 import { useLive } from "@/live/live-provider";
 import { useNow } from "@/live/use-now";
 import {
@@ -154,7 +155,7 @@ function CollectorPanel({ view, now }: { view: CollectorConnectionView; now: num
       title={view.name}
       action={
         <Link
-          href={`/machines/${encodeURIComponent(view.machineId)}`}
+          href={machineViewHref(view.machineId, "overview")}
           className="text-xs text-accent hover:underline"
         >
           Open machine

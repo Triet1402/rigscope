@@ -36,7 +36,6 @@ import {
   rangePreset,
 } from "@/history/presentation";
 import { HistoryControls, type MetricCatalog } from "./history-controls";
-import { RecordingPanel } from "./recording-panel";
 import { useStoredHistory, type HistoryError } from "./use-stored-history";
 import { HistoryCharts } from "./history-panels";
 import { useHistoryRange, useHistoryMetrics, useHistoryHidden, useHistoryAutoRefresh, useHistoryCores, useHistoryCapacityUnit } from "./history-prefs";
@@ -322,11 +321,6 @@ export function HistoryView() {
             onRefresh={() => setRefreshNonce((value) => value + 1)}
           />
 
-          <RecordingPanel
-            machine={machine}
-            selectedMetrics={selectedMetrics}
-            csrfToken={session.kind === "signed-in" ? session.user.csrfToken : null}
-          />
 
           {degraded ? (
             <div

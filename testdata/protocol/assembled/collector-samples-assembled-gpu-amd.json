@@ -1,0 +1,86 @@
+{
+  "type": "samples",
+  "mode": "live",
+  "records": [
+    {
+      "collectorId": "collector-assembled",
+      "runId": "run-amd",
+      "bootId": "boot-assembled",
+      "sequence": 1,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "unavailable",
+          "reason": "cpu usage needs two counter readings; first interval pending"
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4194304000,
+          "totalBytes": 8388608000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "swap total counters unavailable"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": [
+            {
+              "status": "ok",
+              "id": "pci:0000:03:00.0",
+              "utilizationPercent": 37,
+              "memoryUsedBytes": 1073741824,
+              "memoryTotalBytes": 8589934592,
+              "temperatureC": 61.5,
+              "powerWatts": 21.5
+            }
+          ]
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [
+            {
+              "status": "ok",
+              "id": "fs:/",
+              "usedBytes": 2457600,
+              "totalBytes": 4096000,
+              "inodesUsed": 10,
+              "inodesTotal": 100
+            },
+            {
+              "status": "ok",
+              "id": "fs:/srv/fixture",
+              "usedBytes": 2457600,
+              "totalBytes": 4096000,
+              "inodesUsed": 10,
+              "inodesTotal": 100
+            }
+          ],
+          "devices": [
+            {
+              "id": "disk:sda",
+              "status": "unavailable",
+              "reason": "disk I/O needs two readings; first interval pending"
+            }
+          ]
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": [
+            {
+              "id": "net:eth0",
+              "status": "unavailable",
+              "reason": "network I/O needs two readings; first interval pending"
+            },
+            {
+              "id": "net:lo",
+              "status": "unavailable",
+              "reason": "network I/O needs two readings; first interval pending"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

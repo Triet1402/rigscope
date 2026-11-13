@@ -287,7 +287,8 @@ describe("resolveMachineSelection precedence", () => {
 
 describe("route shapes", () => {
   it("builds machine hrefs per view", () => {
-    assert.equal(selectionApi.machineViewHref("a/b", "overview"), "/machines/a%2Fb");
+    assert.equal(selectionApi.machineViewHref("a/b", "overview"), "/machines?machineId=a%2Fb");
+    assert.equal(selectionApi.machineViewHref("host.example", "overview"), "/machines?machineId=host.example");
     assert.equal(selectionApi.machineViewHref("a", "history"), "/history?machineId=a");
     assert.equal(selectionApi.machineViewHref("a", "processes"), "/processes?machineId=a");
   });
@@ -448,7 +449,12 @@ describe("useMachineSelection coordination", () => {
     selectionApi.navigation().selectMachine("x");
     assert.equal(globalThis.__machineSelectionTest!.remembered, "x");
     assert.deepEqual(globalThis.__machineSelectionTest!.pushes, ["/processes?machineId=x"]);
-    fixture({ pathname: "/machines/a%2Fb", machines: [machine("a/b")], remembered: "b" });
+    fixture({ pathname: "/machines", machines: [machine("a/b")], remembered: "b" });
     assert.equal(selectionApi.navigation("a/b", "overview").machine?.machineId, "a/b");
+    // The exported overview page is a query route; shell navigation knows the
+    // view from the pathname alone.
+    fixture({ pathname: "/machines", machines: fleet, remembered: "b" });
+    selectionApi.navigation().selectMachine("a");
+    assert.deepEqual(globalThis.__machineSelectionTest!.pushes, ["/machines?machineId=a"]);
   });
 });

@@ -5,10 +5,9 @@
  * remembered-choice resolution and selection navigation+persistence.
  *
  * Selection rules owned here:
- * - An explicit route Machine (overview path segment or `?machineId=`)
- *   decides: when it names an authorized Machine it is selected; when it
- *   does not, the view receives the missing/unknown outcome and never
- *   silently selects another Machine.
+ * - An explicit route Machine (`?machineId=`) decides: when it names an
+ *   authorized Machine it is selected; when it does not, the view receives
+ *   the missing/unknown outcome and never silently selects another Machine.
  * - Without an explicit Machine the selection follows the viewer: the
  *   remembered choice while it is still authorized, otherwise a
  *   view-specific fallback (Processes prefers a process-capable Machine).
@@ -31,10 +30,14 @@ import type { MachineState } from "@/contracts";
 
 export type MachineViewKind = "overview" | "history" | "processes";
 
-/** Routing shape: overview is a path segment, the other views query `?machineId=`. */
+/**
+ * Routing shape: every machine view is a real exported page selected by
+ * `?machineId=`. The legacy `/machines/<id>` path is redirected to this form
+ * by the hub, so links never force a full document reload.
+ */
 export function machineViewHref(machineId: string, view: MachineViewKind): string {
   const id = encodeURIComponent(machineId);
-  return view === "overview" ? `/machines/${id}` : `/${view}?machineId=${id}`;
+  return view === "overview" ? `/machines?machineId=${id}` : `/${view}?machineId=${id}`;
 }
 
 /**
@@ -127,8 +130,9 @@ export type MachineSelection = {
   machineId: string;
   /**
    * Machine identifier the shared shell/breadcrumb renders for this view:
-   * the route path id for overview, the resolved selection for history,
-   * and the requested id while Processes shows a missing machine.
+   * the requested id for overview (it stays in the URL while a machine is
+   * missing), the resolved selection for history, and the requested id while
+   * Processes shows a missing machine.
    */
   navMachineId: string;
   /** Explicit route identifier; null when the route names no machine. */
@@ -211,7 +215,7 @@ export function useMachineNavigation(machineId?: string, suppliedView?: MachineV
   const { machines } = useLive();
   const [rememberedMachineId] = useRememberedMachine();
   const select = useSelectMachine();
-  const view: MachineViewKind | null = suppliedView ?? (pathname.startsWith("/machines/")
+  const view: MachineViewKind | null = suppliedView ?? (pathname === "/machines" || pathname.startsWith("/machines/")
     ? "overview" : pathname === "/history" ? "history" : pathname === "/processes" ? "processes" : null);
   // The view passes its selection; the shell needs no query subscription or
   // hydration boundary. A missing view retains navigation to authorized Machines.

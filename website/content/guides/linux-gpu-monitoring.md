@@ -22,13 +22,13 @@ AMD collection uses readable amdgpu sysfs and hwmon interfaces. Discrete adapter
 
 Rigscope reports only driver-provided VRAM and does not estimate shared system memory. On AMD APUs, a reported power counter can include CPU/SoC power; do not interpret it as GPU-only power or whole-machine power.
 
-Use `rigscope doctor` on an installed machine to check sensor access and consult the [hardware notes](/docs/installation/#hardware). Rigscope does not install a GPU driver or make an unsupported counter available.
+Use `rigscope status` and the collector's journal on an installed machine to check that collection is running. If a GPU or sensor is missing, check the [sharing policy](/docs/configuration/#sharing-policy) and the [GPU temperature notes](/docs/monitoring/#gpu-junction-and-vram-temperatures) before enabling register readings. Rigscope does not install a GPU driver or make an unsupported counter available.
 
 ## Intel and other display adapters
 
 Intel support is partial: available hwmon temperature and power sensors and optional driver counters may appear, while most utilization readings remain unavailable. Intel sensor support does not imply utilization or per-process GPU-memory support. ASPEED and other display adapters provide inventory without a telemetry backend.
 
-Collection supports Linux. macOS, Windows, and Apple GPU collection are not supported. For the full support matrix and physical validation notes, read the [hardware reference](/docs/installation/#hardware).
+Collection supports Linux. macOS, Windows, and Apple GPU collection are not supported. For supported platforms and installation requirements, read the [installation guide](/docs/installation/).
 
 ## Compare live GPU usage with History
 

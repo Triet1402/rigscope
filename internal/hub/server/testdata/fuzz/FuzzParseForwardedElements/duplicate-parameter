@@ -1,0 +1,2 @@
+go test fuzz v1
+string("for=198.51.100.66;proto=https;proto=http")

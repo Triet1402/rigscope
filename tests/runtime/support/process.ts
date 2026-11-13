@@ -18,13 +18,41 @@ export interface ChildHandle {
   dump(...notes: string[]): string;
 }
 
-export function startChild(
+/**
+ * Race a collector-dependent readiness wait against the child actually exiting.
+ *
+ * An early collector exit (a bad binary, a rejected config, a crash) currently
+ * surfaces as a 30 s "no SSE event" timeout. Instead, fail the moment the child
+ * exits and include its captured output, so the operator sees the real reason.
+ * The losing promise keeps its handler attached through Promise.race, so a
+ * later rejection is never unhandled.
+ */
+export async function failOnExit<T>(
+  children: ChildHandle | readonly ChildHandle[],
+  work: Promise<T>,
+  what: string,
+): Promise<T> {
+  const list = Array.isArray(children) ? children : [children];
+  const guards = list.map((child) =>
+    child.exit.then(() => {
+      throw new Error(`${what} cannot complete: ${child.dump("the process exited first")}`);
+    }),
+  );
+  return await Promise.race([work, ...guards]);
+}
+
+/**
+ * Launch an executable with supervision, line capture, bounded stop and
+ * cleanup. The Go launcher is the only caller.
+ */
+export function startProcess(
   label: string,
+  command: string,
   args: string[],
   env: NodeJS.ProcessEnv,
   options: { groupKill?: boolean; cwd?: string } = {},
 ): ChildHandle {
-  const proc = spawn(process.execPath, args, {
+  const proc = spawn(command, args, {
     cwd: options.cwd ?? ROOT,
     env,
     stdio: ["ignore", "pipe", "pipe"],

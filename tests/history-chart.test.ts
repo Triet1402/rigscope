@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import test from "node:test";
 import { build } from "esbuild";
-import type { HistorySeries } from "../src/hub/storage/history-query";
+import type { HistorySeries } from "../src/history/contract";
+import { splitSeries } from "../src/history/chart";
 
 test("the history chart preserves CPU values when a 601-bucket window loses its oldest bucket", async () => {
   const bundle = await build({
@@ -35,4 +36,22 @@ test("the history chart preserves CPU values when a 601-bucket window loses its 
   const after = lineHeights(render(points.slice(1), 6500, 3_606_500));
   assert.equal(before.length, 601, "draw each API bucket without merging historical readings");
   assert.deepEqual(after, before.slice(1), "past CPU values keep the same vertical positions");
+});
+
+test("a collector restart breaks the line so it never connects across the run boundary", () => {
+  const points = [
+    { t: 0, min: 10, max: 10, avg: 10 },
+    { t: 1_000, min: 20, max: 20, avg: 20 },
+    { t: 5_000, min: 30, max: 30, avg: 30 },
+    { t: 6_000, min: 40, max: 40, avg: 40 },
+  ];
+  const segments = splitSeries(points, {
+    stepMs: 1_000,
+    fromMs: 0,
+    toMs: 6_000,
+    gaps: [{ fromMs: 1_000, toMs: 5_000, kind: "missing", reason: "collector restarted" }],
+  });
+  assert.equal(segments.length, 2);
+  assert.deepEqual(segments[0]!.map((point) => point.t), [0, 1_000]);
+  assert.deepEqual(segments[1]!.map((point) => point.t), [5_000, 6_000]);
 });

@@ -1,6 +1,237 @@
 # Release notes
 
+## 1.0.0 (unreleased)
+
+Rigscope 1.0 is a ground-up Go rewrite. It replaces the 0.2 npm/Node prototype
+with one static binary that contains the installer/CLI, the hub and the
+collector. Nothing from 0.2 is imported.
+
+### Highlights
+
+- Rigscope 1.0.0 project sources are AGPL-3.0-only, with an embedded CLI
+  license, hub source links and corresponding source alongside release binaries.
+
+- System installation recognizes unchanged default 0.2 udev rules, previews
+  replacement of required rules, and records ownership of the new 1.x files.
+  Unused defaults do not block installation; modified rules remain protected.
+
+- `rigscope configure --telemetry-mode memory|persistent` changes hub history
+  storage after confirming the service restart; no config editing is needed.
+- `rigscope configure` now covers everyday settings without editing JSON:
+  `--share FAMILY=on|off` (sensitive families always ask first),
+  `--sampling-interval`, `--gpu-registers off`, `--listen`,
+  `--tls-cert/--tls-key` and `--no-tls` (checked for pair, expiry, names and
+  service-account access before anything changes), `--forwarded-headers`, and
+  `--hub on|off` / `--collector on|off`. Each change is previewed, validated
+  whole, confirmed once and restarts only what it affects; collector-only
+  machines are supported. `configure --show [--json]` prints the settings.
+- Administration → Hub settings shows the running hub's address, HTTPS, proxy
+  trust, storage use and the local collector's sharing, and its storage form
+  gives the exact command to switch history storage on the hub machine.
+
+- One static, `CGO_ENABLED=0` Linux binary for `amd64`, `arm64` and `armv7`.
+  No Node.js, npm, Python, downloaded runtime tree or wrapper process. systemd
+  supervises `rigscope hub` and `rigscope collector` directly.
+- `curl -fsSL https://rigscope.dev/install.sh | sh` installs and starts a local
+  hub and collector. A hub **Add machine** grant installs and enrolls a remote
+  collector in one line.
+- `install` creates the owner account itself: choose the password at the
+  prompt (or `--password-stdin`), or get a generated one printed at the end of
+  the install output. The hub no longer writes a password to the journal.
+  `reset-password` also accepts a chosen password.
+- Commands that need root ask `sudo` for your password themselves instead of
+  telling you to run them again with `sudo`.
+- `collector enroll` restarts a running collector so the new credential takes
+  effect, and writes the credential owned by the collector account in a system
+  install (it was left root-owned and unreadable by the service).
+- Administration > Collectors can **Remove** a revoked collector, deleting its
+  machine's name, tags, alert rules, incidents and all stored history. The
+  registry also refreshes when a machine connects or drops out, so a
+  re-enrolled collector no longer shows as Revoked until a manual refresh.
+- The hub's grant panel shows one complete command with the grant in it, and
+  `collector enroll` without `--grant` asks you to paste the grant.
+- `start` says when a service is already running instead of claiming it
+  started.
+- Setting a public origin no longer cuts off the hub's own collector (every
+  connection got `421 misdirected request`): the collector endpoints accept the
+  loopback address from an unproxied local connection, so the local collector
+  keeps its `127.0.0.1` destination and credential.
+- `install --hub URL --token TOKEN` protects a collector that already works:
+  it asks before moving it to another hub and redeems the grant first, keeping
+  the old destination when the new hub refuses (before, the collector switched
+  and the refusal only appeared in its log). With the hub it is already enrolled
+  with, the grant is left unused; with this machine's own hub, the collector
+  keeps its direct local address. `install` over an older version says
+  `Upgraded Rigscope from OLD to NEW`.
+- `configure --trusted-proxy LIST|none` sets the hub's trusted proxies without
+  editing the configuration file. `install` and `configure` explain what an
+  HTTPS origin still needs when the hub does not serve TLS itself, with the
+  exact `tailscale serve` command for a `*.ts.net` origin, and no longer
+  suggest a `--role collector` reinstall that would remove the hub. The hub log
+  shows the address it actually listens on next to the public one.
+- Re-running `install` without `--system` acts on an existing system
+  installation instead of starting a second, per-user hub beside it, and keeps
+  the installed components unless `--role` is given. The owner password is
+  asked before anything is written.
+- Commands find a system installation without `--system` when there is no
+  per-user one, so `rigscope status` and `sudo rigscope reset-password` just
+  work after `install --system`.
+- Versioned configuration, versioned protocol and journalled upgrades with
+  automatic rollback. 1.x upgrades preserve accounts, history, identities and
+  settings in place.
+- Bounded RAM summary history by default, with opt-in persistent SQLite
+  history and a one-second RAM ring. RAM history is lost on hub restart;
+  accounts, sessions, credentials and alert state remain durable.
+- Persistent ingestion batches commits for up to five seconds and combines
+  rollup updates per target bucket; live publication remains immediate.
+- Uninstall removes owned hardware-access udev and sysusers files, including
+  with `--keep-data`. Failed user-scope GPU rule removal or udev reload retains
+  the installation and ownership record so cleanup can be retried.
+- Add `cleanup-legacy-hardware` to preview leftover default 0.2 CPU-power and
+  GPU-temperature access files. Root-only `--apply` removes recognized files
+  and reloads udev after checking for remaining installations and workers.
+- Commands never refuse because a service is running. `install` over a running
+  installation, `configure`, `upgrade`, `rollback`, `reset-password` and
+  `uninstall` name the services they must stop, ask `[y/N]` on the terminal
+  (also under `curl | sh`), and start again only what was running; `uninstall`
+  never restarts. `--yes`/`-y` approves for scripts; `--no-restart` leaves
+  services stopped after `configure` and `reset-password`.
+- Re-running `install` with a new `--port` or `--origin` now restarts the
+  running hub and collector. Before, `systemctl start` left them on the old
+  binary and settings while reporting them as started.
+- `rigscope configure --port PORT | --origin URL | --local` changes the hub
+  address of an existing installation. A locally paired collector is rebound to
+  the new address with its existing credential.
+- Colored terminal output for errors, warnings, status and doctor results,
+  disabled by `NO_COLOR` or when output is not a terminal.
+- Security gate: canonical Host and Origin checks, CSRF, secure cookies,
+  CSP/HSTS/Referrer-Policy, login rate limits with argon2id, hashed collector
+  credentials, replay-safe enrollment and SSRF-checked webhooks.
+- Runtime-PM gating so the collector never deliberately wakes a suspended
+  discrete GPU, with the documented residual race.
+- NVIDIA junction and VRAM register temperatures work in user scope as well as
+  system scope. A user install applies only the root-owned udev rule through
+  `sudo`, grants the user's private primary group when it has one, and falls
+  back to `rigscope-gpu` with a one-time full log-out otherwise. Sampling is
+  enabled only after the installer can read BAR0 as the invoking user.
+
+### Breaking changes from 0.2
+
+- **No 0.2 data importer.** Accounts, history, recordings, settings, grants and
+  collector credentials from 0.2 are not read. Remove the 0.2 installation with
+  0.2's own uninstaller before installing 1.0. `rigscope install` refuses when it
+  detects 0.2 units, state or `/opt/rigscope`.
+- **npm is no longer a delivery channel.** `npx rigscope`, `npm install
+  rigscope`, `rigscope try`, `rigscope connect` and the npm upgrade path are
+  gone. 1.0 is not published to npm; the old package may be deprecated with a
+  pointer to the installer.
+- **No Node.js, npm or Python dependency.** Any 0.2 setup or automation that
+  expected those runtimes must be removed.
+- **Environment-variable configuration is gone.** `HUB_*`, `COLLECTOR_*` and
+  `RIGSCOPE_*` settings are replaced by the versioned JSON configuration file.
+  Unknown keys are errors. A small set of `RIGSCOPE_*` variables remains
+  internal plumbing only (test/fixture overrides and the upgrade/lock
+  handshakes); see [the configuration reference](docs/configuration.md).
+- **One hub per collector.** 0.2's multi-hub fan-out and per-destination policy
+  are removed in 1.0. The configuration keeps `destinations` as a list for a
+  possible future return, but exactly one entry is accepted.
+- **History configuration changed.** RAM remains the default; set
+  `components.hub.telemetryMode` to `"persistent"` for durable history. Both
+  modes use 10-second/1-minute/1-hour summaries plus a 15-minute, one-second
+  RAM ring. The legacy raw mode, `HUB_TELEMETRY_MODE` and related environment
+  variables no longer exist.
+- **Recordings are removed.** The recording panel, routes, files, download links
+  and recording limits are gone. Use a bounded History export for an incident
+  snapshot.
+- **One collector queue.** The durable SQLite outbox and
+  `COLLECTOR_QUEUE_MODE=durable` are gone. The queue is bounded RAM (10 minutes
+  or 64 MiB). Known drops are gaps; a crash or forced stop discards pending
+  samples and is reported as unknown loss at the run boundary.
+- **Remote access changed.** 0.2's Unix-socket remote mode and development
+  HTTPS validation scripts are replaced by built-in HTTP(S) and one documented
+  reverse-proxy setup with explicit `trustedProxies` and `forwardedHeaders`.
+  Plaintext non-loopback listeners require a trusted proxy or TLS.
+- **Sessions are durable.** Browser sessions are stored as token hashes in
+  SQLite with a fixed 12-hour lifetime, so a hub restart no longer signs every
+  browser out. Logout, expiry, account changes and collector revocation still
+  end streams and detail leases immediately.
+- **Install layout and CLI changed.** 0.2's per-install hashed units and multiple
+  state directories are replaced by stable `rigscope-hub.service` and
+  `rigscope-collector.service` units. New commands are `install`, `configure`,
+  `uninstall`, `upgrade`, `rollback`, `status`, `start`, `stop`, `restart`,
+  `logs`, `doctor`, `hub`, `collector`, `collector enroll` and
+  `reset-password`. `enable`, `disable`, `try`, `connect`, `gpu-temps`,
+  `cpu-power`, `system` and the `ops` database commands are removed.
+- **Hardware access is an install decision.** NVIDIA junction/VRAM register
+  access is enabled only by `install --gpu-registers`. A system install creates
+  the `rigscope-gpu` group and the udev rule. A user install keeps running as
+  the invoking user and applies only the root-owned rule through `sudo`: the
+  rule grants the user's private primary group when it has one, otherwise the
+  shared `rigscope-gpu` group and a full log-out is required before a reinstall
+  can verify and enable sampling. `gpuRegisters` is recorded `true` only after a
+  register read succeeds, and an existing working rule is adopted rather than
+  rewritten. The `gpu-temps` and `cpu-power` commands are replaced.
+- **System installs use dedicated accounts.** `rigscope-hub` and
+  `rigscope-collector` run with no capabilities, hardened systemd units and
+  private state subtrees. 0.2's system layout and environment files are not
+  reused.
+- **Owner password delivery changed.** The installer no longer prints the
+  password. The first hub start prints it once to the hub journal; read it with
+  `rigscope logs hub`. `rigscope reset-password` is the offline recovery path.
+- **Default retention changed.** Persistent mode keeps 10-second summaries
+  for 2 hours, one-minute summaries for 30 days and hourly summaries for
+  400 days, with a 15-minute fine ring. RAM mode uses the same maximum ages,
+  subject to its memory budget and the lifetime of the hub process. 0.2's
+  tier durations and RAM budget variables do not apply.
+
+### Upgrade and rollback
+
+- `rigscope upgrade` downloads and SHA-256-verifies a release, backs up the
+  database, configuration and collector identity, migrates, atomically replaces
+  the binary, and verifies health. A failure before the new release accepts
+  writes restores the backup and previous binary automatically.
+- An interrupted transaction is detected and resumed or rolled back on the next
+  run. Upgrades keep `rigscope.prev` and the newest three backup snapshots.
+- `rigscope rollback` is a transaction with the same health checks. It refuses
+  when the data is newer than the previous release can safely use (the schema
+  floor) instead of risking corruption.
+- Upgrade the hub first, then collectors. The hub accepts the current and
+  previous protocol versions and marks older collectors as needing an upgrade.
+
+### Security
+
+- Exact canonical Host and Origin checks in remote mode; same-origin checks for
+  loopback mutations. Absolute-form targets and `CONNECT` are rejected.
+- Forwarded headers are trusted only from configured proxy addresses, only from
+  the selected header family, and are parsed strictly; the other family is
+  stripped.
+- `HttpOnly`, `SameSite=Strict` cookies; `Secure` and `__Host-` over HTTPS;
+  fixed 12-hour sessions; constant-time CSRF tokens.
+- CSP with per-document script hashes, HSTS on HTTPS, `nosniff`,
+  `Referrer-Policy: no-referrer` and `X-Frame-Options: DENY`.
+- Argon2id password hashing with bounded verification, identical work for
+  unknown usernames, and hub-wide, per-IP and per-username login limits.
+- Collector credentials and enrollment grants are stored as SHA-256 hashes;
+  grants are single-use, with a bounded retry window recovering a lost response.
+- Webhook delivery validates the address actually dialed, refuses redirects and
+  proxy environment variables, and blocks private, loopback, link-local and
+  non-public targets.
+- GPU access is read-only, lease-gated and isolated in a bounded helper process.
+
+### Fixed in the rewrite
+
+- Missing sensor values, unsupported hardware and failed reads are explicit
+  unavailable values with reasons. The collector never sends a fabricated zero.
+- Stable resource identities use GPU UUIDs and PCI addresses, not display order.
+- The collector's installation ID is persistent; a cloned state directory
+  regenerates it.
+- Collector and hub logs are structured JSON on stderr for journald, with one
+  plain readiness line on stdout.
+- The static binary measures about 13 MB. Hub and collector together use about
+  55 MiB RSS with the UI open, against roughly 440 MB for the 0.2 prototype.
+
 ## 0.2.6
+
 
 - Let a revoked collector be re-enrolled. Administration listed only active
   machines as enrollment targets, and the hub refuses a new-machine grant for

@@ -1,0 +1,11 @@
+{
+  "type": "hello",
+  "collectorId": "collector-constructed-unicode",
+  "runId": "run-constructed-unicode",
+  "bootId": "boot-constructed-unicode",
+  "hostname": "rigscope-😀",
+  "capabilities": [
+    "metrics"
+  ],
+  "expectedIntervalMs": 5000
+}

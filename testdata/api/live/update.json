@@ -1,0 +1,272 @@
+{
+  "id": "00000000-0000-4000-8000-000000000001:3",
+  "event": "update",
+  "data": {
+    "hubRunId": "00000000-0000-4000-8000-000000000001",
+    "machines": [
+      {
+        "machineId": "00000000-0000-4000-8000-000000000106",
+        "collectorId": "fixture-collector-2",
+        "hostname": "",
+        "connected": false,
+        "lastReceivedAt": null,
+        "expectedIntervalMs": null
+      },
+      {
+        "machineId": "fixture-machine-1",
+        "collectorId": "fixture-collector-1",
+        "hostname": "fixture-host",
+        "connected": true,
+        "lastReceivedAt": "2026-11-12T10:11:06.658Z",
+        "expectedIntervalMs": 250,
+        "metrics": {
+          "collectorId": "fixture-collector-1",
+          "runId": "00000000-0000-4000-8000-000000000107",
+          "bootId": "00000000-0000-4000-8000-000000000108",
+          "sequence": 24,
+          "capturedAt": "2026-11-12T10:11:06.657Z",
+          "kind": "metrics",
+          "payload": {
+            "cpu": {
+              "status": "ok",
+              "usagePercent": 3.55,
+              "perCore": [
+                4.66,
+                10.72,
+                19.54,
+                24.57,
+                30.64,
+                37.91,
+                39,
+                38.83
+              ],
+              "temperatureC": 57,
+              "powerWatts": 51,
+              "iowaitPercent": 1.06,
+              "pressureSomePercent": 3.95
+            },
+            "memory": {
+              "status": "ok",
+              "usedBytes": 18939942495,
+              "totalBytes": 34359738368,
+              "pressureSomePercent": 2.63,
+              "pressureFullPercent": 0.44
+            },
+            "swap": {
+              "status": "ok",
+              "usedBytes": 1208710585,
+              "totalBytes": 8589934592
+            },
+            "gpus": {
+              "status": "ok",
+              "devices": [
+                {
+                  "id": "gpu:SYNTHETIC-0",
+                  "status": "ok",
+                  "utilizationPercent": 7.21,
+                  "memoryUsedBytes": 4878506978,
+                  "memoryTotalBytes": 8589934592,
+                  "temperatureC": 52,
+                  "powerWatts": 71,
+                  "junctionTemperatureC": 66.1,
+                  "vramTemperatureC": 68.1
+                }
+              ]
+            },
+            "disks": {
+              "status": "ok",
+              "filesystems": [
+                {
+                  "id": "fs:/",
+                  "status": "ok",
+                  "usedBytes": 258463005528,
+                  "totalBytes": 536870912000,
+                  "inodesUsed": 12814249,
+                  "inodesTotal": 30000000
+                }
+              ],
+              "devices": [
+                {
+                  "id": "disk:synthetic0",
+                  "status": "ok",
+                  "readBytesPerSec": 1407124,
+                  "writeBytesPerSec": 562850,
+                  "readLatencyMs": 0.463,
+                  "writeLatencyMs": 0.944,
+                  "ioUtilizationPercent": 15.78
+                }
+              ],
+              "pressureSomePercent": 2.8,
+              "pressureFullPercent": 0.79
+            },
+            "network": {
+              "status": "ok",
+              "interfaces": [
+                {
+                  "id": "net:synthetic0",
+                  "status": "ok",
+                  "rxBytesPerSec": 705379,
+                  "txBytesPerSec": 94050
+                }
+              ]
+            }
+          },
+          "receivedAt": "2026-11-12T10:11:06.658Z"
+        },
+        "inventory": {
+          "os": {
+            "platform": "synthetic",
+            "release": "synthetic-0",
+            "distro": "Synthetic Linux",
+            "arch": "synthetic"
+          },
+          "cpu": {
+            "model": "synthetic 8-core processor",
+            "logicalCores": 8
+          },
+          "memory": {
+            "totalBytes": 34359738368,
+            "swapTotalBytes": 8589934592
+          },
+          "gpus": [
+            {
+              "id": "gpu:SYNTHETIC-0",
+              "name": "synthetic GPU",
+              "vendor": "other",
+              "pciBusId": null,
+              "telemetry": "supported",
+              "memoryTotalBytes": 8589934592
+            }
+          ],
+          "filesystems": [
+            {
+              "id": "fs:/",
+              "mountPoint": "/",
+              "device": "synthetic",
+              "fsType": "syntheticfs",
+              "totalBytes": 536870912000
+            }
+          ],
+          "disks": [
+            {
+              "id": "disk:synthetic0",
+              "name": "synthetic0",
+              "model": "synthetic disk",
+              "rotational": false,
+              "sizeBytes": 536870912000
+            }
+          ],
+          "network": [
+            {
+              "id": "net:synthetic0",
+              "name": "synthetic0",
+              "mac": "00:00:00:00:00:01",
+              "addresses": [
+                {
+                  "family": "ipv4",
+                  "address": "192.0.2.10",
+                  "prefix": 24
+                }
+              ],
+              "virtual": false,
+              "state": "up",
+              "speedMbps": 1000
+            }
+          ],
+          "capabilities": {
+            "cpu": {
+              "status": "supported"
+            },
+            "memory": {
+              "status": "supported"
+            },
+            "swap": {
+              "status": "supported"
+            },
+            "gpus": {
+              "status": "supported"
+            },
+            "disks": {
+              "status": "supported"
+            },
+            "network": {
+              "status": "supported"
+            },
+            "processes": {
+              "status": "supported"
+            }
+          }
+        },
+        "delivery": {
+          "type": "status",
+          "capturedAt": "2026-11-12T10:11:05.897Z",
+          "delivery": {
+            "pendingRecords": 0,
+            "pendingBytes": 0,
+            "oldestPendingCapturedAt": null,
+            "inFlightRecords": 0,
+            "droppedRecords": 0,
+            "replaying": false,
+            "lastAckAt": "2026-11-12T10:11:05.658Z",
+            "queueMode": "memory"
+          },
+          "failures": []
+        },
+        "displayName": "Fixture machine (updated)",
+        "tags": [
+          "fixture",
+          "lab"
+        ]
+      },
+      {
+        "machineId": "fixture-processes-machine",
+        "collectorId": "fixture-collector-processes",
+        "hostname": "fixture-processes-host",
+        "connected": false,
+        "lastReceivedAt": "2026-11-12T10:11:05.561Z",
+        "expectedIntervalMs": 1000,
+        "metrics": {
+          "collectorId": "fixture-collector-processes",
+          "runId": "fixture-synthetic-run",
+          "bootId": "fixture-synthetic-boot",
+          "sequence": 2,
+          "capturedAt": "2026-11-12T10:10:56.310Z",
+          "kind": "metrics",
+          "payload": {
+            "cpu": {
+              "status": "ok",
+              "usagePercent": 7.5,
+              "perCore": [
+                7.5
+              ]
+            },
+            "memory": {
+              "status": "ok",
+              "usedBytes": 4000000000,
+              "totalBytes": 16000000000
+            },
+            "swap": {
+              "status": "ok",
+              "usedBytes": 0,
+              "totalBytes": 0
+            },
+            "gpus": {
+              "status": "unavailable",
+              "reason": "no GPUs detected"
+            },
+            "disks": {
+              "status": "ok",
+              "filesystems": [],
+              "devices": []
+            },
+            "network": {
+              "status": "ok",
+              "interfaces": []
+            }
+          },
+          "receivedAt": "2026-11-12T10:11:05.561Z"
+        }
+      }
+    ]
+  }
+}

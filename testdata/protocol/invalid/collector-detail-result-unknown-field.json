@@ -1,0 +1,44 @@
+{
+  "type": "detail.result",
+  "subscriptionId": "sub-1",
+  "capturedAt": "2026-11-12T10:00:00.000Z",
+  "snapshot": {
+    "totalProcesses": 2,
+    "truncated": false,
+    "inaccessible": 1,
+    "processes": [
+      {
+        "pid": 1,
+        "ppid": 0,
+        "startTicks": 123456,
+        "name": "systemd",
+        "user": "root",
+        "state": "S",
+        "cpuPercent": 0.5,
+        "memoryRssBytes": 10485760,
+        "gpuMemoryBytes": null,
+        "ioReadBytesPerSec": 0,
+        "ioWriteBytesPerSec": 0,
+        "threads": 1,
+        "unit": "init.scope",
+        "command": "/sbin/init"
+      },
+      {
+        "pid": 4242,
+        "ppid": 1,
+        "startTicks": 987654,
+        "name": "firefox",
+        "user": null,
+        "state": "R",
+        "cpuPercent": 125.5,
+        "memoryRssBytes": null,
+        "gpuMemoryBytes": 1073741824,
+        "ioReadBytesPerSec": null,
+        "ioWriteBytesPerSec": null,
+        "threads": null,
+        "unit": null
+      }
+    ]
+  },
+  "extra": true
+}

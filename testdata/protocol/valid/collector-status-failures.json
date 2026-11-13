@@ -1,0 +1,26 @@
+{
+  "type": "status",
+  "capturedAt": "2026-11-12T10:00:00.000Z",
+  "delivery": {
+    "pendingRecords": 12,
+    "pendingBytes": 65536,
+    "oldestPendingCapturedAt": "2026-11-12T09:59:00.000Z",
+    "inFlightRecords": 2,
+    "droppedRecords": 4,
+    "replaying": true,
+    "lastAckAt": "2026-11-12T10:00:00.000Z",
+    "queueMode": "durable"
+  },
+  "failures": [
+    {
+      "metric": "gpus",
+      "resourceId": null,
+      "reason": "nvidia-smi timed out"
+    },
+    {
+      "metric": "disks",
+      "resourceId": "disk:sdb",
+      "reason": "device removed"
+    }
+  ]
+}

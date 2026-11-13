@@ -1,0 +1,39 @@
+36 50 0:31 / /run rw,nosuid,nodev shared:13 - tmpfs tmpfs rw,size=25459220k,nr_inodes=819200,mode=755,inode64
+50 1 259:2 / / rw,relatime shared:1 - ext4 /dev/nvme0n1p2 rw
+42 50 0:9 / /dev rw,nosuid shared:2 - devtmpfs devtmpfs rw,size=63464744k,nr_inodes=15866186,mode=755,inode64
+44 42 0:29 / /dev/shm rw,nosuid,nodev shared:3 - tmpfs tmpfs rw,inode64,usrquota
+45 42 0:30 / /dev/pts rw,nosuid,noexec,relatime shared:4 - devpts devpts rw,gid=5,mode=600,ptmxmode=000
+46 50 0:28 / /sys rw,nosuid,nodev,noexec,relatime shared:5 - sysfs sysfs rw
+48 46 0:10 / /sys/kernel/security rw,nosuid,nodev,noexec,relatime shared:6 - securityfs securityfs rw
+49 46 0:32 / /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime shared:7 - cgroup2 cgroup2 rw,nsdelegate,memory_recursiveprot,memory_hugetlb_accounting
+51 46 0:33 / /sys/fs/pstore rw,nosuid,nodev,noexec,relatime shared:8 - pstore none rw
+52 46 0:34 / /sys/firmware/efi/efivars rw,nosuid,nodev,noexec,relatime shared:9 - efivarfs efivarfs rw
+53 46 0:35 / /sys/fs/bpf rw,nosuid,nodev,noexec,relatime shared:10 - bpf bpf rw,mode=700
+54 46 0:23 / /sys/kernel/config rw,nosuid,nodev,noexec,relatime shared:11 - configfs configfs rw
+55 50 0:27 / /proc rw,nosuid,nodev,noexec,relatime shared:12 - proc proc rw
+2 55 0:3 / /proc/sys/fs/binfmt_misc rw,relatime shared:14 - autofs systemd-1 rw,fd=41,pgrp=1,timeout=0,minproto=5,maxproto=5,direct,pipe_ino=15281
+30 36 0:36 / /run/credentials/systemd-journald.service rw,nosuid,nodev,noexec,relatime,nosymfollow shared:15 - tmpfs none ro,size=1024k,nr_inodes=1024,mode=700,inode64,noswap
+31 46 0:11 / /sys/kernel/debug rw,nosuid,nodev,noexec,relatime shared:17 - debugfs debugfs rw
+32 46 0:16 / /sys/kernel/tracing rw,nosuid,nodev,noexec,relatime shared:16 - tracefs tracefs rw
+33 42 0:37 / /dev/hugepages rw,nosuid,nodev,relatime shared:18 - hugetlbfs hugetlbfs rw,pagesize=2M
+34 42 0:25 / /dev/mqueue rw,nosuid,nodev,noexec,relatime shared:19 - mqueue mqueue rw
+35 46 0:38 / /sys/fs/fuse/connections rw,nosuid,nodev,noexec,relatime shared:20 - fusectl fusectl rw
+38 36 0:40 / /run/credentials/systemd-resolved.service rw,nosuid,nodev,noexec,relatime,nosymfollow shared:22 - tmpfs none ro,size=1024k,nr_inodes=1024,mode=700,inode64,noswap
+47 50 0:46 / /tmp rw,nosuid,nodev shared:88 - tmpfs tmpfs rw,size=63648052k,nr_inodes=1048576,inode64,usrquota
+58 50 7:0 / /snap/snapd/28254 ro,nodev,relatime shared:91 - squashfs /dev/loop0 ro,errors=continue,threads=single
+61 50 7:1 / /snap/hwctl/131 ro,nodev,relatime shared:94 - squashfs /dev/loop1 ro,errors=continue,threads=single
+64 50 7:2 / /snap/core24/2124 ro,nodev,relatime shared:97 - squashfs /dev/loop2 ro,errors=continue,threads=single
+41 50 0:45 / /srv/storage rw,noatime shared:85 - btrfs /dev/sdb2 rw,compress=zstd:1,space_cache=v2,subvolid=5,subvol=/
+40 50 259:1 / /boot/efi rw,relatime shared:100 - vfat /dev/nvme0n1p1 rw,fmask=0022,dmask=0022,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro
+71 2 0:48 / /proc/sys/fs/binfmt_misc rw,nosuid,nodev,noexec,relatime shared:103 - binfmt_misc binfmt_misc rw
+114 36 0:49 / /run/credentials/systemd-networkd.service rw,nosuid,nodev,noexec,relatime,nosymfollow shared:105 - tmpfs none ro,size=1024k,nr_inodes=1024,mode=700,inode64,noswap
+462 36 0:62 / /run/user/1000 rw,nosuid,nodev,relatime shared:360 - tmpfs tmpfs rw,size=12729608k,nr_inodes=3182402,mode=700,uid=1000,gid=1000,inode64
+127 36 0:68 / /run/credentials/getty@tty1.service rw,nosuid,nodev,noexec,relatime,nosymfollow shared:520 - tmpfs none ro,size=1024k,nr_inodes=1024,mode=700,inode64,noswap
+155 50 7:3 / /snap/core26/750 ro,nodev,relatime shared:364 - squashfs /dev/loop3 ro,errors=continue,threads=single
+242 50 7:4 / /snap/lxd/41228 ro,nodev,relatime shared:586 - squashfs /dev/loop4 ro,errors=continue,threads=single
+256 36 0:31 /snapd/ns /run/snapd/ns rw,nosuid,nodev - tmpfs tmpfs rw,size=25459220k,nr_inodes=819200,mode=755,inode64
+1089 256 0:7 mnt:[4026533263] /run/snapd/ns/lxd.mnt rw - nsfs nsfs rw
+1525 50 0:67 / /var/snap/lxd/common/ns rw,relatime - tmpfs tmpfs rw,size=1024k,mode=700,inode64
+1543 1525 0:7 mnt:[4026533148] /var/snap/lxd/common/ns/shmounts rw - nsfs nsfs rw
+1506 1525 0:7 mnt:[4026533263] /var/snap/lxd/common/ns/mntns rw - nsfs nsfs rw
+1128 50 7:5 / /snap/core24/2307 ro,nodev,relatime shared:178 - squashfs /dev/loop5 ro,errors=continue,threads=single

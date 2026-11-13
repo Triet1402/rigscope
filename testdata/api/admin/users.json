@@ -1,0 +1,10 @@
+{
+  "users": [
+    {
+      "username": "fixture-admin",
+      "machineIds": "*",
+      "admin": true,
+      "disabled": false
+    }
+  ]
+}

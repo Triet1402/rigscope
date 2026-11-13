@@ -1,0 +1,1347 @@
+{
+  "type": "samples",
+  "mode": "live",
+  "records": [
+    {
+      "collectorId": "collector-assembled",
+      "runId": "run-max",
+      "bootId": "boot-assembled",
+      "sequence": 1,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 1,
+          "perCore": [
+            1,
+            null
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 1,
+          "totalBytes": 2
+        },
+        "swap": {
+          "status": "ok",
+          "usedBytes": 0,
+          "totalBytes": 0
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": [
+            {
+              "status": "ok",
+              "id": "gpu:GPU-0",
+              "utilizationPercent": 0,
+              "memoryUsedBytes": 0,
+              "memoryTotalBytes": 0,
+              "temperatureC": 40,
+              "powerWatts": null
+            },
+            {
+              "status": "ok",
+              "id": "gpu:GPU-1",
+              "utilizationPercent": 1,
+              "memoryUsedBytes": 1024,
+              "memoryTotalBytes": 1024,
+              "temperatureC": 40,
+              "powerWatts": null
+            },
+            {
+              "status": "ok",
+              "id": "gpu:GPU-2",
+              "utilizationPercent": 2,
+              "memoryUsedBytes": 2048,
+              "memoryTotalBytes": 2048,
+              "temperatureC": 40,
+              "powerWatts": null
+            },
+            {
+              "status": "ok",
+              "id": "gpu:GPU-3",
+              "utilizationPercent": 3,
+              "memoryUsedBytes": 3072,
+              "memoryTotalBytes": 3072,
+              "temperatureC": 40,
+              "powerWatts": null
+            },
+            {
+              "status": "ok",
+              "id": "gpu:GPU-4",
+              "utilizationPercent": 4,
+              "memoryUsedBytes": 4096,
+              "memoryTotalBytes": 4096,
+              "temperatureC": 40,
+              "powerWatts": null
+            },
+            {
+              "status": "ok",
+              "id": "gpu:GPU-5",
+              "utilizationPercent": 5,
+              "memoryUsedBytes": 5120,
+              "memoryTotalBytes": 5120,
+              "temperatureC": 40,
+              "powerWatts": null
+            },
+            {
+              "status": "ok",
+              "id": "gpu:GPU-6",
+              "utilizationPercent": 6,
+              "memoryUsedBytes": 6144,
+              "memoryTotalBytes": 6144,
+              "temperatureC": 40,
+              "powerWatts": null
+            },
+            {
+              "status": "ok",
+              "id": "gpu:GPU-7",
+              "utilizationPercent": 7,
+              "memoryUsedBytes": 7168,
+              "memoryTotalBytes": 7168,
+              "temperatureC": 40,
+              "powerWatts": null
+            },
+            {
+              "status": "ok",
+              "id": "gpu:GPU-8",
+              "utilizationPercent": 8,
+              "memoryUsedBytes": 8192,
+              "memoryTotalBytes": 8192,
+              "temperatureC": 40,
+              "powerWatts": null
+            },
+            {
+              "status": "ok",
+              "id": "gpu:GPU-9",
+              "utilizationPercent": 9,
+              "memoryUsedBytes": 9216,
+              "memoryTotalBytes": 9216,
+              "temperatureC": 40,
+              "powerWatts": null
+            },
+            {
+              "status": "ok",
+              "id": "gpu:GPU-10",
+              "utilizationPercent": 10,
+              "memoryUsedBytes": 10240,
+              "memoryTotalBytes": 10240,
+              "temperatureC": 40,
+              "powerWatts": null
+            },
+            {
+              "status": "ok",
+              "id": "gpu:GPU-11",
+              "utilizationPercent": 11,
+              "memoryUsedBytes": 11264,
+              "memoryTotalBytes": 11264,
+              "temperatureC": 40,
+              "powerWatts": null
+            },
+            {
+              "status": "ok",
+              "id": "gpu:GPU-12",
+              "utilizationPercent": 12,
+              "memoryUsedBytes": 12288,
+              "memoryTotalBytes": 12288,
+              "temperatureC": 40,
+              "powerWatts": null
+            },
+            {
+              "status": "ok",
+              "id": "gpu:GPU-13",
+              "utilizationPercent": 13,
+              "memoryUsedBytes": 13312,
+              "memoryTotalBytes": 13312,
+              "temperatureC": 40,
+              "powerWatts": null
+            },
+            {
+              "status": "ok",
+              "id": "gpu:GPU-14",
+              "utilizationPercent": 14,
+              "memoryUsedBytes": 14336,
+              "memoryTotalBytes": 14336,
+              "temperatureC": 40,
+              "powerWatts": null
+            },
+            {
+              "status": "ok",
+              "id": "gpu:GPU-15",
+              "utilizationPercent": 15,
+              "memoryUsedBytes": 15360,
+              "memoryTotalBytes": 15360,
+              "temperatureC": 40,
+              "powerWatts": null
+            }
+          ]
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [
+            {
+              "status": "ok",
+              "id": "fs:/mnt/0",
+              "usedBytes": 0,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/1",
+              "usedBytes": 1,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/2",
+              "usedBytes": 2,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/3",
+              "usedBytes": 3,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/4",
+              "usedBytes": 4,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/5",
+              "usedBytes": 5,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/6",
+              "usedBytes": 6,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/7",
+              "usedBytes": 7,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/8",
+              "usedBytes": 8,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/9",
+              "usedBytes": 9,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/10",
+              "usedBytes": 10,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/11",
+              "usedBytes": 11,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/12",
+              "usedBytes": 12,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/13",
+              "usedBytes": 13,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/14",
+              "usedBytes": 14,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/15",
+              "usedBytes": 15,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/16",
+              "usedBytes": 16,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/17",
+              "usedBytes": 17,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/18",
+              "usedBytes": 18,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/19",
+              "usedBytes": 19,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/20",
+              "usedBytes": 20,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/21",
+              "usedBytes": 21,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/22",
+              "usedBytes": 22,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/23",
+              "usedBytes": 23,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/24",
+              "usedBytes": 24,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/25",
+              "usedBytes": 25,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/26",
+              "usedBytes": 26,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/27",
+              "usedBytes": 27,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/28",
+              "usedBytes": 28,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/29",
+              "usedBytes": 29,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/30",
+              "usedBytes": 30,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/31",
+              "usedBytes": 31,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/32",
+              "usedBytes": 32,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/33",
+              "usedBytes": 33,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/34",
+              "usedBytes": 34,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/35",
+              "usedBytes": 35,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/36",
+              "usedBytes": 36,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/37",
+              "usedBytes": 37,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/38",
+              "usedBytes": 38,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/39",
+              "usedBytes": 39,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/40",
+              "usedBytes": 40,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/41",
+              "usedBytes": 41,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/42",
+              "usedBytes": 42,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/43",
+              "usedBytes": 43,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/44",
+              "usedBytes": 44,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/45",
+              "usedBytes": 45,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/46",
+              "usedBytes": 46,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/47",
+              "usedBytes": 47,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/48",
+              "usedBytes": 48,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/49",
+              "usedBytes": 49,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/50",
+              "usedBytes": 50,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/51",
+              "usedBytes": 51,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/52",
+              "usedBytes": 52,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/53",
+              "usedBytes": 53,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/54",
+              "usedBytes": 54,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/55",
+              "usedBytes": 55,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/56",
+              "usedBytes": 56,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/57",
+              "usedBytes": 57,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/58",
+              "usedBytes": 58,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/59",
+              "usedBytes": 59,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/60",
+              "usedBytes": 60,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/61",
+              "usedBytes": 61,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/62",
+              "usedBytes": 62,
+              "totalBytes": 1000
+            },
+            {
+              "status": "ok",
+              "id": "fs:/mnt/63",
+              "usedBytes": 63,
+              "totalBytes": 1000
+            }
+          ],
+          "devices": [
+            {
+              "status": "ok",
+              "id": "disk:d0",
+              "readBytesPerSec": 0,
+              "writeBytesPerSec": 0
+            },
+            {
+              "status": "ok",
+              "id": "disk:d1",
+              "readBytesPerSec": 1,
+              "writeBytesPerSec": 2
+            },
+            {
+              "status": "ok",
+              "id": "disk:d2",
+              "readBytesPerSec": 2,
+              "writeBytesPerSec": 4
+            },
+            {
+              "status": "ok",
+              "id": "disk:d3",
+              "readBytesPerSec": 3,
+              "writeBytesPerSec": 6
+            },
+            {
+              "status": "ok",
+              "id": "disk:d4",
+              "readBytesPerSec": 4,
+              "writeBytesPerSec": 8
+            },
+            {
+              "status": "ok",
+              "id": "disk:d5",
+              "readBytesPerSec": 5,
+              "writeBytesPerSec": 10
+            },
+            {
+              "status": "ok",
+              "id": "disk:d6",
+              "readBytesPerSec": 6,
+              "writeBytesPerSec": 12
+            },
+            {
+              "status": "ok",
+              "id": "disk:d7",
+              "readBytesPerSec": 7,
+              "writeBytesPerSec": 14
+            },
+            {
+              "status": "ok",
+              "id": "disk:d8",
+              "readBytesPerSec": 8,
+              "writeBytesPerSec": 16
+            },
+            {
+              "status": "ok",
+              "id": "disk:d9",
+              "readBytesPerSec": 9,
+              "writeBytesPerSec": 18
+            },
+            {
+              "status": "ok",
+              "id": "disk:d10",
+              "readBytesPerSec": 10,
+              "writeBytesPerSec": 20
+            },
+            {
+              "status": "ok",
+              "id": "disk:d11",
+              "readBytesPerSec": 11,
+              "writeBytesPerSec": 22
+            },
+            {
+              "status": "ok",
+              "id": "disk:d12",
+              "readBytesPerSec": 12,
+              "writeBytesPerSec": 24
+            },
+            {
+              "status": "ok",
+              "id": "disk:d13",
+              "readBytesPerSec": 13,
+              "writeBytesPerSec": 26
+            },
+            {
+              "status": "ok",
+              "id": "disk:d14",
+              "readBytesPerSec": 14,
+              "writeBytesPerSec": 28
+            },
+            {
+              "status": "ok",
+              "id": "disk:d15",
+              "readBytesPerSec": 15,
+              "writeBytesPerSec": 30
+            },
+            {
+              "status": "ok",
+              "id": "disk:d16",
+              "readBytesPerSec": 16,
+              "writeBytesPerSec": 32
+            },
+            {
+              "status": "ok",
+              "id": "disk:d17",
+              "readBytesPerSec": 17,
+              "writeBytesPerSec": 34
+            },
+            {
+              "status": "ok",
+              "id": "disk:d18",
+              "readBytesPerSec": 18,
+              "writeBytesPerSec": 36
+            },
+            {
+              "status": "ok",
+              "id": "disk:d19",
+              "readBytesPerSec": 19,
+              "writeBytesPerSec": 38
+            },
+            {
+              "status": "ok",
+              "id": "disk:d20",
+              "readBytesPerSec": 20,
+              "writeBytesPerSec": 40
+            },
+            {
+              "status": "ok",
+              "id": "disk:d21",
+              "readBytesPerSec": 21,
+              "writeBytesPerSec": 42
+            },
+            {
+              "status": "ok",
+              "id": "disk:d22",
+              "readBytesPerSec": 22,
+              "writeBytesPerSec": 44
+            },
+            {
+              "status": "ok",
+              "id": "disk:d23",
+              "readBytesPerSec": 23,
+              "writeBytesPerSec": 46
+            },
+            {
+              "status": "ok",
+              "id": "disk:d24",
+              "readBytesPerSec": 24,
+              "writeBytesPerSec": 48
+            },
+            {
+              "status": "ok",
+              "id": "disk:d25",
+              "readBytesPerSec": 25,
+              "writeBytesPerSec": 50
+            },
+            {
+              "status": "ok",
+              "id": "disk:d26",
+              "readBytesPerSec": 26,
+              "writeBytesPerSec": 52
+            },
+            {
+              "status": "ok",
+              "id": "disk:d27",
+              "readBytesPerSec": 27,
+              "writeBytesPerSec": 54
+            },
+            {
+              "status": "ok",
+              "id": "disk:d28",
+              "readBytesPerSec": 28,
+              "writeBytesPerSec": 56
+            },
+            {
+              "status": "ok",
+              "id": "disk:d29",
+              "readBytesPerSec": 29,
+              "writeBytesPerSec": 58
+            },
+            {
+              "status": "ok",
+              "id": "disk:d30",
+              "readBytesPerSec": 30,
+              "writeBytesPerSec": 60
+            },
+            {
+              "status": "ok",
+              "id": "disk:d31",
+              "readBytesPerSec": 31,
+              "writeBytesPerSec": 62
+            },
+            {
+              "status": "ok",
+              "id": "disk:d32",
+              "readBytesPerSec": 32,
+              "writeBytesPerSec": 64
+            },
+            {
+              "status": "ok",
+              "id": "disk:d33",
+              "readBytesPerSec": 33,
+              "writeBytesPerSec": 66
+            },
+            {
+              "status": "ok",
+              "id": "disk:d34",
+              "readBytesPerSec": 34,
+              "writeBytesPerSec": 68
+            },
+            {
+              "status": "ok",
+              "id": "disk:d35",
+              "readBytesPerSec": 35,
+              "writeBytesPerSec": 70
+            },
+            {
+              "status": "ok",
+              "id": "disk:d36",
+              "readBytesPerSec": 36,
+              "writeBytesPerSec": 72
+            },
+            {
+              "status": "ok",
+              "id": "disk:d37",
+              "readBytesPerSec": 37,
+              "writeBytesPerSec": 74
+            },
+            {
+              "status": "ok",
+              "id": "disk:d38",
+              "readBytesPerSec": 38,
+              "writeBytesPerSec": 76
+            },
+            {
+              "status": "ok",
+              "id": "disk:d39",
+              "readBytesPerSec": 39,
+              "writeBytesPerSec": 78
+            },
+            {
+              "status": "ok",
+              "id": "disk:d40",
+              "readBytesPerSec": 40,
+              "writeBytesPerSec": 80
+            },
+            {
+              "status": "ok",
+              "id": "disk:d41",
+              "readBytesPerSec": 41,
+              "writeBytesPerSec": 82
+            },
+            {
+              "status": "ok",
+              "id": "disk:d42",
+              "readBytesPerSec": 42,
+              "writeBytesPerSec": 84
+            },
+            {
+              "status": "ok",
+              "id": "disk:d43",
+              "readBytesPerSec": 43,
+              "writeBytesPerSec": 86
+            },
+            {
+              "status": "ok",
+              "id": "disk:d44",
+              "readBytesPerSec": 44,
+              "writeBytesPerSec": 88
+            },
+            {
+              "status": "ok",
+              "id": "disk:d45",
+              "readBytesPerSec": 45,
+              "writeBytesPerSec": 90
+            },
+            {
+              "status": "ok",
+              "id": "disk:d46",
+              "readBytesPerSec": 46,
+              "writeBytesPerSec": 92
+            },
+            {
+              "status": "ok",
+              "id": "disk:d47",
+              "readBytesPerSec": 47,
+              "writeBytesPerSec": 94
+            },
+            {
+              "status": "ok",
+              "id": "disk:d48",
+              "readBytesPerSec": 48,
+              "writeBytesPerSec": 96
+            },
+            {
+              "status": "ok",
+              "id": "disk:d49",
+              "readBytesPerSec": 49,
+              "writeBytesPerSec": 98
+            },
+            {
+              "status": "ok",
+              "id": "disk:d50",
+              "readBytesPerSec": 50,
+              "writeBytesPerSec": 100
+            },
+            {
+              "status": "ok",
+              "id": "disk:d51",
+              "readBytesPerSec": 51,
+              "writeBytesPerSec": 102
+            },
+            {
+              "status": "ok",
+              "id": "disk:d52",
+              "readBytesPerSec": 52,
+              "writeBytesPerSec": 104
+            },
+            {
+              "status": "ok",
+              "id": "disk:d53",
+              "readBytesPerSec": 53,
+              "writeBytesPerSec": 106
+            },
+            {
+              "status": "ok",
+              "id": "disk:d54",
+              "readBytesPerSec": 54,
+              "writeBytesPerSec": 108
+            },
+            {
+              "status": "ok",
+              "id": "disk:d55",
+              "readBytesPerSec": 55,
+              "writeBytesPerSec": 110
+            },
+            {
+              "status": "ok",
+              "id": "disk:d56",
+              "readBytesPerSec": 56,
+              "writeBytesPerSec": 112
+            },
+            {
+              "status": "ok",
+              "id": "disk:d57",
+              "readBytesPerSec": 57,
+              "writeBytesPerSec": 114
+            },
+            {
+              "status": "ok",
+              "id": "disk:d58",
+              "readBytesPerSec": 58,
+              "writeBytesPerSec": 116
+            },
+            {
+              "status": "ok",
+              "id": "disk:d59",
+              "readBytesPerSec": 59,
+              "writeBytesPerSec": 118
+            },
+            {
+              "status": "ok",
+              "id": "disk:d60",
+              "readBytesPerSec": 60,
+              "writeBytesPerSec": 120
+            },
+            {
+              "status": "ok",
+              "id": "disk:d61",
+              "readBytesPerSec": 61,
+              "writeBytesPerSec": 122
+            },
+            {
+              "status": "ok",
+              "id": "disk:d62",
+              "readBytesPerSec": 62,
+              "writeBytesPerSec": 124
+            },
+            {
+              "status": "ok",
+              "id": "disk:d63",
+              "readBytesPerSec": 63,
+              "writeBytesPerSec": 126
+            }
+          ]
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": [
+            {
+              "status": "ok",
+              "id": "net:n0",
+              "rxBytesPerSec": 0,
+              "txBytesPerSec": 0
+            },
+            {
+              "status": "ok",
+              "id": "net:n1",
+              "rxBytesPerSec": 1,
+              "txBytesPerSec": 1
+            },
+            {
+              "status": "ok",
+              "id": "net:n2",
+              "rxBytesPerSec": 2,
+              "txBytesPerSec": 2
+            },
+            {
+              "status": "ok",
+              "id": "net:n3",
+              "rxBytesPerSec": 3,
+              "txBytesPerSec": 3
+            },
+            {
+              "status": "ok",
+              "id": "net:n4",
+              "rxBytesPerSec": 4,
+              "txBytesPerSec": 4
+            },
+            {
+              "status": "ok",
+              "id": "net:n5",
+              "rxBytesPerSec": 5,
+              "txBytesPerSec": 5
+            },
+            {
+              "status": "ok",
+              "id": "net:n6",
+              "rxBytesPerSec": 6,
+              "txBytesPerSec": 6
+            },
+            {
+              "status": "ok",
+              "id": "net:n7",
+              "rxBytesPerSec": 7,
+              "txBytesPerSec": 7
+            },
+            {
+              "status": "ok",
+              "id": "net:n8",
+              "rxBytesPerSec": 8,
+              "txBytesPerSec": 8
+            },
+            {
+              "status": "ok",
+              "id": "net:n9",
+              "rxBytesPerSec": 9,
+              "txBytesPerSec": 9
+            },
+            {
+              "status": "ok",
+              "id": "net:n10",
+              "rxBytesPerSec": 10,
+              "txBytesPerSec": 10
+            },
+            {
+              "status": "ok",
+              "id": "net:n11",
+              "rxBytesPerSec": 11,
+              "txBytesPerSec": 11
+            },
+            {
+              "status": "ok",
+              "id": "net:n12",
+              "rxBytesPerSec": 12,
+              "txBytesPerSec": 12
+            },
+            {
+              "status": "ok",
+              "id": "net:n13",
+              "rxBytesPerSec": 13,
+              "txBytesPerSec": 13
+            },
+            {
+              "status": "ok",
+              "id": "net:n14",
+              "rxBytesPerSec": 14,
+              "txBytesPerSec": 14
+            },
+            {
+              "status": "ok",
+              "id": "net:n15",
+              "rxBytesPerSec": 15,
+              "txBytesPerSec": 15
+            },
+            {
+              "status": "ok",
+              "id": "net:n16",
+              "rxBytesPerSec": 16,
+              "txBytesPerSec": 16
+            },
+            {
+              "status": "ok",
+              "id": "net:n17",
+              "rxBytesPerSec": 17,
+              "txBytesPerSec": 17
+            },
+            {
+              "status": "ok",
+              "id": "net:n18",
+              "rxBytesPerSec": 18,
+              "txBytesPerSec": 18
+            },
+            {
+              "status": "ok",
+              "id": "net:n19",
+              "rxBytesPerSec": 19,
+              "txBytesPerSec": 19
+            },
+            {
+              "status": "ok",
+              "id": "net:n20",
+              "rxBytesPerSec": 20,
+              "txBytesPerSec": 20
+            },
+            {
+              "status": "ok",
+              "id": "net:n21",
+              "rxBytesPerSec": 21,
+              "txBytesPerSec": 21
+            },
+            {
+              "status": "ok",
+              "id": "net:n22",
+              "rxBytesPerSec": 22,
+              "txBytesPerSec": 22
+            },
+            {
+              "status": "ok",
+              "id": "net:n23",
+              "rxBytesPerSec": 23,
+              "txBytesPerSec": 23
+            },
+            {
+              "status": "ok",
+              "id": "net:n24",
+              "rxBytesPerSec": 24,
+              "txBytesPerSec": 24
+            },
+            {
+              "status": "ok",
+              "id": "net:n25",
+              "rxBytesPerSec": 25,
+              "txBytesPerSec": 25
+            },
+            {
+              "status": "ok",
+              "id": "net:n26",
+              "rxBytesPerSec": 26,
+              "txBytesPerSec": 26
+            },
+            {
+              "status": "ok",
+              "id": "net:n27",
+              "rxBytesPerSec": 27,
+              "txBytesPerSec": 27
+            },
+            {
+              "status": "ok",
+              "id": "net:n28",
+              "rxBytesPerSec": 28,
+              "txBytesPerSec": 28
+            },
+            {
+              "status": "ok",
+              "id": "net:n29",
+              "rxBytesPerSec": 29,
+              "txBytesPerSec": 29
+            },
+            {
+              "status": "ok",
+              "id": "net:n30",
+              "rxBytesPerSec": 30,
+              "txBytesPerSec": 30
+            },
+            {
+              "status": "ok",
+              "id": "net:n31",
+              "rxBytesPerSec": 31,
+              "txBytesPerSec": 31
+            },
+            {
+              "status": "ok",
+              "id": "net:n32",
+              "rxBytesPerSec": 32,
+              "txBytesPerSec": 32
+            },
+            {
+              "status": "ok",
+              "id": "net:n33",
+              "rxBytesPerSec": 33,
+              "txBytesPerSec": 33
+            },
+            {
+              "status": "ok",
+              "id": "net:n34",
+              "rxBytesPerSec": 34,
+              "txBytesPerSec": 34
+            },
+            {
+              "status": "ok",
+              "id": "net:n35",
+              "rxBytesPerSec": 35,
+              "txBytesPerSec": 35
+            },
+            {
+              "status": "ok",
+              "id": "net:n36",
+              "rxBytesPerSec": 36,
+              "txBytesPerSec": 36
+            },
+            {
+              "status": "ok",
+              "id": "net:n37",
+              "rxBytesPerSec": 37,
+              "txBytesPerSec": 37
+            },
+            {
+              "status": "ok",
+              "id": "net:n38",
+              "rxBytesPerSec": 38,
+              "txBytesPerSec": 38
+            },
+            {
+              "status": "ok",
+              "id": "net:n39",
+              "rxBytesPerSec": 39,
+              "txBytesPerSec": 39
+            },
+            {
+              "status": "ok",
+              "id": "net:n40",
+              "rxBytesPerSec": 40,
+              "txBytesPerSec": 40
+            },
+            {
+              "status": "ok",
+              "id": "net:n41",
+              "rxBytesPerSec": 41,
+              "txBytesPerSec": 41
+            },
+            {
+              "status": "ok",
+              "id": "net:n42",
+              "rxBytesPerSec": 42,
+              "txBytesPerSec": 42
+            },
+            {
+              "status": "ok",
+              "id": "net:n43",
+              "rxBytesPerSec": 43,
+              "txBytesPerSec": 43
+            },
+            {
+              "status": "ok",
+              "id": "net:n44",
+              "rxBytesPerSec": 44,
+              "txBytesPerSec": 44
+            },
+            {
+              "status": "ok",
+              "id": "net:n45",
+              "rxBytesPerSec": 45,
+              "txBytesPerSec": 45
+            },
+            {
+              "status": "ok",
+              "id": "net:n46",
+              "rxBytesPerSec": 46,
+              "txBytesPerSec": 46
+            },
+            {
+              "status": "ok",
+              "id": "net:n47",
+              "rxBytesPerSec": 47,
+              "txBytesPerSec": 47
+            },
+            {
+              "status": "ok",
+              "id": "net:n48",
+              "rxBytesPerSec": 48,
+              "txBytesPerSec": 48
+            },
+            {
+              "status": "ok",
+              "id": "net:n49",
+              "rxBytesPerSec": 49,
+              "txBytesPerSec": 49
+            },
+            {
+              "status": "ok",
+              "id": "net:n50",
+              "rxBytesPerSec": 50,
+              "txBytesPerSec": 50
+            },
+            {
+              "status": "ok",
+              "id": "net:n51",
+              "rxBytesPerSec": 51,
+              "txBytesPerSec": 51
+            },
+            {
+              "status": "ok",
+              "id": "net:n52",
+              "rxBytesPerSec": 52,
+              "txBytesPerSec": 52
+            },
+            {
+              "status": "ok",
+              "id": "net:n53",
+              "rxBytesPerSec": 53,
+              "txBytesPerSec": 53
+            },
+            {
+              "status": "ok",
+              "id": "net:n54",
+              "rxBytesPerSec": 54,
+              "txBytesPerSec": 54
+            },
+            {
+              "status": "ok",
+              "id": "net:n55",
+              "rxBytesPerSec": 55,
+              "txBytesPerSec": 55
+            },
+            {
+              "status": "ok",
+              "id": "net:n56",
+              "rxBytesPerSec": 56,
+              "txBytesPerSec": 56
+            },
+            {
+              "status": "ok",
+              "id": "net:n57",
+              "rxBytesPerSec": 57,
+              "txBytesPerSec": 57
+            },
+            {
+              "status": "ok",
+              "id": "net:n58",
+              "rxBytesPerSec": 58,
+              "txBytesPerSec": 58
+            },
+            {
+              "status": "ok",
+              "id": "net:n59",
+              "rxBytesPerSec": 59,
+              "txBytesPerSec": 59
+            },
+            {
+              "status": "ok",
+              "id": "net:n60",
+              "rxBytesPerSec": 60,
+              "txBytesPerSec": 60
+            },
+            {
+              "status": "ok",
+              "id": "net:n61",
+              "rxBytesPerSec": 61,
+              "txBytesPerSec": 61
+            },
+            {
+              "status": "ok",
+              "id": "net:n62",
+              "rxBytesPerSec": 62,
+              "txBytesPerSec": 62
+            },
+            {
+              "status": "ok",
+              "id": "net:n63",
+              "rxBytesPerSec": 63,
+              "txBytesPerSec": 63
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

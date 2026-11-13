@@ -2,7 +2,7 @@
 
 The standalone marketing page and browser-only synthetic demonstration for
 rigscope.dev. This app has its own build and deployment; it is not part of the
-installed hub or npm package.
+installed hub binary.
 
 ```sh
 cd website
@@ -31,9 +31,9 @@ Do not copy or recreate these views in the website.
 
 Only integration seams differ: `src/product-demo/` provides browser-local routing,
 the live context, and synthetic history/process hooks. Those adapters use the
-product's own types. Fixtures use the collector's synthetic sampler and the
-product's telemetry-to-history mapping. The iframe isolates product styles and
-local fixture responses from the marketing page. It never contacts a real hub.
+product's own types. Fixtures use a website-owned synthetic sampler (retained
+from the former Node collector) and the product's telemetry-to-history mapping.
+The iframe isolates product styles and local fixture responses from the marketing page. It never contacts a real hub.
 
 Rebuild this app whenever product UI changes. Run `npm run verify:demo` to check
 fixtures against the actual telemetry, history, and process parsers. Run the
@@ -48,8 +48,8 @@ installation changes. Documentation lives at `/docs/`; source and contact links 
 ## Public content and SEO
 
 The build renders seven references directly from the root `docs/` Markdown files,
-so installation, monitoring, configuration, operations, system installation,
-sensors, and export instructions have one source of truth. Relative links to
+so installation, monitoring, configuration, security, telemetry storage, sensor
+readings, and export instructions have one source of truth. Relative links to
 published references become local URLs; links to other repository files keep
 pointing to GitHub. New practical guides live in `content/guides/`.
 
@@ -105,7 +105,7 @@ The marketing page self-hosts the unchanged Geist Latin variable WOFF2 supplied
 by `@fontsource-variable/geist` 5.3.0 (npm registry archive). Its copyright notice
 and SIL Open Font License 1.1 are retained in `public/fonts/Geist-LICENSE.txt`
 and deployed alongside the font. The font permits commercial website embedding;
-it remains under OFL rather than the repository's MIT license. Upstream:
+it remains under OFL rather than the repository's AGPL-3.0-only license. Upstream:
 https://github.com/vercel/geist-font and https://openfontlicense.org/.
 
 Lucide icons use their ISC/Feather MIT notices. The build publishes `NOTICES.txt`

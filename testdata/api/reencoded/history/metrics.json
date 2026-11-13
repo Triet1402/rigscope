@@ -1,0 +1,103 @@
+{
+  "metrics": {
+    "cpu.core": {
+      "unit": "percent"
+    },
+    "cpu.iowait": {
+      "unit": "percent"
+    },
+    "cpu.power": {
+      "unit": "watts"
+    },
+    "cpu.pressure": {
+      "unit": "percent"
+    },
+    "cpu.temperature": {
+      "unit": "celsius"
+    },
+    "cpu.usage": {
+      "unit": "percent"
+    },
+    "disk.read": {
+      "unit": "bytes_per_second"
+    },
+    "disk.read.latency": {
+      "unit": "milliseconds"
+    },
+    "disk.utilization": {
+      "unit": "percent"
+    },
+    "disk.write": {
+      "unit": "bytes_per_second"
+    },
+    "disk.write.latency": {
+      "unit": "milliseconds"
+    },
+    "fs.inodes.usage": {
+      "unit": "percent"
+    },
+    "fs.total": {
+      "unit": "bytes"
+    },
+    "fs.usage": {
+      "unit": "percent"
+    },
+    "fs.used": {
+      "unit": "bytes"
+    },
+    "gpu.junction.temperature": {
+      "unit": "celsius"
+    },
+    "gpu.memory.total": {
+      "unit": "bytes"
+    },
+    "gpu.memory.used": {
+      "unit": "bytes"
+    },
+    "gpu.power": {
+      "unit": "watts"
+    },
+    "gpu.temperature": {
+      "unit": "celsius"
+    },
+    "gpu.utilization": {
+      "unit": "percent"
+    },
+    "gpu.vram.temperature": {
+      "unit": "celsius"
+    },
+    "io.pressure.full": {
+      "unit": "percent"
+    },
+    "io.pressure.some": {
+      "unit": "percent"
+    },
+    "memory.pressure.full": {
+      "unit": "percent"
+    },
+    "memory.pressure.some": {
+      "unit": "percent"
+    },
+    "memory.total": {
+      "unit": "bytes"
+    },
+    "memory.usage": {
+      "unit": "percent"
+    },
+    "memory.used": {
+      "unit": "bytes"
+    },
+    "net.rx": {
+      "unit": "bytes_per_second"
+    },
+    "net.tx": {
+      "unit": "bytes_per_second"
+    },
+    "swap.total": {
+      "unit": "bytes"
+    },
+    "swap.used": {
+      "unit": "bytes"
+    }
+  }
+}

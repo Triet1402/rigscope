@@ -1,0 +1,47 @@
+{
+  "mode": "memory",
+  "persistentHistory": false,
+  "availableFromMs": 1794478260893,
+  "availableToMs": 1794478260893,
+  "memory": {
+    "budgetBytes": 134217728,
+    "usedBytes": 2846254,
+    "pressure": false,
+    "seriesCount": 40,
+    "machineCount": 1,
+    "evictedSeries": 0,
+    "rejectedSeries": 0,
+    "oldestMs": 1794478260893,
+    "newestMs": 1794478260893,
+    "tiers": [
+      {
+        "tier": "1s",
+        "stepMs": 1000,
+        "retentionMs": 120000,
+        "bytes": 156672
+      },
+      {
+        "tier": "10s",
+        "stepMs": 10000,
+        "retentionMs": 3600000,
+        "bytes": 483840
+      },
+      {
+        "tier": "1m",
+        "stepMs": 60000,
+        "retentionMs": 86400000,
+        "bytes": 1962240
+      },
+      {
+        "tier": "1h",
+        "stepMs": 3600000,
+        "retentionMs": 604800000,
+        "bytes": 234240
+      }
+    ]
+  },
+  "persistence": null,
+  "gaps": 0,
+  "acceptedRecords": 1,
+  "generatedAt": "2026-11-12T10:11:01.037Z"
+}

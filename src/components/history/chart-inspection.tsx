@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import type { HistoryGap, HistorySeries } from "@/hub/storage/history-query";
+import type { HistoryGap, HistorySeries } from "@/history/contract";
 import { inspectionPoint, inspectionTimeForKey, inspectionTimes } from "@/history/inspection";
 import { formatClock, formatDateTime, formatMetricValue } from "@/history/presentation";
 

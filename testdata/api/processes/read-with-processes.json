@@ -1,0 +1,46 @@
+{
+  "result": {
+    "type": "detail.result",
+    "subscriptionId": "00000000-0000-4000-8000-000000000010",
+    "capturedAt": "2026-11-12T10:11:06.065Z",
+    "snapshot": {
+      "totalProcesses": 2,
+      "truncated": false,
+      "inaccessible": 0,
+      "processes": [
+        {
+          "pid": 1,
+          "ppid": 0,
+          "startTicks": 123456,
+          "name": "fixture-init",
+          "user": "fixture-user",
+          "state": "S",
+          "cpuPercent": 0.5,
+          "memoryRssBytes": 10485760,
+          "gpuMemoryBytes": null,
+          "ioReadBytesPerSec": 0,
+          "ioWriteBytesPerSec": 0,
+          "threads": 1,
+          "unit": "fixture.service",
+          "command": "/usr/bin/fixture-init"
+        },
+        {
+          "pid": 4242,
+          "ppid": 1,
+          "startTicks": 987654,
+          "name": "fixture-worker",
+          "user": null,
+          "state": "R",
+          "cpuPercent": 12.5,
+          "memoryRssBytes": 20971520,
+          "gpuMemoryBytes": null,
+          "ioReadBytesPerSec": 1024,
+          "ioWriteBytesPerSec": 2048,
+          "threads": 4,
+          "unit": null
+        }
+      ]
+    }
+  },
+  "state": "ready"
+}

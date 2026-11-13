@@ -231,23 +231,40 @@ export function enrollmentTargets(
     }));
 }
 
-/** Enrollment command contains the hub address, never the one-time secret. */
+/** Quote one shell word so a pasted command cannot be split or expanded. */
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * The enrollment command is complete: the hub address and the one-time grant
+ * are both in it, so the operator copies one thing. The grant is single-use
+ * and short-lived, so its copy in shell history is spent once it is used. A new
+ * machine runs the installer, which records the destination and stages the
+ * grant. An existing installation enrolls explicitly; `collector enroll`
+ * restarts a running collector itself, so no separate restart is needed.
+ */
 export function grantCommand(
   mode: GrantMode,
   origin = "https://your-hub",
+  token = "<grant>",
 ): { command: string; note: string } {
   const url = new URL(origin);
   if (!["https:", "http:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
     throw new Error("Invalid hub origin");
   }
-  const address = url.origin.replace(/'/g, "%27");
+  const address = shellQuote(url.origin);
+  const grant = shellQuote(token);
   const notes: Record<GrantMode, string> = {
-    new: "Paste the grant at the prompt, then run rigscope start.",
-    replacement: "Paste the grant at the prompt. The old credential stays active until replacement succeeds.",
-    reenroll: "Run this on the revoked machine and paste the grant at the prompt. It keeps its machine history.",
+    new: "Run this on the new machine. It installs Rigscope as a collector, enrolls it with this hub and starts it.",
+    replacement:
+      "Run this on the existing machine. Its old credential keeps working until the new enrollment succeeds; a running collector restarts to use the new one.",
+    reenroll:
+      "Run this on the revoked machine. It keeps its machine history; a running collector restarts to use the new credential.",
   };
-  return {
-    command: `rigscope connect '${address}'${mode === "new" ? "" : " --replace"}`,
-    note: notes[mode],
-  };
+  const command =
+    mode === "new"
+      ? `curl -fsSL https://rigscope.dev/install.sh | sh -s -- --role collector --hub ${address} --token ${grant}`
+      : `rigscope collector enroll --hub-url ${address} --grant ${grant}`;
+  return { command, note: notes[mode] };
 }

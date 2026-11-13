@@ -1,0 +1,99 @@
+{
+  "type": "samples",
+  "mode": "live",
+  "records": [
+    {
+      "collectorId": "mock-collector",
+      "runId": "mock-run",
+      "bootId": "mock-boot",
+      "sequence": 1,
+      "capturedAt": "2023-11-14T22:13:20.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 9.67,
+          "perCore": [
+            10.06,
+            17.25,
+            24.45,
+            30.86,
+            35.76,
+            38.63,
+            39.15,
+            37.25
+          ],
+          "temperatureC": 52,
+          "powerWatts": 60,
+          "iowaitPercent": 0.93,
+          "pressureSomePercent": 3
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 12333755550,
+          "totalBytes": 34359738368,
+          "pressureSomePercent": 1.09,
+          "pressureFullPercent": 0.21
+        },
+        "swap": {
+          "status": "ok",
+          "usedBytes": 878680783,
+          "totalBytes": 8589934592
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": [
+            {
+              "status": "ok",
+              "id": "gpu:SYNTHETIC-0",
+              "utilizationPercent": 15.76,
+              "memoryUsedBytes": 3536197967,
+              "memoryTotalBytes": 8589934592,
+              "temperatureC": 45,
+              "powerWatts": 80,
+              "junctionTemperatureC": 57.7,
+              "vramTemperatureC": 60.7
+            }
+          ]
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [
+            {
+              "status": "ok",
+              "id": "fs:/",
+              "usedBytes": 217209280220,
+              "totalBytes": 536870912000,
+              "inodesUsed": 12045838,
+              "inodesTotal": 30000000
+            }
+          ],
+          "devices": [
+            {
+              "status": "ok",
+              "id": "disk:synthetic0",
+              "readBytesPerSec": 1022919,
+              "writeBytesPerSec": 409168,
+              "readLatencyMs": 0.309,
+              "writeLatencyMs": 0.714,
+              "ioUtilizationPercent": 12
+            }
+          ],
+          "pressureSomePercent": 2.17,
+          "pressureFullPercent": 0.6
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": [
+            {
+              "status": "ok",
+              "id": "net:synthetic0",
+              "rxBytesPerSec": 800058,
+              "txBytesPerSec": 106674
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

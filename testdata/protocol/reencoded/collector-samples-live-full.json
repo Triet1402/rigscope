@@ -1,0 +1,126 @@
+{
+  "type": "samples",
+  "mode": "live",
+  "records": [
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 1,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 42.5,
+          "perCore": [
+            40,
+            45,
+            null,
+            0
+          ],
+          "temperatureC": 61.4,
+          "powerWatts": 88.2,
+          "iowaitPercent": 1.25,
+          "pressureSomePercent": 3.5
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000,
+          "pressureSomePercent": 1.5,
+          "pressureFullPercent": 0.5
+        },
+        "swap": {
+          "status": "ok",
+          "usedBytes": 0,
+          "totalBytes": 0
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": [
+            {
+              "status": "ok",
+              "id": "gpu:GPU-4ace4b62-1111",
+              "utilizationPercent": 55,
+              "memoryUsedBytes": 1000000000,
+              "memoryTotalBytes": 8000000000,
+              "temperatureC": 65,
+              "powerWatts": 120.5,
+              "junctionTemperatureC": 70.5,
+              "vramTemperatureC": 60.5
+            },
+            {
+              "status": "ok",
+              "id": "gpu:GPU-4ace4b62-2222",
+              "utilizationPercent": null,
+              "memoryUsedBytes": null,
+              "memoryTotalBytes": null,
+              "temperatureC": null,
+              "powerWatts": null,
+              "junctionTemperatureC": null,
+              "vramTemperatureC": null
+            },
+            {
+              "id": "gpu:0000:01:00.0",
+              "status": "unavailable",
+              "reason": "management adapter"
+            }
+          ]
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [
+            {
+              "status": "ok",
+              "id": "fs:/",
+              "usedBytes": 50000000000,
+              "totalBytes": 100000000000,
+              "inodesUsed": 1000,
+              "inodesTotal": 10000
+            },
+            {
+              "id": "fs:/boot",
+              "status": "unavailable",
+              "reason": "permission denied"
+            }
+          ],
+          "devices": [
+            {
+              "status": "ok",
+              "id": "disk:sda",
+              "readBytesPerSec": 1000.5,
+              "writeBytesPerSec": 2000.5,
+              "readLatencyMs": 1.5,
+              "writeLatencyMs": 2.5,
+              "ioUtilizationPercent": 12.5
+            },
+            {
+              "id": "disk:sdb",
+              "status": "unavailable",
+              "reason": "removed during scan"
+            }
+          ],
+          "pressureSomePercent": 2.5,
+          "pressureFullPercent": 1.5
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": [
+            {
+              "status": "ok",
+              "id": "net:eth0",
+              "rxBytesPerSec": 12345.5,
+              "txBytesPerSec": 6789.5
+            },
+            {
+              "id": "net:lo",
+              "status": "unavailable",
+              "reason": "not sampled"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "state": "ready",
+  "result": {
+    "type": "detail.result",
+    "subscriptionId": "00000000-0000-4000-8000-000000000010",
+    "capturedAt": "2026-11-12T10:11:05.165Z",
+    "snapshot": {
+      "totalProcesses": 0,
+      "truncated": false,
+      "inaccessible": 0,
+      "processes": []
+    }
+  }
+}

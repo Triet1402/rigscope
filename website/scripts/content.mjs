@@ -16,16 +16,16 @@ export function documentHtml({title, description, path, body, css, script = ''})
 }
 
 const docs = [
-  ['installation', 'Installation', 'Install Rigscope on Linux with npm, configure HTTPS access, add machines, and check supported GPU hardware.'],
-  ['monitoring', 'Monitoring and alerts', 'Understand Rigscope collection, SQLite history retention, process details, user access, and webhook alerts.'],
-  ['configuration', 'Configuration reference', 'Reference for Rigscope hub and collector settings, sharing policies, and source enrollment.'],
-  ['operations', 'Operations', 'Diagnose Rigscope services, back up monitoring data, recover access, and manage upgrades and storage pressure.'],
-  ['system-installation', 'System installation', 'Run Rigscope with dedicated service accounts and system units, including optional CPU package-power access.'],
+  ['installation', 'Installation', 'Install Rigscope 1.0 on Linux with the curl one-liner, then sign in, add machines, and upgrade. One static Go binary; no Node.js or npm.'],
+  ['monitoring', 'Monitoring and alerts', 'What Rigscope collects, how SQLite summary history and the one-second RAM ring behave, and how webhook alerts work.'],
+  ['configuration', 'Configuration reference', 'Reference for Rigscope 1.0 hub and collector settings, sharing policies, TLS, trusted proxies, and file locations.'],
+  ['security', 'Security', 'Rigscope 1.0 threat model, session and enrollment protections, webhook SSRF defenses, and operator responsibilities.'],
+  ['telemetry-storage', 'Telemetry storage and history', 'Understand default RAM history, opt-in persistent summaries, the one-second RAM ring, retention, replay, gaps, and unknown loss.'],
   ['bottlenecks', 'Sensor readings', 'Understand Linux CPU pressure, temperature, package power, memory, disk latency, and other Rigscope sensor readings.'],
   ['exports', 'Export monitoring data', 'Export Rigscope historical monitoring readings and live process details as CSV and JSON.'],
 ].map(([slug, title, description]) => ({path:`/docs/${slug}/`, title, description, source:`docs/${slug}.md`, section:'Documentation'}));
 const guides = [
-  ['monitor-multiple-linux-machines', 'Monitor multiple Linux machines from one dashboard', 'Set up a Rigscope hub and enroll Linux collectors with HTTPS, private connection grants, and per-hub sharing settings.'],
+  ['monitor-multiple-linux-machines', 'Monitor multiple Linux machines from one dashboard', 'Set up a Rigscope hub and enroll Linux collectors with the curl installer, single-use grants, and a local sharing policy.'],
   ['linux-cpu-memory-processes', 'Understand Linux CPU, memory, and process readings', 'Interpret Linux machine and process CPU, memory pressure, historical readings, and alerts with Rigscope.'],
   ['linux-gpu-monitoring', 'Monitor NVIDIA and AMD GPUs on Linux with Rigscope', 'Check Linux GPU monitoring support for NVIDIA, AMD, and Intel, then inspect available utilization, VRAM, temperature, and power readings.'],
 ].map(([slug, title, description]) => ({path:`/guides/${slug}/`, title, description, source:`website/content/guides/${slug}.md`, section:'Guides'}));
@@ -35,7 +35,7 @@ export async function buildContent({root, dist, renderContent, css}) {
   const pages = [...docs, ...guides];
   const localSources = new Map(pages.map(page => [page.source, page.path]));
   const indexes = [
-    {path:'/docs/', title:'Rigscope documentation', description:'Install, configure, and operate your self-hosted Linux system and process monitor.', section:'Documentation', entries:docs},
+    {path:'/docs/', title:'Rigscope documentation', description:'Install, configure, secure, and operate a self-hosted Linux monitor built as one static Go binary.', section:'Documentation', entries:docs},
     {path:'/guides/', title:'Linux monitoring guides', description:'Practical guides to Linux fleet monitoring, CPU and memory readings, and GPU telemetry with Rigscope.', section:'Guides', entries:guides},
   ];
   for (const page of [...pages, ...indexes]) {

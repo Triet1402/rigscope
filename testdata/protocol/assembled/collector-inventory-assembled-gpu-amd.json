@@ -1,0 +1,98 @@
+{
+  "type": "inventory",
+  "capturedAt": "2026-11-12T10:00:00.000Z",
+  "inventory": {
+    "os": {
+      "platform": "linux",
+      "release": "fixture-kernel",
+      "distro": "Fixture Linux 1.0",
+      "arch": "amd64"
+    },
+    "cpu": {
+      "model": "Fixture Single Core CPU",
+      "logicalCores": 1
+    },
+    "memory": {
+      "totalBytes": 8388608000,
+      "swapTotalBytes": null
+    },
+    "gpus": [
+      {
+        "id": "pci:0000:03:00.0",
+        "name": "AMD display adapter",
+        "vendor": "amd",
+        "pciBusId": "0000:03:00.0",
+        "telemetry": "supported",
+        "memoryTotalBytes": 8589934592
+      }
+    ],
+    "filesystems": [
+      {
+        "id": "fs:/",
+        "mountPoint": "/",
+        "device": "/dev/nvme0n1p2",
+        "fsType": "ext4",
+        "totalBytes": 4096000
+      },
+      {
+        "id": "fs:/srv/fixture",
+        "mountPoint": "/srv/fixture",
+        "device": "/dev/sdb1",
+        "fsType": "ext4",
+        "totalBytes": 4096000
+      }
+    ],
+    "disks": [
+      {
+        "id": "disk:sda",
+        "name": "sda",
+        "model": "Fixture Disk",
+        "rotational": false,
+        "sizeBytes": 1024000
+      }
+    ],
+    "network": [
+      {
+        "id": "net:eth0",
+        "name": "eth0",
+        "mac": "02:00:00:00:00:10",
+        "addresses": [],
+        "virtual": false,
+        "state": "up",
+        "speedMbps": 1000
+      },
+      {
+        "id": "net:lo",
+        "name": "lo",
+        "mac": "00:00:00:00:00:00",
+        "addresses": [],
+        "virtual": true,
+        "state": "unknown",
+        "speedMbps": null
+      }
+    ],
+    "capabilities": {
+      "cpu": {
+        "status": "supported"
+      },
+      "memory": {
+        "status": "supported"
+      },
+      "swap": {
+        "status": "supported"
+      },
+      "gpus": {
+        "status": "supported"
+      },
+      "disks": {
+        "status": "supported"
+      },
+      "network": {
+        "status": "supported"
+      },
+      "processes": {
+        "status": "supported"
+      }
+    }
+  }
+}

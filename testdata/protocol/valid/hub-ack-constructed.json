@@ -1,0 +1,11 @@
+{
+  "type": "ack",
+  "accepted": [
+    {
+      "runId": "run-constructed",
+      "sequence": 1
+    }
+  ],
+  "rejected": [],
+  "retryAfterMs": 100
+}

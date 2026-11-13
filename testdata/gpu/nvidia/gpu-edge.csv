@@ -1,0 +1,7 @@
+GPU-cccccccc-3333, NVIDIA GeForce RTX 4090, 00000000:01:00.0, 0, 512, 24564, 45, 0
+  GPU-aaaaaaaa-1111  ,  NVIDIA GeForce RTX 3090  , 00000000:C1:00.0  ,  99  ,  1  ,  2  ,  70  ,  350.5
+GPU-aaaaaaaa-1111, Duplicate row for the same UUID, 00000000:C3:00.0, 5, 5, 5, 5, 5
+GPU-dddddddd-4444, [N/A], [N/A], , , , ,
+not,csv
+, , , , , ,
+GPU-eeeeeeee-5555, NVIDIA RTX A2000, 00000000:05:00.0, [Unknown Error], [Unknown], [Not Supported], 61, [N/A]

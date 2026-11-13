@@ -1,0 +1,54 @@
+{
+  "type": "inventory",
+  "capturedAt": "2026-11-12T10:00:00.000Z",
+  "inventory": {
+    "os": {
+      "platform": "linux",
+      "release": "",
+      "distro": null,
+      "arch": "amd64"
+    },
+    "cpu": {
+      "model": null,
+      "logicalCores": 48
+    },
+    "memory": {
+      "totalBytes": null,
+      "swapTotalBytes": null
+    },
+    "gpus": [],
+    "filesystems": [],
+    "disks": [],
+    "network": [],
+    "capabilities": {
+      "cpu": {
+        "status": "unsupported",
+        "reason": "procfs unavailable"
+      },
+      "memory": {
+        "status": "unsupported",
+        "reason": "memory counters unavailable"
+      },
+      "swap": {
+        "status": "unsupported",
+        "reason": "memory counters unavailable"
+      },
+      "gpus": {
+        "status": "unsupported",
+        "reason": "no GPUs detected"
+      },
+      "disks": {
+        "status": "unsupported",
+        "reason": "mount information unavailable"
+      },
+      "network": {
+        "status": "unsupported",
+        "reason": "no network interfaces detected"
+      },
+      "processes": {
+        "status": "unsupported",
+        "reason": "processes need Linux procfs"
+      }
+    }
+  }
+}

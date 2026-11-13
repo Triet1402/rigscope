@@ -1,4 +1,4 @@
-import type { HistoryGap, HistorySeries } from "../hub/storage/history-query";
+import type { HistoryGap, HistorySeries } from "./contract";
 
 type Point = HistorySeries["points"][number];
 

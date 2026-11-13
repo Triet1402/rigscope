@@ -1,46 +1,195 @@
 # Development
 
-Use Node.js 26+ and Linux for real collection. Keep private configuration outside Git, with directories 0700 and files 0600. Public fixture credentials are only for isolated tests.
+Rigscope 1.0 is a Go program with a React/TypeScript UI. Go is the runtime;
+Node is only needed to build the static UI export and to run the TypeScript
+tests. There is no Node hub, Node collector or npm-installed Rigscope.
 
-```sh
-npm ci
-npm run dev
-```
+See [Architecture](../ARCHITECTURE.md), the
+[rewrite plan](rewrite/PLAN.md) and the
+[runtime test matrix](rewrite/test-matrix.md) for the system and its tests.
 
-Development uses `.next-dev`; production uses `.next`. Configure users and collector credentials privately before starting a hub. With no browser users it fails closed. Do not run two hubs against the same database or build output.
+## Requirements
 
-```sh
-npm run build
-npm start
-# After enrollment, in a separate terminal or service:
-npm run collector:start
-```
-
-`npm run collector:enroll` uses `COLLECTOR_ENROLL_URL` and a private `COLLECTOR_ENROLL_TOKEN`. `npm run collector:mock` emits synthetic readings. Real collection continues without a browser. See the [configuration reference](configuration.md) for variables, enrollment and sharing settings.
-
-## HTTPS boundary
-
-Local HTTP is literal loopback only. Remote access requires `HUB_PUBLIC_ORIGIN` and `HUB_SOCKET_PATH` together: an exact HTTPS origin and an absolute Unix socket inside a private directory. The TLS reverse proxy must support WebSocket upgrades, unbuffered SSE, the configured Host and long-lived connections. The remote-mode hub has no TCP listener. The CLI does not configure DNS, certificates, Tailscale or a proxy.
-
-Cookies are Secure and HttpOnly remotely; same-origin validation and machine scope apply to queries, streams and mutations. A hub restart invalidates in-memory sessions. Development HMR upgrades must reach Next.js while collector upgrades reach `/api/collector/connect`. Browser sign-in during development reconnects to the authenticated socket.
-
-```sh
-curl --fail --silent --unix-socket /path/private/hub.sock \
-  -H 'Host: monitor.example.invalid' http://localhost/api/health
-npm run validate:https
-```
-
-The validation command checks an already configured endpoint. Supply its `RIGSCOPE_VALIDATE_*` settings privately; inspect `scripts/validate-https.cjs` for the exact inputs. It does not deploy or change credentials. Health checks and anonymous rejection alone do not prove an authenticated owner stream advances or reconnects.
-
-## Targeted verification
-
-| Command | Scope / default workers |
+| | |
 | --- | --- |
-| `npm test` | Source tests; 4 concurrent files, `RIGSCOPE_TEST_CONCURRENCY` |
-| `npm run test:runtime` | Packaged runtime topology/auth/durability; 4 concurrent files, `RIGSCOPE_RUNTIME_TEST_CONCURRENCY` |
-| `npm run test:dev` | Development/HMR integration; 1 file at a time, `RIGSCOPE_DEV_TEST_CONCURRENCY` |
-| `npm run build:ui` | Production UI and TypeScript; `RIGSCOPE_BUILD_WORKERS`, default `min(4, available CPUs)` |
-| `npm run build:runtime` | Hub, collector, CLI and operations bundles |
-| `npm run typecheck` | Repository TypeScript check |
+| Go | 1.27 (`go.mod`), Linux |
+| Node | 26 or newer for the UI build and tests (the runtime harness uses Node 26's `crypto.argon2Sync`) |
+| Tools | `gofmt`, `go`, `npm`, GNU tar, gzip, sha256sum for release work |
 
-Run the narrow checks relevant to the change. Build the UI once before runtime integration tests that require it; avoid duplicate unchanged builds. Tests use isolated state and never authorize touching host services or private installed data. `RIGSCOPE_REAL_HW=1 npx tsx --test tests/sampling-real.test.ts` explicitly opts into host collection. See [releasing](releasing.md) for package validation and evidence boundaries.
+## First checkout
+
+```sh
+npm ci                 # UI/test dependencies only
+go mod download
+
+npm run typecheck      # browser/contract TypeScript
+npm test               # UI, contract and harness-support unit tests
+go vet ./...
+go test ./...          # add -race for the full gate
+```
+
+`npm test` runs `tests/*.test.ts` through Node's test runner (four files at a
+time; `RIGSCOPE_TEST_CONCURRENCY` accepts 1–16). It does not start the Go
+binary. The runtime suites are separate.
+
+## Full stack locally
+
+Build the UI, embed it and build the binary once:
+
+```sh
+npm run build:ui
+go generate ./internal/hub/webui
+go build -o ./rigscope ./cmd/rigscope
+```
+
+Then run a hub and a collector against throwaway state directories. This is the
+same shape the runtime harness uses; nothing touches an installed service.
+
+```sh
+root=$(mktemp -d)
+mkdir -p "$root/hub" "$root/collector"
+
+cat >"$root/hub/config.json" <<'JSON'
+{
+  "version": 1,
+  "components": {
+    "hub": {
+      "enabled": true,
+      "listen": "127.0.0.1",
+      "port": 8081,
+      "origin": "",
+      "tlsCert": "",
+      "tlsKey": "",
+      "trustedProxies": []
+    },
+    "collector": {
+      "enabled": false,
+      "destinations": [],
+      "samplingInterval": "2s",
+      "sharing": {
+        "cpu": true, "memory": true, "swap": true, "gpus": true,
+        "disks": true, "network": true, "networkAddresses": false,
+        "processes": true, "processArguments": false
+      },
+      "hardware": { "gpuRegisters": false }
+    }
+  }
+}
+JSON
+
+./rigscope hub --config "$root/hub/config.json" --state-dir "$root/hub"
+```
+
+In this direct development startup, the first hub start creates the `owner`
+account and prints its password once to the terminal. Managed installations
+instead set up the account during `rigscope install`. Open
+<http://127.0.0.1:8081>, sign in, and use **Administration → Add machine** to
+create a grant. Then enroll and start a collector in another terminal:
+
+```sh
+cat >"$root/collector/config.json" <<'JSON'
+{
+  "version": 1,
+  "components": {
+    "hub": {
+      "enabled": false,
+      "listen": "127.0.0.1", "port": 8081, "origin": "",
+      "tlsCert": "", "tlsKey": "", "trustedProxies": []
+    },
+    "collector": {
+      "enabled": true,
+      "destinations": [{ "url": "ws://127.0.0.1:8081/api/collector/connect" }],
+      "samplingInterval": "2s",
+      "sharing": {
+        "cpu": true, "memory": true, "swap": true, "gpus": true,
+        "disks": true, "network": true, "networkAddresses": false,
+        "processes": true, "processArguments": false
+      },
+      "hardware": { "gpuRegisters": false }
+    }
+  }
+}
+JSON
+
+./rigscope collector enroll \
+  --config "$root/collector/config.json" \
+  --state-dir "$root/collector" \
+  --grant 'PASTE-THE-GRANT'
+./rigscope collector --config "$root/collector/config.json" --state-dir "$root/collector"
+```
+
+Use `--hostname NAME` on the collector for a stable display name. SIGTERM and
+SIGINT drain the RAM queue within a bounded window and exit zero.
+
+## UI-only iteration
+
+Every UI change needs the export rebuilt and re-embedded before the Go hub
+serves it:
+
+```sh
+npm run build:ui
+go generate ./internal/hub/webui
+go build -o ./rigscope ./cmd/rigscope
+```
+
+`npx next dev` starts the UI alone on port 3000 for visual or component work.
+Its `/api/*` requests have no hub behind them there, so it is not a full-stack
+replacement; use the build-and-embed loop above for anything that reads live or
+history data.
+
+## Runtime harness
+
+The runtime suites exercise the Go binary only. `RIGSCOPE_TEST_GO_BINARY` is
+required and must be an absolute path:
+
+```sh
+npm run build:ui
+go generate ./internal/hub/webui
+go build -o "$PWD/rigscope" ./cmd/rigscope
+
+RIGSCOPE_TEST_GO_BINARY="$PWD/rigscope" npm run test:runtime
+```
+
+`RIGSCOPE_RUNTIME_TEST_CONCURRENCY` accepts 1–16 (default 4). The suites start
+isolated loopback hubs and collectors in temporary state directories; they never
+touch an installed service. See
+[the test matrix](rewrite/test-matrix.md) for what each file covers and which
+Node-prototype tests were removed.
+
+## Release artifacts
+
+The reproducible release build embeds the UI, cross-compiles amd64/arm64/armv7,
+generates both notices files and writes checksums:
+
+```sh
+sh scripts/release/build.sh 1.0.0
+sh scripts/release/verify.sh 1.0.0
+```
+
+`npm run notices` regenerates `THIRD_PARTY_NOTICES.md` for the browser bundle
+from the installed production `node_modules`; it needs no network. The Go
+notices are generated by `scripts/release/notices.sh`. The remaining manual
+release steps are in [releasing-v1.md](rewrite/releasing-v1.md).
+
+## Style
+
+- `gofmt`, `go vet ./...` and `go test ./...` pass on every commit.
+- Parsers are pure functions over bytes or an `fs.FS` so they test against
+  `testdata/` without root or real hardware.
+- Errors are values; no panics across a sampling boundary, no package-level
+  mutable state.
+- Keep the TypeScript contract modules browser-safe: no Node built-ins and no
+  server code imported by `src/app` or `src/components`.
+
+## Settings usability
+
+See the [settings access audit](settings-audit.md) for implemented CLI and hub
+UI controls, the remaining destination-enrollment improvement, and service
+management constraints.
+
+## Licensing and source builds
+
+Project-owned sources are AGPL-3.0-only; third-party code retains its licenses.
+The release source archive includes vendored Go modules and the browser package
+sources. See [Licensing](../LICENSING.md). Build a modified network deployment
+with `NEXT_PUBLIC_RIGSCOPE_SOURCE_URL` pointing to its corresponding source.

@@ -1,0 +1,63 @@
+{
+  "type": "samples",
+  "mode": "live",
+  "records": [
+    {
+      "collectorId": "collector-constructed",
+      "runId": "run-constructed",
+      "bootId": "boot-constructed",
+      "sequence": 1,
+      "capturedAt": "2026-11-12T10:00:00.500Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            10,
+            null
+          ]
+        },
+        "memory": {
+          "status": "unavailable",
+          "reason": "not supported"
+        },
+        "swap": {
+          "status": "ok",
+          "usedBytes": 0,
+          "totalBytes": 0
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": [
+            {
+              "status": "ok",
+              "id": "gpu:GPU-constructed",
+              "utilizationPercent": 4,
+              "memoryUsedBytes": null,
+              "memoryTotalBytes": null,
+              "temperatureC": null,
+              "powerWatts": null
+            }
+          ]
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [
+            {
+              "status": "ok",
+              "id": "fs:/",
+              "usedBytes": 1,
+              "totalBytes": 2
+            }
+          ],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    }
+  ]
+}

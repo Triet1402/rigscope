@@ -21,8 +21,11 @@ export function assertHealthShape(body: unknown, what: string): HubHealth {
   assertExactKeys(body, ["hubRunId", "mode", "status", "version"], what);
   const record = body as HubHealth;
   assert.equal(record.status, "ok", `${what}.status`);
-  assert.equal(record.mode, "runtime-spike", `${what}.mode`);
-  assert.match(record.version, /^\d+\.\d+\.\d+/, `${what}.version`);
+  // 1.0's only implementation decision from docs/rewrite/api-v1.md.
+  assert.equal(record.mode, "go", `${what}.mode`);
+  // A plain `go build` reports the development version; release builds use
+  // -ldflags to set a semver.
+  assert.match(record.version, /^(?:\d+\.\d+\.\d+|dev)/, `${what}.version`);
   assert.equal(typeof record.hubRunId, "string", `${what}.hubRunId must be a string`);
   assert.ok(record.hubRunId.length > 0, `${what}.hubRunId non-empty`);
   return record;

@@ -1,0 +1,66 @@
+{
+  "type": "samples",
+  "mode": "live",
+  "records": [
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 1,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": [
+            {
+              "id": "gpu:GPU-4ace4b62-1111",
+              "status": "ok",
+              "utilizationPercent": 10,
+              "memoryUsedBytes": 1,
+              "memoryTotalBytes": 5,
+              "temperatureC": 40,
+              "powerWatts": 10
+            },
+            {
+              "id": "gpu:GPU-4ace4b62-1111",
+              "status": "ok",
+              "utilizationPercent": 10,
+              "memoryUsedBytes": 1,
+              "memoryTotalBytes": 5,
+              "temperatureC": 40,
+              "powerWatts": 10
+            }
+          ]
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [],
+          "devices": []
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    }
+  ]
+}

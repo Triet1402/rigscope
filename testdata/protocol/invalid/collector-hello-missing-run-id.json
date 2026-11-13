@@ -1,0 +1,10 @@
+{
+  "type": "hello",
+  "collectorId": "collector-a",
+  "bootId": "boot-123",
+  "hostname": "mock-machine",
+  "capabilities": [
+    "metrics"
+  ],
+  "expectedIntervalMs": 5000
+}

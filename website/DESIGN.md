@@ -6,7 +6,9 @@ The document scrolls on desktop and mobile. The demo has a bounded height and sc
 The compact introduction uses the descriptive product title and leads directly
 to the wide demo. Benefits follow the demo on desktop and mobile. The desktop
 demo uses an 18px rem base and a taller viewport for easier reading. The install command wraps on narrow screens,
-with copy status and manual selection fallback.
+with copy status and manual selection fallback. A compact four-step quick start
+(install, sign in, add a machine, upgrade) and a measured light-footprint summary
+follow the product sections.
 
 The product demo directly imports the real Fleet, Overview, History and Processes
 views, their shared shell/sidebar and root stylesheet. There is no separate demo
@@ -24,7 +26,7 @@ Alerts, Connections and Administration retain their place after machine views;
 the public demo explains that configuration is available in an installation.
 Contact links to the maintainer's GitHub profile. No generated images ship.
 
-The install control is one centered code box with a 44px icon-only copy button inside its right edge. Preserve command tokens when wrapping on mobile. Geist is self-hosted under OFL 1.1 with its copyright and license included; deployed third-party notices are generated at build time.
+The install controls are two stacked, labeled code boxes: normal user installation above system-wide installation. Each has its own 44px icon-only copy button inside its right edge and independent copy feedback. Preserve command tokens when wrapping on mobile. Geist is self-hosted under OFL 1.1 with its copyright and license included; deployed third-party notices are generated at build time.
 
 
 Public documentation and guides share the landing page palette, Geist type,

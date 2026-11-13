@@ -1,0 +1,78 @@
+{
+  "type": "samples",
+  "mode": "live",
+  "records": [
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 1,
+      "capturedAt": "2026-11-12T10:00:00.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 12.5,
+          "perCore": [
+            12.5,
+            null,
+            0
+          ]
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 4000000000,
+          "totalBytes": 8000000000
+        },
+        "swap": {
+          "status": "unavailable",
+          "reason": "no swap"
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": []
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [
+            {
+              "status": "ok",
+              "id": "fs:/",
+              "usedBytes": 50000000000,
+              "totalBytes": 100000000000,
+              "inodesUsed": 1000,
+              "inodesTotal": 10000
+            },
+            {
+              "id": "fs:/boot",
+              "status": "unavailable",
+              "reason": "permission denied"
+            }
+          ],
+          "devices": [
+            {
+              "status": "ok",
+              "id": "disk:sda",
+              "readBytesPerSec": 1000.5,
+              "writeBytesPerSec": 2000.5,
+              "readLatencyMs": 1.5,
+              "writeLatencyMs": 2.5,
+              "ioUtilizationPercent": 12.5
+            },
+            {
+              "id": "disk:sdb",
+              "status": "unavailable",
+              "reason": "removed during scan"
+            }
+          ],
+          "pressureSomePercent": 2.5,
+          "pressureFullPercent": 1.5
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": []
+        }
+      }
+    }
+  ]
+}

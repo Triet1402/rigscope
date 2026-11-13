@@ -3,6 +3,7 @@ import test from "node:test";
 import { credential, demoToken } from "./support/config";
 import { startCollector, startHub } from "./support/fixtures";
 import { expectHealth } from "./support/http";
+import { failOnExit } from "./support/process";
 import { SseClient } from "./support/sse";
 import { assertSample, parseSnapshot, waitMachineState } from "./support/wire";
 
@@ -30,7 +31,7 @@ test("mock collector: samples reach SSE snapshot and update with full contract s
     intervalMs: 200,
   });
 
-  const found = await waitMachineState(live, 30_000, { machineId: cred.machineId, collectorId: cred.collectorId, withMetrics: true });
+  const found = await failOnExit(collector, waitMachineState(live, 30_000, { machineId: cred.machineId, collectorId: cred.collectorId, withMetrics: true }), "mock collector samples reaching SSE");
   const machine = found.snapshot.machines.find((m) => m.machineId === cred.machineId);
   assert.ok(machine, "mapped machine present in the delivered snapshot");
   if (machine !== undefined) {

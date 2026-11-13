@@ -1,0 +1,2 @@
+go test fuzz v1
+string("for=198.51.100.66;ext=\", for=10.1.2.3")

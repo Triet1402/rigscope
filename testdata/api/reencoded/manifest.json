@@ -1,0 +1,232 @@
+[
+  {
+    "path": "admin/audit.json",
+    "validator": "AuditEventList",
+    "shape": "json"
+  },
+  {
+    "path": "admin/collector-grants.json",
+    "validator": "GrantResponse",
+    "shape": "json"
+  },
+  {
+    "path": "admin/collectors-revoke.json",
+    "validator": "OKResponse",
+    "shape": "json"
+  },
+  {
+    "path": "admin/collectors.json",
+    "validator": "CollectorList",
+    "shape": "json"
+  },
+  {
+    "path": "admin/users-delete.json",
+    "validator": "OKResponse",
+    "shape": "json"
+  },
+  {
+    "path": "admin/users-upsert.json",
+    "validator": "OKResponse",
+    "shape": "json"
+  },
+  {
+    "path": "admin/users.json",
+    "validator": "AdminUserList",
+    "shape": "json"
+  },
+  {
+    "path": "alerts/list-active.json",
+    "validator": "AlertListResponse",
+    "shape": "json"
+  },
+  {
+    "path": "alerts/list.json",
+    "validator": "AlertListResponse",
+    "shape": "json"
+  },
+  {
+    "path": "alerts/rule-create.json",
+    "validator": "AlertRuleResponse",
+    "shape": "json"
+  },
+  {
+    "path": "alerts/rule-delete.json",
+    "validator": "OKResponse",
+    "shape": "json"
+  },
+  {
+    "path": "alerts/rule-update.json",
+    "validator": "AlertRuleResponse",
+    "shape": "json"
+  },
+  {
+    "path": "alerts/webhook-configured.json",
+    "validator": "AlertWebhookResponse",
+    "shape": "json"
+  },
+  {
+    "path": "alerts/webhook-test.json",
+    "validator": "AlertWebhookTestResponse",
+    "shape": "json"
+  },
+  {
+    "path": "alerts/webhook.json",
+    "validator": "AlertWebhookResponse",
+    "shape": "json"
+  },
+  {
+    "path": "auth/login-invalid.json",
+    "validator": "APIError",
+    "shape": "json"
+  },
+  {
+    "path": "auth/login.json",
+    "validator": "SessionResponse",
+    "shape": "json"
+  },
+  {
+    "path": "auth/logout.json",
+    "validator": "OKResponse",
+    "shape": "json"
+  },
+  {
+    "path": "auth/session-unauthorized.json",
+    "validator": "APIError",
+    "shape": "json"
+  },
+  {
+    "path": "auth/session.json",
+    "validator": "SessionResponse",
+    "shape": "json"
+  },
+  {
+    "path": "constructed/alerts-list-incident.json",
+    "validator": "AlertListResponse",
+    "shape": "json"
+  },
+  {
+    "path": "constructed/alerts-webhook-test.json",
+    "validator": "AlertWebhookTestResponse",
+    "shape": "json"
+  },
+  {
+    "path": "constructed/errors-process-budget.json",
+    "validator": "APIError",
+    "shape": "json"
+  },
+  {
+    "path": "constructed/health.json",
+    "validator": "HealthResponse",
+    "shape": "json"
+  },
+  {
+    "path": "constructed/history-query-unavailable.json",
+    "validator": "HistoryResult",
+    "shape": "json"
+  },
+  {
+    "path": "constructed/history-status-persistent.json",
+    "validator": "HistoryStatus",
+    "shape": "json"
+  },
+  {
+    "path": "constructed/machines-meta-tags.json",
+    "validator": "MachineMeta",
+    "shape": "json"
+  },
+  {
+    "path": "constructed/processes-read-with-processes.json",
+    "validator": "ProcessReadResponse",
+    "shape": "json"
+  },
+  {
+    "path": "enrollment/enroll.json",
+    "validator": "EnrollmentIdentity",
+    "shape": "json"
+  },
+  {
+    "path": "errors/unauthorized.json",
+    "validator": "APIError",
+    "shape": "json"
+  },
+  {
+    "path": "health/get.json",
+    "validator": "HealthResponse",
+    "shape": "json"
+  },
+  {
+    "path": "history/invalid-query.json",
+    "validator": "APIError",
+    "shape": "json"
+  },
+  {
+    "path": "history/metrics.json",
+    "validator": "MetricCatalogResponse",
+    "shape": "json"
+  },
+  {
+    "path": "history/query-unavailable.json",
+    "validator": "HistoryResult",
+    "shape": "json"
+  },
+  {
+    "path": "history/query.json",
+    "validator": "HistoryResult",
+    "shape": "json"
+  },
+  {
+    "path": "history/status-persistent.json",
+    "validator": "HistoryStatus",
+    "shape": "json"
+  },
+  {
+    "path": "history/status.json",
+    "validator": "HistoryStatus",
+    "shape": "json"
+  },
+  {
+    "path": "live/reset.json",
+    "validator": "HubSnapshot",
+    "shape": "sse-envelope"
+  },
+  {
+    "path": "live/snapshot.json",
+    "validator": "HubSnapshot",
+    "shape": "sse-envelope"
+  },
+  {
+    "path": "live/update.json",
+    "validator": "HubSnapshot",
+    "shape": "sse-envelope"
+  },
+  {
+    "path": "machines/meta.json",
+    "validator": "MachineMeta",
+    "shape": "json"
+  },
+  {
+    "path": "processes/acquire.json",
+    "validator": "ProcessAcquireResponse",
+    "shape": "json"
+  },
+  {
+    "path": "processes/budget-error.json",
+    "validator": "APIError",
+    "shape": "json"
+  },
+  {
+    "path": "processes/read-with-processes.json",
+    "validator": "ProcessReadResponse",
+    "shape": "json"
+  },
+  {
+    "path": "processes/read.json",
+    "validator": "ProcessReadResponse",
+    "shape": "json"
+  },
+  {
+    "path": "processes/release.json",
+    "validator": "OKResponse",
+    "shape": "json"
+  }
+]

@@ -1,0 +1,10 @@
+{
+  "type": "ack",
+  "accepted": [
+    {
+      "runId": "run-1",
+      "sequence": -1
+    }
+  ],
+  "rejected": []
+}

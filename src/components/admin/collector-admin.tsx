@@ -7,6 +7,7 @@ import {
   KeyRound,
   RefreshCw,
   ShieldOff,
+  Trash2,
   X,
 } from "lucide-react";
 
@@ -64,12 +65,17 @@ export function CollectorAdmin(props: {
   const [grantError, setGrantError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [copyStatus, setCopyStatus] = useState("");
-  const [confirmRevoke, setConfirmRevoke] = useState<CollectorRecord | null>(null);
+  // One confirmation at a time: revoke an active collector, or remove a
+  // revoked one with all of its machine's data.
+  const [confirmAction, setConfirmAction] = useState<{ collector: CollectorRecord; action: "revoke" | "remove" } | null>(null);
+  const confirmRevoke = confirmAction?.collector ?? null;
+  const setConfirmRevoke = (collector: CollectorRecord | null, action: "revoke" | "remove" = "revoke") =>
+    setConfirmAction(collector ? { collector, action } : null);
   const [revoking, setRevoking] = useState(false);
   const [revokeError, setRevokeError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
-  const grantInputRef = useRef<HTMLInputElement | null>(null);
+  const copyCommandRef = useRef<HTMLButtonElement | null>(null);
   const createRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
@@ -88,8 +94,7 @@ export function CollectorAdmin(props: {
 
   useEffect(() => {
     if (!grant) return;
-    grantInputRef.current?.focus();
-    grantInputRef.current?.select();
+    copyCommandRef.current?.focus();
   }, [grant]);
 
   const load = useCallback(async () => {
@@ -121,6 +126,20 @@ export function CollectorAdmin(props: {
     void load();
   }, [load]);
 
+  // The registry is fetched, not streamed. When the live fleet changes (a
+  // machine is revoked and drops out, or a re-enrolled one reconnects),
+  // fetch it again so a row never shows a stale Revoked or Active state.
+  const fleetKey = machines
+    .map((machine) => machine.machineId)
+    .sort()
+    .join(",");
+  const firstFleetKey = useRef(fleetKey);
+  useEffect(() => {
+    if (fleetKey === firstFleetKey.current) return;
+    firstFleetKey.current = fleetKey;
+    void load();
+  }, [fleetKey, load]);
+
   useEffect(() => {
     if (targetMachineId === "") return;
     if (!collectors.some((row) => row.machineId === targetMachineId)) {
@@ -131,7 +150,7 @@ export function CollectorAdmin(props: {
   const targets = enrollmentTargets(collectors);
   const selectedTarget = targets.find((target) => target.machineId === targetMachineId);
   const replacementMode = selectedTarget !== undefined;
-  const createdCommand = grant ? grantCommand(grant.mode, window.location.origin) : null;
+  const createdCommand = grant ? grantCommand(grant.mode, window.location.origin, grant.token) : null;
 
   const createGrant = async () => {
     if (creating) return;
@@ -173,17 +192,6 @@ export function CollectorAdmin(props: {
     }
   };
 
-  const copyGrant = async () => {
-    if (!grant) return;
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
-      await navigator.clipboard.writeText(grant.token);
-      setCopyStatus("Grant copied to the clipboard.");
-    } catch {
-      setCopyStatus("Copy failed. Select the grant field and copy it manually.");
-    }
-  };
-
   const copyCommand = async () => {
     if (!createdCommand) return;
     try {
@@ -207,12 +215,21 @@ export function CollectorAdmin(props: {
     if (!confirmRevoke || revoking) return;
     setRevoking(true);
     setRevokeError(null);
+    const removing = confirmAction?.action === "remove";
     try {
-      await api.revokeCollector(confirmRevoke.collectorId, csrfToken);
+      if (removing) {
+        await api.removeCollector(confirmRevoke.collectorId, csrfToken);
+      } else {
+        await api.revokeCollector(confirmRevoke.collectorId, csrfToken);
+      }
       if (!mountedRef.current) return;
       const label = `${confirmRevoke.collectorId} on ${confirmRevoke.machineId}`;
       setConfirmRevoke(null);
-      setAnnouncement(`Revoked ${label}. Its live stream was disconnected.`);
+      setAnnouncement(
+        removing
+          ? `Removed ${machineLabel(confirmRevoke.machineId)} and all of its data.`
+          : `Revoked ${label}. Its live stream was disconnected.`,
+      );
       onAuditChange();
       await load();
     } catch (error) {
@@ -224,7 +241,7 @@ export function CollectorAdmin(props: {
       setRevokeError(
         isForbidden(error)
           ? "Your account does not have access to that collector's machine."
-          : friendlyError(error, "Could not revoke that collector."),
+          : friendlyError(error, removing ? "Could not remove that machine." : "Could not revoke that collector."),
       );
     } finally {
       if (mountedRef.current) setRevoking(false);
@@ -367,6 +384,18 @@ export function CollectorAdmin(props: {
                             <KeyRound className="h-3.5 w-3.5" aria-hidden />
                             Re-enroll
                           </button>
+                          <button
+                            type="button"
+                            className={ADMIN_BUTTON_QUIET}
+                            aria-expanded={confirming}
+                            onClick={() => {
+                              setRevokeError(null);
+                              setConfirmRevoke(confirming ? null : collector, "remove");
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                            Remove
+                          </button>
                         </div>
                       )}
                     </div>
@@ -376,12 +405,21 @@ export function CollectorAdmin(props: {
                         role="alert"
                         className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md bg-crit-soft px-3 py-2"
                       >
-                        <p className="min-w-0 flex-1 text-xs text-foreground">
-                          Revoke <strong className="font-medium">{collector.collectorId}</strong>{" "}
-                          on <strong className="font-medium">{machineLabel(collector.machineId)}</strong>?
-                          This disconnects the collector and invalidates its credential. To bring it
-                          back later, create a re-enrollment grant for this machine.
-                        </p>
+                        {confirmAction?.action === "remove" ? (
+                          <p className="min-w-0 flex-1 text-xs text-foreground">
+                            Remove <strong className="font-medium">{machineLabel(collector.machineId)}</strong>{" "}
+                            permanently? This deletes its collector record, name and tags, alert rules
+                            and incidents, and all of its stored history. It cannot be undone. To
+                            monitor this machine again, add it as a new machine.
+                          </p>
+                        ) : (
+                          <p className="min-w-0 flex-1 text-xs text-foreground">
+                            Revoke <strong className="font-medium">{collector.collectorId}</strong>{" "}
+                            on <strong className="font-medium">{machineLabel(collector.machineId)}</strong>?
+                            This disconnects the collector and invalidates its credential. To bring it
+                            back later, create a re-enrollment grant for this machine.
+                          </p>
+                        )}
                         <div className="flex flex-wrap gap-1.5">
                           <button
                             type="button"
@@ -389,7 +427,13 @@ export function CollectorAdmin(props: {
                             onClick={() => void revoke()}
                             disabled={revoking}
                           >
-                            {revoking ? "Revoking…" : "Revoke collector"}
+                            {confirmAction?.action === "remove"
+                              ? revoking
+                                ? "Removing…"
+                                : "Remove machine"
+                              : revoking
+                                ? "Revoking…"
+                                : "Revoke collector"}
                           </button>
                           <button
                             type="button"
@@ -514,42 +558,22 @@ export function CollectorAdmin(props: {
                 </span>
               </InlineNotice>
 
-              <div className="flex min-w-0 flex-col gap-1.5">
-                <label htmlFor={fid("grant-token")} className="text-xs font-medium">
-                  One-time grant
-                </label>
-                <div className="flex min-w-0 flex-wrap gap-1.5">
-                  <input
-                    ref={grantInputRef}
-                    id={fid("grant-token")}
-                    readOnly
-                    autoComplete="off"
-                    spellCheck={false}
-                    value={grant.token}
-                    onFocus={(event) => event.currentTarget.select()}
-                    className={`${ADMIN_INPUT} tnum min-w-0 flex-1 break-all`}
-                  />
-                  <button type="button" className={ADMIN_BUTTON_SECONDARY} onClick={() => void copyGrant()}>
-                    <ClipboardCopy className="h-3.5 w-3.5" aria-hidden />
-                    Copy grant
-                  </button>
-                </div>
-                <p className="sr-only" role="status">
-                  {copyStatus}
-                </p>
-                {copyStatus ? <p className="text-xs text-muted-foreground">{copyStatus}</p> : null}
-              </div>
-
               <div className="min-w-0">
-                <p className="text-xs font-medium">Run on the new machine</p>
+                <p className="text-xs font-medium">
+                  {grant.mode === "new" ? "Run on the new machine" : "Run on the existing machine"}
+                </p>
                 <pre className="mt-1.5 overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-card-strong p-3 text-xs text-foreground">
                   <code>{createdCommand.command}</code>
                 </pre>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <button type="button" className={ADMIN_BUTTON_SECONDARY} onClick={() => void copyCommand()}>
+                  <button ref={copyCommandRef} type="button" className={ADMIN_BUTTON_SECONDARY} onClick={() => void copyCommand()}>
                     <ClipboardCopy className="h-3.5 w-3.5" aria-hidden />Copy command
                   </button>
+                  {copyStatus ? <span className="text-xs text-muted-foreground">{copyStatus}</span> : null}
                 </div>
+                <p className="sr-only" role="status">
+                  {copyStatus}
+                </p>
                 <p className="mt-2 text-xs text-muted-foreground">{createdCommand.note}</p>
               </div>
             </section>

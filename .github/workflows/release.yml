@@ -1,0 +1,82 @@
+name: Release artifacts
+
+# Manual only. Builds the release assets, verifies them locally against the
+# produced tarballs and keeps them as workflow artifacts.
+#
+# This workflow never publishes: it does not push a tag, create a GitHub
+# Release, deploy the website or touch npm. Those are separate manual steps in
+# docs/rewrite/releasing-v1.md.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version without the leading v (for example 1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and verify release artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Use Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.27.4"
+
+      - name: Use Node 26
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "26.13.0"
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Validate the version input
+        id: version
+        env:
+          VERSION_INPUT: ${{ inputs.version }}
+        run: |
+          version="${VERSION_INPUT#v}"
+          case "$version" in
+            '' | . | ..) echo "version is required" >&2; exit 1 ;;
+            *[!0-9A-Za-z.+-]*) echo "invalid version: $version" >&2; exit 1 ;;
+            [0-9A-Za-z]*) ;;
+            *) echo "invalid version: $version" >&2; exit 1 ;;
+          esac
+          printf 'version=%s\n' "$version" >>"$GITHUB_OUTPUT"
+
+      - name: Build release artifacts
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: sh scripts/release/build.sh "$VERSION"
+
+      - name: Verify release artifacts
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: sh scripts/release/verify.sh "$VERSION"
+
+      - name: Show checksums
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: cat "build/release/v${VERSION}/checksums.txt"
+
+      # Workflow artifacts only. Creating the public GitHub Release is the
+      # manual step documented in docs/rewrite/releasing-v1.md.
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rigscope-${{ steps.version.outputs.version }}
+          path: build/release/v${{ steps.version.outputs.version }}/
+          if-no-files-found: error
+          retention-days: 30

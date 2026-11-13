@@ -9,7 +9,7 @@ import { loginBrowser, BROWSER_PASSWORD } from './support/browser';
 /** End-to-end admin changes use the packaged composition root and real cookies/sockets. */
 test('packaged administration preserves scoped authorization and revokes existing access immediately', async t => {
   const creds = credential('admin-test-collector', 'admin-test-machine', 'public-admin-collector-token');
-  const hub = await startHub(t, { collectors: [creds], stateFile: undefined,
+  const hub = await startHub(t, { collectors: [creds],
     browserUsers: [{ username: 'owner', machineIds: '*', admin: true }, { username: 'viewer', machineIds: [creds.machineId] }] });
   const owner = await loginBrowser(hub.baseUrl, 'owner', BROWSER_PASSWORD);
   const viewer = await loginBrowser(hub.baseUrl, 'viewer', BROWSER_PASSWORD);

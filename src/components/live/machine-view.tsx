@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Machine drilldown at /machines/[machineId].
+ * Machine drilldown at /machines?machineId=&lt;id&gt;.
  *
  * The view is built from one deterministic `machineResourceView` deriving
  * every panel from the machine's latest metrics record: per-core CPU, swap,
@@ -216,7 +216,7 @@ function MachineUnavailablePanels({ machineId, machineCount }: { machineId: stri
 
 export function MachineView({ machineId }: { machineId: string }) {
   const { phase, machines } = useLive();
-  // The route path segment is the explicit machine; resolution (and the
+  // The query string is the explicit machine; resolution (and the
   // remembering that carries it to other views) belongs to the Machine
   // selection module.
   const { machine: routeMachine } = useMachineSelection("overview", machineId);

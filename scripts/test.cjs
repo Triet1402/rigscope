@@ -2,38 +2,28 @@
 /**
  * Shared test runner. Node's test runner gives each file its own process.
  *
- *   node scripts/test.cjs                       # tests/*.test.ts, four files at once
- *   node scripts/test.cjs --suite development   # tests/development/*.integration.ts, one at a time
+ *   node scripts/test.cjs                  # tests/*.test.ts, four files at once
  *
  * Extra arguments are forwarded to `node --test`:
  *   node scripts/test.cjs --test-name-pattern=session
  *
- * RIGSCOPE_TEST_CONCURRENCY and RIGSCOPE_DEV_TEST_CONCURRENCY accept 1..16.
+ * RIGSCOPE_TEST_CONCURRENCY accepts 1..16.
  */
 const { readdirSync } = require("node:fs");
 const { spawn } = require("node:child_process");
 const { join } = require("node:path");
 
 const root = join(__dirname, "..");
-const suites = {
-  source: {
-    directory: "tests",
-    extension: ".test.ts",
-    concurrencyEnv: "RIGSCOPE_TEST_CONCURRENCY",
-    defaultConcurrency: 4,
-  },
-  development: {
-    directory: "tests/development",
-    extension: ".integration.ts",
-    concurrencyEnv: "RIGSCOPE_DEV_TEST_CONCURRENCY",
-    defaultConcurrency: 1,
-  },
+const suite = {
+  directory: "tests",
+  extension: ".test.ts",
+  concurrencyEnv: "RIGSCOPE_TEST_CONCURRENCY",
+  defaultConcurrency: 4,
 };
 
-const USAGE = `Usage: node scripts/test.cjs [--suite source|development] [--dry-run] [node --test flags]
+const USAGE = `Usage: node scripts/test.cjs [--dry-run] [node --test flags]
 
   source       tests/*.test.ts (RIGSCOPE_TEST_CONCURRENCY, default 4)
-  development  tests/development/*.integration.ts (RIGSCOPE_DEV_TEST_CONCURRENCY, default 1)
 `;
 
 function fail(message) {
@@ -42,27 +32,12 @@ function fail(message) {
 }
 
 function parseArguments(argv) {
-  let suiteName = "source";
   let dryRun = false;
   const forwarded = [];
-  for (let index = 0; index < argv.length; index += 1) {
-    const argument = argv[index];
+  for (const argument of argv) {
     if (argument === "--help" || argument === "-h") {
       console.log(USAGE);
       process.exit(0);
-    }
-    if (argument === "--suite") {
-      const value = argv[index + 1];
-      if (value === undefined || value.startsWith("-")) {
-        throw new Error("--suite requires source or development");
-      }
-      suiteName = value;
-      index += 1;
-      continue;
-    }
-    if (argument.startsWith("--suite=")) {
-      suiteName = argument.slice("--suite=".length);
-      continue;
     }
     if (argument === "--dry-run") {
       dryRun = true;
@@ -70,13 +45,10 @@ function parseArguments(argv) {
     }
     forwarded.push(argument);
   }
-  if (!Object.hasOwn(suites, suiteName)) {
-    throw new Error(`unknown test suite ${JSON.stringify(suiteName)}; use --suite source or --suite development`);
-  }
-  return { suite: suites[suiteName], suiteName, dryRun, forwarded };
+  return { dryRun, forwarded };
 }
 
-function testFiles(suite) {
+function testFiles() {
   const files = readdirSync(join(root, suite.directory), { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith(suite.extension))
     .map((entry) => `${suite.directory}/${entry.name}`)
@@ -87,7 +59,7 @@ function testFiles(suite) {
   return files;
 }
 
-function concurrencyFor(suite) {
+function concurrency() {
   const raw = process.env[suite.concurrencyEnv];
   const value = raw === undefined || raw === "" ? suite.defaultConcurrency : Number(raw);
   if (!Number.isInteger(value) || value < 1 || value > 16) {
@@ -100,18 +72,18 @@ function concurrencyFor(suite) {
 }
 
 function main() {
-  const { suite, suiteName, dryRun, forwarded } = parseArguments(process.argv.slice(2));
-  const concurrency = concurrencyFor(suite);
-  const files = testFiles(suite);
+  const { dryRun, forwarded } = parseArguments(process.argv.slice(2));
+  const workers = concurrency();
+  const files = testFiles();
   const args = [
     "--import", "tsx",
     "--test",
-    `--test-concurrency=${concurrency}`,
+    `--test-concurrency=${workers}`,
     ...forwarded,
     ...files,
   ];
   if (dryRun) {
-    console.log(JSON.stringify({ suite: suiteName, concurrency, command: [process.execPath, ...args] }));
+    console.log(JSON.stringify({ suite: "source", concurrency: workers, command: [process.execPath, ...args] }));
     return;
   }
   const child = spawn(process.execPath, args, { cwd: root, stdio: "inherit", env: process.env });

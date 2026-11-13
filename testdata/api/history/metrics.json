@@ -1,0 +1,103 @@
+{
+  "metrics": {
+    "cpu.usage": {
+      "unit": "percent"
+    },
+    "cpu.core": {
+      "unit": "percent"
+    },
+    "cpu.temperature": {
+      "unit": "celsius"
+    },
+    "cpu.power": {
+      "unit": "watts"
+    },
+    "cpu.iowait": {
+      "unit": "percent"
+    },
+    "cpu.pressure": {
+      "unit": "percent"
+    },
+    "memory.used": {
+      "unit": "bytes"
+    },
+    "memory.total": {
+      "unit": "bytes"
+    },
+    "memory.usage": {
+      "unit": "percent"
+    },
+    "memory.pressure.some": {
+      "unit": "percent"
+    },
+    "memory.pressure.full": {
+      "unit": "percent"
+    },
+    "swap.used": {
+      "unit": "bytes"
+    },
+    "swap.total": {
+      "unit": "bytes"
+    },
+    "gpu.utilization": {
+      "unit": "percent"
+    },
+    "gpu.memory.used": {
+      "unit": "bytes"
+    },
+    "gpu.memory.total": {
+      "unit": "bytes"
+    },
+    "gpu.temperature": {
+      "unit": "celsius"
+    },
+    "gpu.junction.temperature": {
+      "unit": "celsius"
+    },
+    "gpu.vram.temperature": {
+      "unit": "celsius"
+    },
+    "gpu.power": {
+      "unit": "watts"
+    },
+    "fs.used": {
+      "unit": "bytes"
+    },
+    "fs.total": {
+      "unit": "bytes"
+    },
+    "fs.usage": {
+      "unit": "percent"
+    },
+    "fs.inodes.usage": {
+      "unit": "percent"
+    },
+    "io.pressure.some": {
+      "unit": "percent"
+    },
+    "io.pressure.full": {
+      "unit": "percent"
+    },
+    "disk.read": {
+      "unit": "bytes_per_second"
+    },
+    "disk.write": {
+      "unit": "bytes_per_second"
+    },
+    "disk.read.latency": {
+      "unit": "milliseconds"
+    },
+    "disk.write.latency": {
+      "unit": "milliseconds"
+    },
+    "disk.utilization": {
+      "unit": "percent"
+    },
+    "net.rx": {
+      "unit": "bytes_per_second"
+    },
+    "net.tx": {
+      "unit": "bytes_per_second"
+    }
+  }
+}

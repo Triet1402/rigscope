@@ -1,0 +1,11 @@
+{
+  "type": "detail.result",
+  "subscriptionId": "sub-1",
+  "capturedAt": "2026-11-12T10:00:00.000Z",
+  "snapshot": {
+    "totalProcesses": 0,
+    "truncated": false,
+    "inaccessible": 0,
+    "processes": []
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "rule": {
+    "id": "00000000-0000-4000-8000-000000000104",
+    "name": "Fixture CPU high",
+    "machineId": "fixture-machine-1",
+    "metric": "cpu.usage",
+    "resourceId": "",
+    "condition": "above",
+    "threshold": 0,
+    "durationMs": 0,
+    "enabled": true,
+    "maintenanceUntil": null,
+    "state": "ok",
+    "pendingSince": null,
+    "activeIncidentId": null,
+    "lastValue": null,
+    "lastObservedAt": null,
+    "createdAt": "2026-11-12T10:11:06.139Z",
+    "updatedAt": "2026-11-12T10:11:06.139Z"
+  }
+}

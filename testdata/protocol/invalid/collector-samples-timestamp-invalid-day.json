@@ -1,0 +1,20 @@
+{
+  "type": "samples",
+  "mode": "live",
+  "records": [
+    {
+      "collectorId": "collector-a",
+      "runId": "run-1",
+      "bootId": "boot-123",
+      "sequence": 1,
+      "capturedAt": "2026-02-30T10:00:00.000Z",
+      "kind": "gap",
+      "payload": {
+        "fromCapturedAt": "2026-02-28T09:59:00.000Z",
+        "toCapturedAt": "2026-02-28T10:00:00.000Z",
+        "droppedRecords": 1,
+        "reason": "rejected"
+      }
+    }
+  ]
+}

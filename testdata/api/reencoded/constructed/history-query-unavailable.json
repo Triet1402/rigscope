@@ -1,0 +1,38 @@
+{
+  "machineId": "fixture-machine-1",
+  "fromMs": 1794470820000,
+  "toMs": 1794470880000,
+  "stepMs": 1000,
+  "tier": "1s",
+  "series": [
+    {
+      "metric": "cpu.usage",
+      "resourceId": "",
+      "unit": "percent",
+      "points": [
+        {
+          "t": 1794470876000,
+          "min": null,
+          "max": null,
+          "avg": null
+        },
+        {
+          "t": 1794470877000,
+          "min": 1.5,
+          "max": 2.5,
+          "avg": 2
+        }
+      ]
+    }
+  ],
+  "gaps": [
+    {
+      "fromMs": 1794470876000,
+      "toMs": 1794470877000,
+      "kind": "missing",
+      "reason": "expected interval missed"
+    }
+  ],
+  "truncated": false,
+  "elapsedMs": 1.25
+}

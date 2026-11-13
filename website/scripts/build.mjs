@@ -9,12 +9,15 @@ import {resolve} from 'node:path';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const dist = resolve(root, 'dist');
+// Remove pages from earlier builds so deleted documentation cannot remain in
+// the deployed output or disagree with the generated sitemap.
+await rm(dist, {recursive:true, force:true});
 await mkdir(dist, {recursive:true});
 const asset = async name => '/' + name + '?v=' + createHash('sha256').update(await readFile(resolve(dist, name))).digest('hex').slice(0, 12);
 await mkdir(resolve(root, '.build'), {recursive:true});
 const shared = {
   absWorkingDir:root, bundle:true, jsx:'automatic', minify:true, external:['/fonts/*'],
-  define:{'process.env.NODE_ENV':'"production"'}, logLevel:'info',
+  define:{'process.env.NODE_ENV':'"production"', 'process.env.NEXT_PUBLIC_RIGSCOPE_VERSION':'"1.0.0"', 'process.env.NEXT_PUBLIC_RIGSCOPE_SOURCE_URL':'""'}, logLevel:'info',
   // TypeScript maps React types into this app for the shared BrandMark. Runtime
   // imports must resolve to actual packages instead of those declaration files.
   tsconfigRaw:{compilerOptions:{jsx:'react-jsx'}},
@@ -24,6 +27,10 @@ await build({...shared, entryPoints:['src/render.tsx'], outfile:'.build/render.m
 const {render, renderContent} = await import(pathToFileURL(resolve(root, '.build/render.mjs')).href + '?t=' + Date.now());
 const body = render();
 await cp(resolve(root, 'public'), dist, {recursive:true});
+// The canonical installer is hosted at https://rigscope.dev/install.sh. Copy
+// the release tooling's script into the site output so the site can never drift
+// from the tested installer. Deployment remains a separate manual step.
+await cp(resolve(root, '../scripts/install.sh'), resolve(dist, 'install.sh'));
 const notices = ['Rigscope website third-party notices\n\nGeist font (SIL Open Font License 1.1)\n' + await readFile(resolve(root, 'public/fonts/Geist-LICENSE.txt'), 'utf8')];
 for (const [name, license] of [['react','LICENSE'], ['react-dom','LICENSE'], ['scheduler','LICENSE'], ['next-themes','license.md'], ['lucide-react','LICENSE'], ['tailwindcss','LICENSE']]) {
   const manifest = JSON.parse(await readFile(resolve(root, 'node_modules', name, 'package.json'), 'utf8'));
@@ -32,8 +39,8 @@ for (const [name, license] of [['react','LICENSE'], ['react-dom','LICENSE'], ['s
 await writeFile(resolve(dist, 'NOTICES.txt'), notices.join('\n\n---\n\n'));
 
 await writeFile(resolve(dist, 'index.html'), documentHtml({
-  title:'Rigscope — Self-hosted Linux System & Process Monitor',
-  description:'Monitor Linux CPU, memory, GPUs, disks, networks, and processes with Rigscope. Self-host your dashboard, review history, and set alerts for your machines.',
+  title:'Rigscope — Self-hosted Linux Monitoring in One Binary',
+  description:'One static Go binary for self-hosted Linux monitoring: CPU, memory, GPUs, disks, networks, processes, history, and alerts. No Node.js, npm, or database server.',
   path:'/', body:`<div id="root">${body}</div>`, css:await asset('app.css'), script:await asset('app.js'),
 }));
 await buildContent({root, dist, renderContent, css:await asset('app.css')});

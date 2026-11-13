@@ -1,0 +1,5 @@
+{
+  "username": "fixture-admin",
+  "csrfToken": "fixture-csrf-token",
+  "admin": true
+}

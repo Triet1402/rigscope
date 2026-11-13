@@ -1,18 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
-import { DatabaseSync } from 'node:sqlite';
+import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startChild } from './support/process';
-import { baseEnv, startHub } from './support/fixtures';
+import { startCollectorProcess, startEnrollmentProcess } from './support/launcher';
+import { failOnExit } from './support/process';
+import { startHub } from './support/fixtures';
 import { loginBrowser } from './support/browser';
 import { credential } from './support/config';
+import { within } from './support/deadline';
 import { SseClient } from './support/sse';
 import { parseHubSnapshot, type MachineState } from '../../src/contracts';
-import { DestinationOutbox, outboxDirFor } from '../../collector/destinations/outbox';
-import { createSyntheticMetricsSampler } from '../../collector/sampling/synthetic';
-import { createSequenceAllocator } from '../../collector/sampling/sequence';
 
 async function waitMetrics(live: SseClient, minimumSequence = -1): Promise<MachineState> {
   const deadline = Date.now() + 20000;
@@ -24,111 +22,178 @@ async function waitMetrics(live: SseClient, minimumSequence = -1): Promise<Machi
   throw new Error('metrics did not arrive');
 }
 
-test('packaged collector replays a retained canonical queue and reapplies local privacy', async t => {
-  const dir = mkdtempSync(join(tmpdir(), 'rigscope-retained-runtime-'));
-  t.after(() => rmSync(dir, {recursive: true, force: true}));
-  const collectorId = 'retained-runtime-collector';
-  const creds = credential(collectorId, 'retained-machine', 'public-retained-token');
-  const databasePath = join(dir, 'hub', 'telemetry.sqlite');
-  const hub = await startHub(t, {collectors: [creds], databasePath});
-  const statePath = join(dir, 'collector.json');
-  writeFileSync(statePath, JSON.stringify({collectorId,
-    destinations: [{url: hub.collectorWsUrl, token: creds.token, sharing: {cpu: true, memory: false}}]}), {mode: 0o600});
-  const identity = {collectorId, runId: 'retained-run', bootId: 'retained-boot'};
-  const record = createSyntheticMetricsSampler(identity, {sequence: createSequenceAllocator(), now: () => Date.now() - 2000}).next();
-  const queueDir = outboxDirFor(dir, hub.collectorWsUrl);
-  const outbox = DestinationOutbox.open({dir: queueDir, identity, allocateSequence: () => 100});
-  outbox.append(record);
-  outbox.close();
-  const spool = new DatabaseSync(join(queueDir, 'outbox.sqlite'));
-  const gap = {...identity, sequence: 2, kind: 'gap', capturedAt: record.capturedAt,
-    payload: {fromCapturedAt: record.capturedAt, toCapturedAt: record.capturedAt, droppedRecords: 1, reason: 'outbox-age'}};
-  const json = JSON.stringify(gap);
-  spool.prepare("INSERT INTO outbox_records (run_id,sequence,captured_at,kind,state,gap_reason,offered,bytes,json) VALUES (?,?,?,'gap','inflight','outbox-age',1,?,?)")
-    .run(identity.runId, 2, gap.capturedAt, Buffer.byteLength(json), json);
-  spool.close();
+/** Wait for a settled CPU reading so the history assertions are meaningful. */
+async function waitSettledMetrics(
+  live: SseClient,
+  minimumSequence = -1,
+  excludeRunId?: string,
+): Promise<MachineState> {
+  const deadline = Date.now() + 20000;
+  while (Date.now() < deadline) {
+    const event = await live.next(Math.max(1, deadline - Date.now()));
+    const machine = parseHubSnapshot(JSON.parse(event.data)).machines[0];
+    const metrics = machine?.metrics;
+    if (!metrics) continue;
+    // After a restart the live snapshot can still hold the previous process's
+    // last sample. A new runId is the only proof this is the new collector.
+    if (excludeRunId !== undefined && metrics.runId === excludeRunId) continue;
+    if (excludeRunId === undefined && metrics.sequence <= minimumSequence) continue;
+    if (metrics.payload.cpu.status === 'ok') return machine;
+  }
+  throw new Error('settled metrics did not arrive');
+}
+
+type HistoryBody = {
+  series: Array<{ metric: string; points: Array<{ min: number | null; max: number | null }> }>;
+};
+
+async function waitHistory(
+  hubBase: string,
+  headers: Record<string, string>,
+  machineId: string,
+  metrics: string,
+  predicate: (body: HistoryBody) => boolean,
+): Promise<HistoryBody> {
+  const url = `${hubBase}/api/history?machineId=${machineId}&metrics=${metrics}` +
+    `&from=${Date.now() - 60_000}&to=${Date.now() + 5_000}`;
+  const deadline = Date.now() + 15_000;
+  let body: HistoryBody = { series: [] };
+  while (Date.now() < deadline) {
+    const response = await fetch(url, { headers });
+    assert.equal(response.status, 200);
+    body = await response.json() as HistoryBody;
+    if (predicate(body)) return body;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return body;
+}
+
+async function waitInventoryMachine(live: SseClient, machineId: string): Promise<MachineState> {
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) {
+    const event = await live.next(Math.max(1, deadline - Date.now()));
+    const machine = parseHubSnapshot(JSON.parse(event.data)).machines[0];
+    if (machine?.machineId === machineId && machine.inventory) return machine;
+  }
+  throw new Error('inventory did not arrive');
+}
+
+/**
+ * The enrollment-time sharing policy is part of the installation: it survives
+ * a restart, withholds memory from live state, inventory and persistent
+ * history, and never fabricates a memory reading.
+ */
+test('packaged collector: enrollment sharing withholds memory across restart while CPU reaches history', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'rigscope-privacy-runtime-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const token = 'demo-token-enroll-privacy';
+  const hubDir = join(dir, 'hub');
+  const stateDir = join(dir, 'collector');
+  const hub = await startHub(t, {
+    stateDir: hubDir,
+    telemetryMode: 'persistent',
+    databasePath: join(hubDir, 'telemetry.sqlite'),
+    grants: [{ token, expiresAt: new Date(Date.now() + 600000).toISOString() }],
+  });
+  const enrollment = startEnrollmentProcess(t, {
+    label: 'privacy enrollment',
+    stateDir,
+    url: hub.collectorWsUrl,
+    token,
+    sharing: { cpu: true, memory: false },
+  });
+  assert.equal((await within(enrollment.exit, 10000, 'privacy enrollment')).code, 0, enrollment.dump());
 
   const live = new SseClient(hub.liveUrl, hub.browserHeaders);
   t.after(() => live.close());
-  const collector = startChild('retained-real-collector', ['dist/collector.cjs'], baseEnv('collector', {
-    COLLECTOR_MODE: 'real', COLLECTOR_STATE_FILE: statePath, COLLECTOR_INTERVAL_MS: '500',
-    // Replaying a retained queue is the durable mode; the default RAM queue
-    // intentionally cannot recover another run's unacknowledged samples.
-    COLLECTOR_QUEUE_MODE: 'durable',
-  }));
-  t.after(() => collector.stop());
-  const current = await waitMetrics(live);
-  assert.notEqual(current.metrics!.runId, identity.runId, 'replay cannot replace fresh live metrics');
-  const from = Date.parse(record.capturedAt) - 5_000;
-  const historyUrl = `${hub.baseUrl}/api/history?machineId=${creds.machineId}` +
-    `&metrics=cpu.usage,memory.used,cpu.temperature&from=${from}&to=${Date.now() + 5_000}`;
-  type HistoryBody = {
-    series: Array<{ metric: string; points: Array<{ min: number | null; max: number | null }> }>;
-  };
-  let history: HistoryBody | null = null;
-  const deadline = Date.now() + 10_000;
-  while (Date.now() < deadline) {
-    const response = await fetch(historyUrl, { headers: hub.browserHeaders });
-    assert.equal(response.status, 200);
-    history = await response.json() as HistoryBody;
-    if (history.series.some((series) => series.metric === 'memory.used' && series.points.length > 0)) break;
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  // Retained canonical fields replay unchanged, while the state sharing policy
-  // is applied again before the record leaves the collector. In the default
-  // memory mode this history is RAM-only, never a points_raw row.
-  assert.equal(record.payload.cpu.status, 'ok');
-  assert.equal(record.payload.memory.status, 'ok');
-  const memorySeries = history?.series.find(series => series.metric === 'memory.used');
-  assert.ok(memorySeries, 'replayed memory series reached RAM history');
-  assert.ok(memorySeries.points.every(point => point.min === null && point.max === null),
-    'withheld memory never reaches the hub as a value');
-  assert.ok(history?.series.some(series => series.metric === 'cpu.usage' && series.points.length > 0));
+  const collector = startCollectorProcess(t, {
+    label: 'privacy collector',
+    mode: 'real',
+    stateDir,
+    intervalMs: 250,
+  });
+  const first = await failOnExit(collector, waitSettledMetrics(live), 'privacy metrics');
+  assert.equal(first.metrics!.payload.cpu.status, 'ok', 'real CPU reaches live state');
+  assert.deepEqual(
+    first.metrics!.payload.memory,
+    { status: 'unavailable', reason: 'withheld by local sharing policy' },
+    'enrollment policy withholds memory live',
+  );
+  const inventoried = await failOnExit(collector, waitInventoryMachine(live, first.machineId), 'privacy inventory');
+  assert.equal(inventoried.inventory!.capabilities.memory.status, 'withheld', 'inventory carries the same policy');
 
-  // Memory mode deliberately writes no telemetry rows/receipts/gaps.
-  const db = new DatabaseSync(databasePath, {readOnly: true});
-  try {
-    for (const table of ['points_raw', 'points_10s', 'sample_receipts', 'gaps', 'machine_latest']) {
-      assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get()!.count, 0,
-        `${table} must stay empty in memory mode`);
-    }
-  } finally { db.close(); }
-  const state = JSON.parse(readFileSync(statePath, 'utf8'));
-  assert.equal(state.collectorId, collectorId);
-  assert.equal(state.destinations[0].url, hub.collectorWsUrl);
-  assert.equal(state.destinations[0].token, creds.token);
-  assert.deepEqual(state.destinations[0].sharing, {cpu: true, memory: false});
+  // CPU reaches history, while withheld memory can only appear as null points.
+  const history = await waitHistory(
+    hub.baseUrl,
+    hub.browserHeaders,
+    first.machineId,
+    'cpu.usage,memory.used',
+    body => body.series.some(series => series.metric === 'cpu.usage' && series.points.length > 0),
+  );
+  const cpu = history.series.find(series => series.metric === 'cpu.usage');
+  assert.ok(cpu && cpu.points.length > 0, 'CPU reaches persistent history');
+  const memory = history.series.find(series => series.metric === 'memory.used');
+  assert.ok(
+    memory === undefined || memory.points.every(point => point.min === null && point.max === null),
+    'withheld memory never becomes a value in history',
+  );
+
+  // A restart rebuilds the runtime config from the installation; the
+  // enrollment-time policy must survive that rebuild unchanged.
   assert.equal((await collector.stop()).code, 0);
+  const restarted = startCollectorProcess(t, {
+    label: 'privacy collector restart',
+    mode: 'real',
+    stateDir,
+    intervalMs: 250,
+  });
+  const after = await failOnExit(
+    restarted,
+    waitSettledMetrics(live, -1, first.metrics!.runId),
+    'privacy restart metrics',
+  );
+  assert.equal(after.collectorId, first.collectorId, 'restart preserves the installation identity');
+  assert.notEqual(after.metrics!.runId, first.metrics!.runId, 'the restart samples under a new runId');
+  assert.deepEqual(
+    after.metrics!.payload.memory,
+    { status: 'unavailable', reason: 'withheld by local sharing policy' },
+    'enrollment sharing survives the restart/config rebuild',
+  );
+  assert.equal((await restarted.stop()).code, 0);
 });
 
-test('packaged real collector: multi-hub live/history, process interests and durable hub restart', async t => {
+/**
+ * Persistent history, process-detail interests and hub-restart recovery on a
+ * single hub. 1.0 has one hub per collector and a bounded RAM queue, so the
+ * multi-hub and durable-outbox variants are gone.
+ */
+test('packaged real collector: persistent live/history, process interests and hub restart', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'rigscope-durable-runtime-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const collectorId = 'real-runtime-collector';
-  const credsA = credential(collectorId, 'machine-a', 'public-token-a');
-  const credsB = credential(collectorId, 'machine-b', 'public-token-b');
-  const databasePath = join(dir, 'hub-a', 'telemetry.sqlite');
-  const hubA = await startHub(t, { collectors: [credsA], databasePath, telemetryMode: 'persistent', telemetryFlushMs: 1000 });
-  const hubB = await startHub(t, { collectors: [credsB], databasePath: join(dir, 'hub-b', 'telemetry.sqlite'), telemetryMode: 'persistent', telemetryFlushMs: 1000 });
-  const statePath = join(dir, 'collector.json');
-  writeFileSync(statePath, JSON.stringify({ collectorId, destinations: [
-    { url: hubA.collectorWsUrl, token: credsA.token }, { url: hubB.collectorWsUrl, token: credsB.token },
-  ] }), { mode: 0o600 });
-  const liveA = new SseClient(hubA.liveUrl, hubA.browserHeaders);
-  const liveB = new SseClient(hubB.liveUrl, hubB.browserHeaders);
-  t.after(() => { liveA.close(); liveB.close(); });
-  const collector = startChild('durable-real-collector', ['dist/collector.cjs'], baseEnv('collector', {
-    COLLECTOR_MODE: 'real', COLLECTOR_STATE_FILE: statePath, COLLECTOR_INTERVAL_MS: '500',
-    COLLECTOR_QUEUE_MODE: 'durable',
-  }));
-  t.after(() => collector.stop());
-  const [firstA, firstB] = await Promise.all([waitMetrics(liveA), waitMetrics(liveB)]);
-  assert.equal(firstA.collectorId, firstB.collectorId);
-  const latestA = await waitMetrics(liveA, firstA.metrics!.sequence);
-  assert.equal(latestA.metrics!.payload.cpu.status, 'ok');
-  const browser = await loginBrowser(hubA.baseUrl);
-  const url = `${hubA.baseUrl}/api/processes?machineId=${credsA.machineId}&viewerId=runtime-view`;
-  const headers = { ...browser.headers, Origin: hubA.baseUrl, 'X-CSRF-Token': browser.csrfToken };
+  const creds = credential(collectorId, 'machine-a', 'public-token-a');
+  const hubDir = join(dir, 'hub');
+  const databasePath = join(hubDir, 'telemetry.sqlite');
+  const hub = await startHub(t, { stateDir: hubDir, collectors: [creds], databasePath, telemetryFlushMs: null, telemetryMode: 'persistent' });
+  const statusResponse = await fetch(`${hub.baseUrl}/api/history/status`, { headers: hub.browserHeaders });
+  assert.equal(statusResponse.status, 200);
+  const status = await statusResponse.json() as { persistence: { flushIntervalMs: number } };
+  assert.equal(status.persistence.flushIntervalMs, 5000, 'persistent mode reports its effective default batch delay');
+  const live = new SseClient(hub.liveUrl, hub.browserHeaders);
+  t.after(() => live.close());
+  const collector = startCollectorProcess(t, {
+    label: 'durable-real-collector',
+    mode: 'real',
+    collectorId,
+    hubs: [{ url: hub.collectorWsUrl, token: creds.token }],
+    intervalMs: 500,
+  });
+  const first = await failOnExit(collector, waitMetrics(live), 'durable collector metrics');
+  const latest = await failOnExit(collector, waitMetrics(live, first.metrics!.sequence), 'advancing durable metrics');
+  assert.equal(latest.metrics!.payload.cpu.status, 'ok');
+  const browser = await loginBrowser(hub.baseUrl);
+  const url = `${hub.baseUrl}/api/processes?machineId=${creds.machineId}&viewerId=runtime-view`;
+  const headers = { ...browser.headers, Origin: hub.baseUrl, 'X-CSRF-Token': browser.csrfToken };
   assert.equal((await fetch(url, { method: 'POST', headers })).status, 200);
   let processes = 0;
   for (let tries = 0; tries < 20 && processes === 0; tries++) {
@@ -140,60 +205,111 @@ test('packaged real collector: multi-hub live/history, process interests and dur
   }
   assert.ok(processes > 0, 'actual Linux process scanning reached the browser query');
   assert.equal((await fetch(url, { method: 'DELETE', headers })).status, 200);
-  const historyUrl = `/api/history?machineId=${credsA.machineId}&metrics=cpu.usage,memory.used&from=${Date.now() - 60000}&to=${Date.now() + 1000}`;
+  const historyUrl = `/api/history?machineId=${creds.machineId}&metrics=cpu.usage,memory.used&from=${Date.now() - 60000}&to=${Date.now() + 1000}`;
   let before: { series: { points: unknown[] }[] } = { series: [] };
   const historyDeadline = Date.now() + 15000;
   while (Date.now() < historyDeadline) {
-    const history = await fetch(hubA.baseUrl + historyUrl, { headers: browser.headers });
+    const history = await fetch(hub.baseUrl + historyUrl, { headers: browser.headers });
     assert.equal(history.status, 200);
     before = await history.json() as typeof before;
     if (before.series.some(s => s.points.length > 0)) break;
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Match the history query budget while waiting for the real 5-second
+    // persistent batch; faster polling exhausts the session's token bucket.
+    await new Promise(resolve => setTimeout(resolve, 300));
   }
   assert.ok(before.series.some(s => s.points.length > 0));
-  liveA.close();
-  assert.equal((await hubA.stop()).code, 0);
-  const advancingB = await waitMetrics(liveB, firstB.metrics!.sequence + 2);
-  assert.ok(advancingB.connected, 'a stopped destination does not interrupt the healthy hub');
-  // Stop the collector so the hub restart must recover without fresh samples.
+  live.close();
+  // Stop the collector so the hub restart must recover history without fresh samples.
   assert.equal((await collector.stop()).code, 0);
-  const restarted = await startHub(t, { port: hubA.port, collectors: [credsA], databasePath, telemetryMode: 'persistent', telemetryFlushMs: 1000 });
+  assert.equal((await hub.stop()).code, 0);
+  const restarted = await startHub(t, {
+    stateDir: hubDir, port: hub.port, collectors: [creds], databasePath, telemetryFlushMs: null, telemetryMode: 'persistent',
+  });
   const restoredLive = new SseClient(restarted.liveUrl, restarted.browserHeaders);
   t.after(() => restoredLive.close());
   const event = await restoredLive.next();
   const restored = parseHubSnapshot(JSON.parse(event.data)).machines[0];
   assert.equal(restored.connected, false);
   assert.ok(restored.metrics);
-  assert.equal(restored.metrics!.bootId, latestA.metrics!.bootId);
+  assert.equal(restored.metrics!.bootId, latest.metrics!.bootId);
   assert.ok(Date.parse(restored.metrics!.receivedAt) < Date.now());
   const restoredHistory = await fetch(restarted.baseUrl + historyUrl, { headers: restarted.browserHeaders });
   assert.equal(restoredHistory.status, 200);
   assert.ok((await restoredHistory.json() as { series: { points: unknown[] }[] }).series.some(s => s.points.length));
 });
 
-test('the default collector writes no queue file and reports its queue as memory', async t => {
+test('default RAM hub loses telemetry on restart while preserving collector enrollment', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'rigscope-ram-hub-runtime-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const creds = credential('ram-hub-collector', 'ram-hub-machine', 'public-ram-hub-token');
+  const hub = await startHub(t, { stateDir: dir, collectors: [creds] });
+  const live = new SseClient(hub.liveUrl, hub.browserHeaders);
+  t.after(() => live.close());
+  const collector = startCollectorProcess(t, {
+    mode: 'mock', collectorId: creds.collectorId,
+    hubs: [{ url: hub.collectorWsUrl, token: creds.token }], intervalMs: 250,
+  });
+  await failOnExit(collector, waitMetrics(live), 'RAM hub metrics');
+  await waitHistory(hub.baseUrl, hub.browserHeaders, creds.machineId, 'cpu.usage', body => body.series.some(s => s.points.length > 0));
+  const before = await fetch(`${hub.baseUrl}/api/history/status`, { headers: hub.browserHeaders });
+  const status = await before.json() as { mode: string; persistentHistory: boolean };
+  assert.equal(status.mode, 'memory');
+  assert.equal(status.persistentHistory, false);
+  assert.equal((await collector.stop()).code, 0);
+  live.close();
+  assert.equal((await hub.stop()).code, 0);
+  const restarted = await startHub(t, { stateDir: dir, port: hub.port, collectors: [creds] });
+  const fresh = new SseClient(restarted.liveUrl, restarted.browserHeaders);
+  t.after(() => fresh.close());
+  const event = await fresh.next();
+  const machine = parseHubSnapshot(JSON.parse(event.data)).machines[0];
+  assert.equal(machine.machineId, creds.machineId, 'enrollment survives');
+  assert.equal(machine.metrics == null, true, 'telemetry is lost on hub restart');
+  const after = await fetch(`${restarted.baseUrl}/api/history/status`, { headers: restarted.browserHeaders });
+  assert.equal((await after.json() as { acceptedRecords: number }).acceptedRecords, 0);
+  const history = await fetch(`${restarted.baseUrl}/api/history?machineId=${creds.machineId}&metrics=cpu.usage&from=${Date.now() - 60_000}&to=${Date.now() + 1_000}`, { headers: restarted.browserHeaders });
+  assert.equal(history.status, 200);
+  assert.equal((await history.json() as HistoryBody).series.some(s => s.points.length > 0), false);
+});
+
+test('the default collector writes no queue file and reports its memory queue', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'rigscope-ram-queue-runtime-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const creds = credential('ram-queue-collector', 'ram-queue-machine', 'public-ram-queue-token');
-  const hub = await startHub(t, { collectors: [creds], databasePath: join(dir, 'hub', 'telemetry.sqlite') });
+  const hub = await startHub(t, { collectors: [creds], telemetryMode: 'persistent' });
 
   const stateDir = join(dir, 'collector');
   const live = new SseClient(hub.liveUrl, hub.browserHeaders);
   t.after(() => live.close());
-  const collector = startChild('ram-queue-collector', ['dist/collector.cjs'], baseEnv('collector', {
-    COLLECTOR_MODE: 'mock',
-    COLLECTOR_STATE_FILE: join(stateDir, 'state.json'),
-    COLLECTOR_ID: 'ram-queue-collector',
-    COLLECTOR_HOSTNAME: 'ram-queue-machine',
-    COLLECTOR_HUBS: JSON.stringify([{ url: hub.collectorWsUrl, token: creds.token }]),
-    COLLECTOR_INTERVAL_MS: '250',
-  }));
-  t.after(() => collector.stop());
+  const collector = startCollectorProcess(t, {
+    label: 'ram-queue-collector',
+    mode: 'mock',
+    stateDir,
+    collectorId: creds.collectorId,
+    hostname: 'ram-queue-machine',
+    hubs: [{ url: hub.collectorWsUrl, token: creds.token }],
+    intervalMs: 250,
+  });
 
   // Samples are being delivered, so the queue is in use, not merely unopened.
-  await waitMetrics(live);
+  await failOnExit(collector, waitMetrics(live), 'default-queue metrics');
 
-  // The whole point of the default: routine delivery creates no queue on disk.
+  // Persistent history serves these samples.
+  const historyUrl = `${hub.baseUrl}/api/history?machineId=${creds.machineId}` +
+    `&metrics=cpu.usage&from=${Date.now() - 60_000}&to=${Date.now() + 1_000}`;
+  let history: { series: { points: unknown[] }[] } = { series: [] };
+  const historyDeadline = Date.now() + 15_000;
+  while (Date.now() < historyDeadline) {
+    const response = await fetch(historyUrl, { headers: hub.browserHeaders });
+    assert.equal(response.status, 200);
+    history = await response.json() as typeof history;
+    if (history.series.some((series) => series.points.length > 0)) break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.ok(history.series.some((series) => series.points.length > 0),
+    'history serves this collector\'s samples');
+
+  // The default queue is RAM only: routine delivery creates no queue on disk.
   assert.equal(existsSync(join(stateDir, 'outbox')), false, 'the default queue must not create a directory');
   assert.deepEqual(
     existsSync(stateDir) ? readdirSync(stateDir).filter((name) => name.startsWith('outbox')) : [],

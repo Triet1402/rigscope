@@ -1,0 +1,195 @@
+{
+  "type": "samples",
+  "mode": "live",
+  "records": [
+    {
+      "collectorId": "collector-assembled",
+      "runId": "run-assembled",
+      "bootId": "boot-assembled",
+      "sequence": 2,
+      "capturedAt": "2026-11-12T10:00:01.000Z",
+      "kind": "metrics",
+      "payload": {
+        "cpu": {
+          "status": "ok",
+          "usagePercent": 0,
+          "perCore": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "temperatureC": 31.88,
+          "iowaitPercent": 0,
+          "pressureSomePercent": 0
+        },
+        "memory": {
+          "status": "ok",
+          "usedBytes": 80873635840,
+          "totalBytes": 130351206400,
+          "pressureSomePercent": 0,
+          "pressureFullPercent": 0
+        },
+        "swap": {
+          "status": "ok",
+          "usedBytes": 12517376,
+          "totalBytes": 8589930496
+        },
+        "gpus": {
+          "status": "ok",
+          "devices": [
+            {
+              "id": "pci:0000:02:00.0",
+              "status": "unavailable",
+              "reason": "GPU detected, but no readable DRM/sysfs counters; driver support or permissions may limit telemetry"
+            },
+            {
+              "status": "ok",
+              "id": "gpu:GPU-aaaaaaaa-1111",
+              "utilizationPercent": 25,
+              "memoryUsedBytes": 15971909632,
+              "memoryTotalBytes": 25769803776,
+              "temperatureC": 30,
+              "powerWatts": 22.35,
+              "junctionTemperatureC": 61.5,
+              "vramTemperatureC": 64
+            }
+          ]
+        },
+        "disks": {
+          "status": "ok",
+          "filesystems": [
+            {
+              "status": "ok",
+              "id": "fs:/",
+              "usedBytes": 2457600,
+              "totalBytes": 4096000,
+              "inodesUsed": 10,
+              "inodesTotal": 100
+            },
+            {
+              "status": "ok",
+              "id": "fs:/boot/efi",
+              "usedBytes": 2457600,
+              "totalBytes": 4096000,
+              "inodesUsed": 10,
+              "inodesTotal": 100
+            },
+            {
+              "status": "ok",
+              "id": "fs:/srv/storage",
+              "usedBytes": 2457600,
+              "totalBytes": 4096000,
+              "inodesUsed": 10,
+              "inodesTotal": 100
+            }
+          ],
+          "devices": [
+            {
+              "status": "ok",
+              "id": "disk:nvme0n1",
+              "readBytesPerSec": 0,
+              "writeBytesPerSec": 0,
+              "ioUtilizationPercent": 0
+            },
+            {
+              "status": "ok",
+              "id": "disk:sda",
+              "readBytesPerSec": 0,
+              "writeBytesPerSec": 0,
+              "ioUtilizationPercent": 0
+            },
+            {
+              "status": "ok",
+              "id": "disk:sdb",
+              "readBytesPerSec": 0,
+              "writeBytesPerSec": 0,
+              "ioUtilizationPercent": 0
+            }
+          ],
+          "pressureSomePercent": 0,
+          "pressureFullPercent": 0
+        },
+        "network": {
+          "status": "ok",
+          "interfaces": [
+            {
+              "status": "ok",
+              "id": "net:eno1np0",
+              "rxBytesPerSec": 0,
+              "txBytesPerSec": 0
+            },
+            {
+              "status": "ok",
+              "id": "net:eno2np1",
+              "rxBytesPerSec": 0,
+              "txBytesPerSec": 0
+            },
+            {
+              "status": "ok",
+              "id": "net:enx020000000103",
+              "rxBytesPerSec": 0,
+              "txBytesPerSec": 0
+            },
+            {
+              "status": "ok",
+              "id": "net:lo",
+              "rxBytesPerSec": 0,
+              "txBytesPerSec": 0
+            },
+            {
+              "status": "ok",
+              "id": "net:tailscale0",
+              "rxBytesPerSec": 0,
+              "txBytesPerSec": 0
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

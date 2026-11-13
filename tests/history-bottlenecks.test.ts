@@ -31,7 +31,7 @@ import {
   formatAxisValue,
   formatMetricValue,
 } from "../src/history/presentation";
-import type { HistoryResult } from "../src/hub/storage/history-query";
+import type { HistoryResult } from "../src/history/contract";
 import { buildHistoryPanels } from "../src/components/history/history-panels";
 
 function machineWithCores(logicalCores: number): MachineState {

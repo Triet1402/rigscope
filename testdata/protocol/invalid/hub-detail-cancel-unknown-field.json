@@ -1,0 +1,5 @@
+{
+  "type": "detail.cancel",
+  "subscriptionId": "sub-1",
+  "kind": "processes"
+}

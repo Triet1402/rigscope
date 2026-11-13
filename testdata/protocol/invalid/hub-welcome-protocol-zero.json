@@ -1,0 +1,8 @@
+{
+  "type": "welcome",
+  "hubRunId": "hub-run-1",
+  "machineId": "machine-1",
+  "delivery": "durable",
+  "maxInFlightBatches": 8,
+  "protocol": 0
+}

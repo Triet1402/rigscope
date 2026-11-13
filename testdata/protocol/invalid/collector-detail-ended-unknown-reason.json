@@ -1,0 +1,5 @@
+{
+  "type": "detail.ended",
+  "subscriptionId": "sub-1",
+  "reason": "restarted"
+}
