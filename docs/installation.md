@@ -172,8 +172,13 @@ the collector too, so an active collector picks up its first destination.
 never disables a component (`--role collector` does not remove a hub), and it
 protects a collector that is already working:
 
-- **Already enrolled with that hub**: the grant is not used; `install` says so,
-  and you can delete the grant in the hub.
+- **Already enrolled with that hub**: `install` redeems the grant itself and
+  the new credential replaces the stored one, restarting a running collector.
+  The credential file on the machine cannot show whether the hub still accepts
+  it (the machine may have been removed there), so it never causes the grant to
+  be skipped. If the hub refuses the grant (for example because the collector is
+  still registered: one installation runs one collector), the collector keeps
+  its credential and `install` prints a warning explaining what to check.
 - **The URL is this machine's own hub** (its origin, or a loopback address on
   its port): the collector keeps its direct local address instead of leaving
   through a proxy and coming back. Without a credential the grant is staged for

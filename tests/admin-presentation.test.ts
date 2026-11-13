@@ -162,6 +162,7 @@ describe("admin presentation helpers", () => {
     );
     assert.doesNotMatch(created.command, /rigscope connect|--replace|grant-secret/);
     assert.match(created.note, /new machine/);
+    assert.match(created.note, /already has its own collector/);
     assert.doesNotMatch(created.note, /paste at the prompt/);
 
     const replacement = grantCommand("replacement");

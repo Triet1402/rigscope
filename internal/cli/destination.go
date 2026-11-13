@@ -19,7 +19,11 @@ import (
 // still completes while the hub is unreachable. An existing one is handled
 // before anything is written:
 //
-//   - already enrolled with that hub: the grant is not used;
+//   - already enrolled with that hub: the grant is redeemed during install
+//     and replaces the stored credential. The local credential file cannot
+//     tell whether the hub still honours it (the machine may have been
+//     removed there), so it is never a reason to discard the grant. When the
+//     hub refuses, the collector keeps its credential and install says so;
 //   - the hub is this machine's own: the collector keeps its direct local
 //     address instead of leaving through a proxy and coming back;
 //   - enrolled with another hub: moving is confirmed first, and the grant is
@@ -29,9 +33,12 @@ type destinationPlan struct {
 	// ownHub: the URL named this machine's own hub, and the destination was
 	// rewritten to the hub's local address.
 	ownHub bool
-	// alreadyEnrolled: the collector holds a credential for the destination,
-	// so the grant is not staged.
-	alreadyEnrolled bool
+	// reenroll: the collector already holds a credential for the
+	// destination, so the grant is redeemed during install to replace it.
+	reenroll bool
+	// refused is the hub's answer when a reenroll redemption failed; the
+	// collector keeps the credential it has.
+	refused error
 	// moveFrom is the destination the collector is enrolled with today, when
 	// this install moves it to another hub.
 	moveFrom string
@@ -43,7 +50,13 @@ type destinationPlan struct {
 // stagesGrant reports whether install should still stage the grant for the
 // collector service to redeem.
 func (p destinationPlan) stagesGrant() bool {
-	return !p.alreadyEnrolled && !p.enrolled
+	return !p.reenroll && !p.enrolled
+}
+
+// restartsCollector reports whether install replaced the collector's
+// credential, so a running collector must restart to use it.
+func (p destinationPlan) restartsCollector() bool {
+	return p.reenroll && p.enrolled
 }
 
 // planDestination decides how --hub applies to this installation. It runs
@@ -66,7 +79,7 @@ func (d Deps) planDestination(paths config.Paths, existing bool, prior, cfg *con
 		return plan, err
 	}
 	if enrolled {
-		plan.alreadyEnrolled = true
+		plan.reenroll = true
 		return plan, nil
 	}
 	if !prior.Components.Collector.Enabled || len(prior.Components.Collector.Destinations) != 1 {
@@ -104,10 +117,13 @@ func (d Deps) planDestination(paths config.Paths, existing bool, prior, cfg *con
 	return plan, nil
 }
 
-// redeemForMove enrolls with the new hub before the destination changes. On
-// failure nothing has changed: the collector keeps its working destination.
-func (d Deps) redeemForMove(ctx context.Context, paths config.Paths, plan *destinationPlan, hubURL, hubCA, grant string) error {
-	if plan.moveFrom == "" {
+// redeemGrant redeems the grant during install when the collector already
+// holds a credential: before the destination changes for a move, or to
+// replace the credential for its current hub. A refused move fails the
+// install with nothing changed; a refused re-enrollment keeps the existing
+// credential and is reported afterwards.
+func (d Deps) redeemGrant(ctx context.Context, paths config.Paths, plan *destinationPlan, hubURL, hubCA, grant string) error {
+	if plan.moveFrom == "" && !plan.reenroll {
 		return nil
 	}
 	store, err := openCollectorStore(d, paths.StateDir)
@@ -115,6 +131,10 @@ func (d Deps) redeemForMove(ctx context.Context, paths config.Paths, plan *desti
 		return err
 	}
 	result, err := d.enroll(ctx, enroll.Options{Store: store, HubURL: hubURL, Grant: grant, CAFile: hubCA})
+	if err != nil && plan.reenroll {
+		plan.refused = err
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("%s did not accept the grant (%v)\n  nothing changed: this collector still sends to %s", hubAddress(hubURL), err, hubAddress(plan.moveFrom))
 	}
@@ -130,8 +150,14 @@ func printDestinationPlan(d Deps, plan destinationPlan, hubURL string) {
 		fmt.Fprintf(d.Stdout, "  %s --hub is this machine's own hub; the collector uses its direct local address %s\n", label, hubURL)
 	}
 	switch {
-	case plan.alreadyEnrolled:
-		fmt.Fprintf(d.Stdout, "  %s already enrolled with %s; the grant was not used (delete it in the hub under Administration > Collectors)\n", label, hubAddress(hubURL))
+	case plan.refused != nil:
+		d.warnf(d.Stdout, "the grant was not redeemed with %s (%v)\n"+
+			"  This collector keeps its existing credential for that hub. If this machine is listed in the hub, it is\n"+
+			"  already connected: one installation runs one collector, so there is nothing to add. If it is missing\n"+
+			"  (removed there), create a new grant in the hub under Administration > Collectors and run the command again.",
+			hubAddress(hubURL), plan.refused)
+	case plan.reenroll && plan.enrolled:
+		fmt.Fprintf(d.Stdout, "  %s enrolled again with %s (machine %s); the new credential replaces the old one\n", label, hubAddress(hubURL), plan.machineID)
 	case plan.enrolled:
 		fmt.Fprintf(d.Stdout, "  %s moved from %s to %s (machine %s)\n", label, hubAddress(plan.moveFrom), hubAddress(hubURL), plan.machineID)
 	}

@@ -256,7 +256,9 @@ export function grantCommand(
   const address = shellQuote(url.origin);
   const grant = shellQuote(token);
   const notes: Record<GrantMode, string> = {
-    new: "Run this on the new machine. It installs Rigscope as a collector, enrolls it with this hub and starts it.",
+    new:
+      "Run this on the new machine. It installs Rigscope as a collector, enrolls it with this hub and starts it. " +
+      "The machine running this hub already has its own collector (one per installation); run this there only to bring back a collector that was removed.",
     replacement:
       "Run this on the existing machine. Its old credential keeps working until the new enrollment succeeds; a running collector restarts to use the new one.",
     reenroll:

@@ -357,10 +357,21 @@ func runSetup(ctx context.Context, deps Deps, req setupRequest) int {
 	if err != nil {
 		return deps.errorf("%v", err)
 	}
-	// Moving an enrolled collector: redeem the grant with the new hub first.
-	// A refusal returns here, before the configuration changes.
-	if err := deps.redeemForMove(ctx, paths, &destination, *hubURL, *hubCA, *token); err != nil {
+	// An enrolled collector redeems the grant now: a move redeems with the
+	// new hub before the configuration changes (a refusal returns here), and
+	// a re-enrollment replaces the credential it holds.
+	if err := deps.redeemGrant(ctx, paths, &destination, *hubURL, *hubCA, *token); err != nil {
 		return deps.errorf("%s: %v", command, err)
+	}
+	// A running collector reads its credential only when a session starts, so
+	// one that would otherwise keep running restarts to use the new one.
+	if destination.restartsCollector() && containsComponent(unchanged, systemd.Collector) {
+		unchanged = removeComponent(unchanged, systemd.Collector)
+		if *noStart {
+			untouched = append(untouched, systemd.Collector)
+		} else {
+			running = append(running, systemd.Collector)
+		}
 	}
 
 	hardware := plannedHardware(paths, cfg, previous)

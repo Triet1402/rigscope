@@ -204,3 +204,13 @@ func containsComponent(list []systemd.Component, component systemd.Component) bo
 	}
 	return false
 }
+
+func removeComponent(list []systemd.Component, component systemd.Component) []systemd.Component {
+	out := make([]systemd.Component, 0, len(list))
+	for _, candidate := range list {
+		if candidate != component {
+			out = append(out, candidate)
+		}
+	}
+	return out
+}

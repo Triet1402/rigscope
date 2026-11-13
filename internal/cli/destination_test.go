@@ -9,6 +9,7 @@ import (
 	"github.com/Triet1402/rigscope/internal/collector/enroll"
 	"github.com/Triet1402/rigscope/internal/collector/state"
 	"github.com/Triet1402/rigscope/internal/config"
+	"github.com/Triet1402/rigscope/internal/platform/systemd"
 )
 
 const (
@@ -129,17 +130,97 @@ func TestInstallDoesNotMoveACollectorWithoutConsent(t *testing.T) {
 	}
 }
 
-func TestInstallWithTheCurrentHubDoesNotUseTheGrant(t *testing.T) {
+// A credential file on the machine does not prove the hub still honours it:
+// the machine may have been removed there. The grant is redeemed and replaces
+// it, instead of being discarded while the hub shows no collector.
+func TestInstallWithTheCurrentHubReenrollsWithTheGrant(t *testing.T) {
 	f, paths := enrolledCollector(t)
 	f.deps.Confirm = func(string) (bool, error) { t.Fatal("asked to move to the same hub"); return false, nil }
+	redeemed := false
+	f.deps.Enroll = func(_ context.Context, opts enroll.Options) (enroll.Result, error) {
+		if opts.HubURL != hubA || opts.Grant != "grant-a2" {
+			t.Fatalf("enroll options = %+v", opts)
+		}
+		redeemed = true
+		credential := state.Credential{URL: opts.HubURL, Token: "credential-a2"}
+		if err := opts.Store.SaveCredential(credential); err != nil {
+			return enroll.Result{}, err
+		}
+		return enroll.Result{Credential: credential, MachineID: "m-a2"}, nil
+	}
 	if code := f.run(t, "install", "--no-start", "--role", "collector", "--hub", "https://hub-a.example", "--token", "grant-a2"); code != 0 {
 		t.Fatalf("install exit %d: %s", code, f.err.String())
 	}
-	if !strings.Contains(f.out.String(), "already enrolled with https://hub-a.example; the grant was not used") {
+	if !redeemed {
+		t.Fatal("the grant was not redeemed")
+	}
+	if !strings.Contains(f.out.String(), "enrolled again with https://hub-a.example (machine m-a2)") {
 		t.Fatalf("install output = %s", f.out.String())
 	}
 	if data, err := os.ReadFile(paths.EnrollmentFile()); err == nil && strings.Contains(string(data), "grant-a2") {
-		t.Fatalf("the unused grant was staged: %s", data)
+		t.Fatalf("the redeemed grant was staged: %s", data)
+	}
+	if !strings.Contains(f.out.String(), "keep the previous binary and settings") {
+		t.Fatalf("--no-start did not say the collector keeps its old credential: %s", f.out.String())
+	}
+}
+
+func TestInstallKeepsTheCredentialWhenTheCurrentHubRefusesTheGrant(t *testing.T) {
+	f, paths := enrolledCollector(t)
+	f.deps.Enroll = func(context.Context, enroll.Options) (enroll.Result, error) {
+		return enroll.Result{}, &enroll.RejectionError{Status: 403}
+	}
+	if code := f.run(t, "install", "--no-start", "--role", "collector", "--hub", "https://hub-a.example", "--token", "grant-a2"); code != 0 {
+		t.Fatalf("install exit %d: %s", code, f.err.String())
+	}
+	out := f.out.String()
+	if !strings.Contains(out, "warning: the grant was not redeemed with https://hub-a.example") || !strings.Contains(out, "keeps its existing credential") {
+		t.Fatalf("install output = %s", out)
+	}
+	store, err := state.Open(paths.StateDir, state.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if credential, found, err := store.Credential(hubA); err != nil || !found || credential.Token != "credential" {
+		t.Fatalf("credential = %+v, found=%v, err=%v", credential, found, err)
+	}
+	if data, err := os.ReadFile(paths.EnrollmentFile()); err == nil && strings.Contains(string(data), `"grant": "grant-a2"`) {
+		t.Fatalf("the refused grant was staged for the service: %s", data)
+	}
+}
+
+func TestInstallRestartsARunningCollectorAfterReenrolling(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		refused     bool
+		wantRestart bool
+	}{
+		{"accepted", false, true},
+		{"refused", true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t)
+			paths := f.install(t, "--role", "collector", "--hub", "https://hub-a.example", "--token", "grant-a")
+			saveCredential(t, paths, hubA)
+			f.deps.Enroll = func(_ context.Context, opts enroll.Options) (enroll.Result, error) {
+				if tc.refused {
+					return enroll.Result{}, &enroll.RejectionError{Status: 403}
+				}
+				credential := state.Credential{URL: opts.HubURL, Token: "credential-a2"}
+				if err := opts.Store.SaveCredential(credential); err != nil {
+					return enroll.Result{}, err
+				}
+				return enroll.Result{Credential: credential, MachineID: "m-a2"}, nil
+			}
+			f.fake.Reset()
+			if code := f.run(t, "install", "--role", "collector", "--hub", "https://hub-a.example", "--token", "grant-a2"); code != 0 {
+				t.Fatalf("install exit %d: %s", code, f.err.String())
+			}
+			unit := systemd.Collector.UnitName()
+			if got := f.fake.HasCall("restart", unit); got != tc.wantRestart {
+				t.Fatalf("collector restarted = %v, want %v: %v", got, tc.wantRestart, f.fake.Methods())
+			}
+		})
 	}
 }
 
@@ -194,13 +275,23 @@ func TestInstallWithThisMachinesOwnHubKeepsTheLocalAddress(t *testing.T) {
 		t.Fatalf("hub enabled = %v (%v); --role collector must never disable it", cfg.Components.Hub.Enabled, err)
 	}
 
-	// Enrolled: the grant is not used.
+	// Enrolled: the grant is redeemed at the local address, never the public one.
 	saveCredential(t, paths, local)
+	f.deps.Enroll = func(_ context.Context, opts enroll.Options) (enroll.Result, error) {
+		if opts.HubURL != local || opts.Grant != "grant-own2" {
+			t.Fatalf("enroll options = %+v, want the local %s", opts, local)
+		}
+		credential := state.Credential{URL: opts.HubURL, Token: "credential-own2"}
+		if err := opts.Store.SaveCredential(credential); err != nil {
+			return enroll.Result{}, err
+		}
+		return enroll.Result{Credential: credential, MachineID: "m-own"}, nil
+	}
 	f.out.Reset()
 	if code := f.run(t, "install", "--no-start", "--role", "collector", "--hub", "http://127.0.0.1:8081", "--token", "grant-own2"); code != 0 {
 		t.Fatalf("install exit %d: %s", code, f.err.String())
 	}
-	if !strings.Contains(f.out.String(), "already enrolled with http://127.0.0.1:8081") {
+	if !strings.Contains(f.out.String(), "enrolled again with http://127.0.0.1:8081 (machine m-own)") {
 		t.Fatalf("install output = %s", f.out.String())
 	}
 }

@@ -1,6 +1,22 @@
 # Release notes
 
-## 1.0.0 (unreleased)
+## 1.0.1 (2026-11-13)
+
+- Fixed: running an **Add machine** command on a machine whose collector was
+  removed in the hub (typically the hub's own machine) finished without error,
+  but the collector never came back. The installer had seen the old credential
+  file, skipped the grant, and the hub kept rejecting that credential. `install
+  --hub URL --token TOKEN` now redeems the grant whenever the collector already
+  holds a credential for that hub, replaces the credential and restarts a
+  running collector. When the hub refuses the grant, `install` prints a warning
+  instead of reporting that the grant was simply unused.
+- The **Add machine** grant panel says that the hub's own machine already has a
+  collector, and to run the command there only to bring back a removed one.
+
+- Clarified the **Add machine** instructions: the hub machine already has its
+  own collector; use the command there only to restore a removed collector.
+
+## 1.0.0 (2026-11-13)
 
 Rigscope 1.0 is a ground-up Go rewrite. It replaces the 0.2 npm/Node prototype
 with one static binary that contains the installer/CLI, the hub and the
