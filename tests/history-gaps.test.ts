@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { gapBands, splitSeries } from "../src/history/chart";
+import { gapBands, snapBucketsOutOfGaps, splitSeries } from "../src/history/chart";
 import { observedOutageGaps, updateObservedOutages } from "../src/history/gaps";
 
 const connection = (connected: boolean, at: number | null) => ({
@@ -49,4 +49,19 @@ test("gap alignment ignores unavailable buckets and remains inside the selected 
   assert.deepEqual(gapBands(gaps, 0, 5000, points), [{ fromMs: 0, toMs: 4000, kind: "missing" }]);
   assert.deepEqual(gapBands([{ fromMs: -2000, toMs: 1500, kind: "missing" }], 500, 2500, points),
     [{ fromMs: 500, toMs: 2500, kind: "missing" }]);
+});
+
+test("a bucket stamped inside an outage but filled after reconnect moves to the reconnect edge", () => {
+  const gap = { fromMs: 130_000, toMs: 220_000, kind: "missing" as const, reason: "collector restarted" };
+  const points = [point(60_000), point(120_000), point(180_000), point(240_000), point(300_000)];
+  const snapped = snapBucketsOutOfGaps(points, [gap], 60_000);
+  assert.deepEqual(snapped.map((p) => p.t), [60_000, 120_000, 220_000, 240_000, 300_000]);
+  // The resumed bucket now starts the post-outage line instead of standing alone.
+  const segments = splitSeries(snapped, { stepMs: 60_000, gaps: [gap], fromMs: 0, toMs: 360_000 });
+  assert.deepEqual(segments.map((segment) => segment.length), [2, 3]);
+  // Readings far from the gap end are left where the hub put them.
+  const far = snapBucketsOutOfGaps([point(150_000)], [gap], 60_000);
+  assert.equal(far[0]!.t, 150_000);
+  // No gaps: same array back.
+  assert.equal(snapBucketsOutOfGaps(points, [], 60_000), points);
 });

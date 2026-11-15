@@ -9,7 +9,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, History as HistoryIcon, RefreshCw, ShieldAlert, WifiOff } from "lucide-react";
+import { AlertTriangle, History as HistoryIcon, Info, RefreshCw, ShieldAlert, WifiOff } from "lucide-react";
 
 import { AppShell } from "@/components/shell/app-shell";
 import { EmptyState, Panel } from "@/components/panel";
@@ -40,6 +40,9 @@ import { useStoredHistory, type HistoryError } from "./use-stored-history";
 import { HistoryCharts } from "./history-panels";
 import { useHistoryRange, useHistoryMetrics, useHistoryHidden, useHistoryAutoRefresh, useHistoryCores, useHistoryCapacityUnit } from "./history-prefs";
 import { HistoryExportControls } from "@/components/exports/history-export-controls";
+
+/** Default hub RAM ring retention for 1-second history (internal/hub/storage/ring.go). */
+const RING_WINDOW_MS = 15 * 60_000;
 
 function errorCopy(error: HistoryError): { title: string; note: string; icon: typeof ShieldAlert } {
   switch (error.kind) {
@@ -457,6 +460,12 @@ export function HistoryView() {
                     : result.tier === "1m"
                       ? "1-minute rollups"
                       : "1-hour rollups";
+            // The 1-second tier lives in hub memory for the most recent minutes
+            // and restarts empty with the hub. Until it covers the whole range,
+            // a short range is answered from coarser stored summaries, which
+            // look smoother. Say so instead of letting the shape change silently.
+            const coarserThanRing = result.tier !== "1s" && result.tier !== "raw";
+            const shortRange = result.toMs - result.fromMs <= RING_WINDOW_MS;
             return (
             <>
               <div className="mb-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -470,8 +479,8 @@ export function HistoryView() {
                 <span>
                   {formatDateTime(result.fromMs)} – {formatDateTime(result.toMs)}
                 </span>
-                <span className="tnum" title={tierLabel}>
-                  {formatGapDuration(result.stepMs)} buckets
+                <span className="tnum" title={`Each point averages ${formatGapDuration(result.stepMs)} of readings, from ${tierLabel}. The shaded band around a line shows the min–max range within each point.`}>
+                  {formatGapDuration(result.stepMs)} averages · {tierLabel}
                 </span>
                 <div className="ml-auto self-center">
                   <HistoryExportControls
@@ -486,6 +495,20 @@ export function HistoryView() {
                   />
                 </div>
               </div>
+
+              {coarserThanRing && shortRange ? (
+                <div
+                  role="status"
+                  className="mb-4 flex items-start gap-2 rounded-lg bg-card-strong px-4 py-2.5 text-xs text-foreground"
+                >
+                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                  <span>
+                    Showing {tierLabel}, so lines look smoother than usual. 1-second detail is kept in hub
+                    memory and starts over when the hub restarts; it returns once the hub has been
+                    running for this whole range.
+                  </span>
+                </div>
+              ) : null}
 
               {result.truncated ? (
                 <div

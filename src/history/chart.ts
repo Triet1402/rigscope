@@ -141,6 +141,35 @@ export function gapBands(
   return points === undefined ? merged : alignGapBands(merged, points, fromMs, toMs);
 }
 
+/**
+ * Move a bucket that starts inside a recorded gap to the gap's end.
+ *
+ * Stored buckets are stamped at their start. When the collector comes back
+ * part-way through a bucket, that bucket's readings all arrive after the
+ * outage, yet its start time sits inside the shaded interval, so it used to
+ * render as a stray mark in the middle of the outage. A gap promises there is
+ * no data inside it, so the readings belong at the reconnect edge, where the
+ * line resumes. Buckets more than one step before the gap end are left alone:
+ * they are real readings the gap record does not explain.
+ */
+export function snapBucketsOutOfGaps<P extends HistoryPoint>(
+  points: readonly P[],
+  gaps: readonly HistoryGap[],
+  bucketMs: number,
+): P[] {
+  const bands = gaps.filter((gap) => Number.isFinite(gap.fromMs) && Number.isFinite(gap.toMs) && gap.toMs > gap.fromMs);
+  if (bands.length === 0) return points as P[];
+  const step = Math.max(1, bucketMs);
+  let changed = false;
+  const output = points.map((point) => {
+    const band = bands.find((gap) => point.t > gap.fromMs && point.t < gap.toMs && gap.toMs - point.t <= step);
+    if (band === undefined) return point;
+    changed = true;
+    return { ...point, t: band.toMs };
+  });
+  return changed ? output : (points as P[]);
+}
+
 function overlapsGap(previousT: number, nextT: number, bands: readonly GapBand[]): boolean {
   return bands.some((band) => band.toMs > previousT && band.fromMs < nextT);
 }

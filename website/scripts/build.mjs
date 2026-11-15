@@ -9,6 +9,7 @@ import {resolve} from 'node:path';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const dist = resolve(root, 'dist');
+const {version} = JSON.parse(await readFile(resolve(root, '../package.json'), 'utf8'));
 // Remove pages from earlier builds so deleted documentation cannot remain in
 // the deployed output or disagree with the generated sitemap.
 await rm(dist, {recursive:true, force:true});
@@ -17,7 +18,7 @@ const asset = async name => '/' + name + '?v=' + createHash('sha256').update(awa
 await mkdir(resolve(root, '.build'), {recursive:true});
 const shared = {
   absWorkingDir:root, bundle:true, jsx:'automatic', minify:true, external:['/fonts/*'],
-  define:{'process.env.NODE_ENV':'"production"', 'process.env.NEXT_PUBLIC_RIGSCOPE_VERSION':'"1.0.0"', 'process.env.NEXT_PUBLIC_RIGSCOPE_SOURCE_URL':'""'}, logLevel:'info',
+  define:{'process.env.NODE_ENV':'"production"', 'process.env.NEXT_PUBLIC_RIGSCOPE_VERSION':JSON.stringify(version), 'process.env.NEXT_PUBLIC_RIGSCOPE_SOURCE_URL':'""'}, logLevel:'info',
   // TypeScript maps React types into this app for the shared BrandMark. Runtime
   // imports must resolve to actual packages instead of those declaration files.
   tsconfigRaw:{compilerOptions:{jsx:'react-jsx'}},

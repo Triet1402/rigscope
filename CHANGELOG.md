@@ -1,5 +1,15 @@
 # Release notes
 
+## 1.0.2 (2026-11-15)
+
+- Fixed history chart buckets collected after reconnection appearing inside an
+  outage. These buckets now appear at the reconnect edge.
+- History labels now explain the averaging interval and storage tier, with a
+  notice when a short range uses coarser summaries while the hub's in-memory
+  1-second history fills after a restart.
+- The website and its product demo now display the current release version,
+  sourced from the root package manifest to keep future releases in sync.
+
 ## 1.0.1 (2026-11-13)
 
 - Fixed: running an **Add machine** command on a machine whose collector was

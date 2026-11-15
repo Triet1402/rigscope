@@ -12,6 +12,7 @@ import {
   buildYDomain,
   downsamplePoints,
   gapBands,
+  snapBucketsOutOfGaps,
   seriesStats,
   splitSeries,
   timeTicks,
@@ -130,7 +131,16 @@ function chartAriaLabel(
 }
 
 export function HistoryChart(props: Props) {
-  const { title, unit, series, fromMs, toMs, stepMs, gaps, hiddenKeys, onToggleSeries, emptyMessage, note } = props;
+  const { title, unit, fromMs, toMs, stepMs, gaps, hiddenKeys, onToggleSeries, emptyMessage, note } = props;
+  // A bucket stamped inside an outage but filled after reconnect belongs at the
+  // reconnect edge; otherwise it reads as a sample taken while offline.
+  const series = useMemo(
+    () => props.series.map((item) => {
+      const points = snapBucketsOutOfGaps(item.points, gaps, stepMs);
+      return points === item.points ? item : { ...item, points };
+    }),
+    [props.series, gaps, stepMs],
+  );
   const visible = useMemo(() => series.filter((item) => !hiddenKeys.has(item.key)), [series, hiddenKeys]);
   const inspection = useChartInspection({ series: visible, fromMs, toMs, stepMs, gaps });
   const plot = useRef<SVGSVGElement>(null);

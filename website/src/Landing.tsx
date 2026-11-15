@@ -249,7 +249,7 @@ export function Landing({ children }: { children: ReactNode }) {
             <p>Rigscope brings CPU, memory, GPU, disk, network, and process readings into a browser dashboard. Run a hub for the dashboard and a collector on each Linux machine. The default installation runs both on one computer; collectors on other machines connect outbound to your hub.</p>
 
             <section className="quickstart" aria-labelledby="quickstart-heading">
-              <h2 id="quickstart-heading">Install Rigscope 1.0</h2>
+              <h2 id="quickstart-heading">Install Rigscope {process.env.NEXT_PUBLIC_RIGSCOPE_VERSION}</h2>
               <p>One static Go binary is the installer, the hub, and the collector. There is no Node.js, npm, Python, Docker, or external database to install or maintain.</p>
               <ol className="quickstart-steps">
                 <li>
