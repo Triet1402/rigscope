@@ -76,7 +76,7 @@ export SOURCE_DATE_EPOCH
 # A fresh checkout has no modules in the cache. Fetch the build list once; the
 # notices generator below runs with GOPROXY=off and only reads that cache.
 printf 'build: ensuring Go modules are in the cache\n'
-go mod download
+go mod download all
 
 # Both notices files are generated, committed artifacts. Regenerate them before
 # anything is embedded so the release always matches the module graph and the
