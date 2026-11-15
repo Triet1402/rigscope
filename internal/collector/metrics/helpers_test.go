@@ -247,6 +247,7 @@ func maxReadingsFixture() procfs.Readings {
 // fails, which the assembler must turn into honest unavailable families.
 func newUnavailableSampler(clock Clock) *procfs.Sampler {
 	return NewProcFSSampler(clock, procfs.SamplerOptions{
+		Host:   &procfs.HostInfo{Platform: "linux", Arch: "amd64", CPUCount: 48},
 		Source: procfs.NewFSSource(fstest.MapFS{}),
 		StatFS: func(string) (procfs.StatFSSnapshot, error) {
 			return procfs.StatFSSnapshot{}, errors.New("no statfs in fixture")
