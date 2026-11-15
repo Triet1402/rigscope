@@ -16,7 +16,8 @@
       "@/*": ["../src/*"],
       "next/link": ["./src/product-demo/navigation.tsx"],
       "next/navigation": ["./src/product-demo/navigation.tsx"],
-      "next-themes": ["./node_modules/next-themes"]
+      "next-themes": ["./node_modules/next-themes"],
+      "lucide-react": ["./node_modules/lucide-react"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"]
